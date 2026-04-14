@@ -26,6 +26,7 @@ import {
 import { formatErrorMessage } from "../infra/errors.js";
 import { buildOutboundSessionContext } from "../infra/outbound/session-context.js";
 import { getRemoteSkillEligibility } from "../infra/skills-remote.js";
+import { applyLinktrendGovernanceToAgentCommand } from "../linktrend/governance.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
@@ -452,6 +453,11 @@ async function agentCommandInternal(
     acpResolution,
   } = prepared;
   let sessionEntry = prepared.sessionEntry;
+
+  applyLinktrendGovernanceToAgentCommand(opts, cfg, {
+    runId,
+    sessionKey: sessionKey ?? undefined,
+  });
 
   try {
     if (opts.deliver === true) {

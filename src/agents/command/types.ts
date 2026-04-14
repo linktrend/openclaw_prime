@@ -1,6 +1,7 @@
 import type { AgentInternalEvent } from "../../agents/internal-events.js";
 import type { SpawnedRunMetadata } from "../../agents/spawned-context.js";
 import type { ChannelOutboundTargetMode } from "../../channels/plugins/types.public.js";
+import type { LinktrendGovernanceInput } from "../../linktrend/governance-types.js";
 import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
 import type { InputProvenance } from "../../sessions/input-provenance.js";
 import type { AgentStreamParams, ClientToolDefinition } from "./shared-types.js";
@@ -90,6 +91,16 @@ export type AgentCommandOpts = {
   workspaceDir?: SpawnedRunMetadata["workspaceDir"];
   /** Force bundled MCP teardown when a one-shot local run completes. */
   cleanupBundleMcpOnRunEnd?: boolean;
+  /**
+   * Optional LiNKtrend governance payload (bootstrap, mission, runtime instructions, approved tools).
+   * Owned and authored by bot-runtime — the fork only validates, merges, and signals.
+   */
+  linktrendGovernance?: LinktrendGovernanceInput;
+  /**
+   * When set, only these built-in tool names are exposed to the model for this run
+   * (embedded runner allow-list). Used with LiNKtrend approved capability surfaces.
+   */
+  toolsAllow?: string[];
 };
 
 export type AgentCommandIngressOpts = Omit<

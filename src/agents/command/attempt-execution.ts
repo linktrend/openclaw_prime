@@ -295,6 +295,7 @@ export function runAgentAttempt(params: {
     onAgentEvent: params.onAgentEvent,
     bootstrapPromptWarningSignaturesSeen,
     bootstrapPromptWarningSignature,
+    toolsAllow: params.opts.toolsAllow,
   });
 }
 

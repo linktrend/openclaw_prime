@@ -28,6 +28,7 @@ import {
 } from "../../infra/outbound/agent-delivery.js";
 import { shouldDowngradeDeliveryToSessionOnly } from "../../infra/outbound/best-effort-delivery.js";
 import { resolveMessageChannelSelection } from "../../infra/outbound/channel-selection.js";
+import type { LinktrendGovernanceInput } from "../../linktrend/governance-types.js";
 import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
 import { classifySessionKeyShape, normalizeAgentId } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -325,6 +326,7 @@ export const agentHandlers: GatewayRequestHandlers = {
       bestEffortDeliver?: boolean;
       label?: string;
       inputProvenance?: InputProvenance;
+      linktrendGovernance?: LinktrendGovernanceInput;
     };
     const senderIsOwner = resolveSenderIsOwnerFromClient(client);
     const allowModelOverride = resolveAllowModelOverrideFromClient(client);
@@ -888,6 +890,7 @@ export const agentHandlers: GatewayRequestHandlers = {
         }),
         senderIsOwner,
         allowModelOverride,
+        linktrendGovernance: request.linktrendGovernance,
       },
       runId,
       idempotencyKey: idem,

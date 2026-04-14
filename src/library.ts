@@ -89,3 +89,17 @@ export {
   saveSessionStore,
   waitForever,
 };
+
+export type {
+  LinktrendApprovedToolSurface,
+  LinktrendBootstrapContext,
+  LinktrendGovernanceInput,
+  LinktrendMissionContext,
+  LinktrendRuntimeInstructions,
+} from "./linktrend/governance-types.js";
+export {
+  applyLinktrendGovernanceToAgentCommand,
+  GOV_EVENT_KIND,
+  resolveLinktrendGovernance,
+} from "./linktrend/governance.js";
+export type { LinktrendGovernanceApplyContext } from "./linktrend/governance.js";

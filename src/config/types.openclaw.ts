@@ -122,6 +122,20 @@ export type OpenClawConfig = {
   gateway?: GatewayConfig;
   memory?: MemoryConfig;
   mcp?: McpConfig;
+  /**
+   * LiNKtrend / bot-runtime integration: fail-closed defaults and governance requirements.
+   * See docs/linktrend-governance.md
+   */
+  linktrendGovernance?: {
+    /** When true, fork-side governance hooks are active for validation and telemetry. */
+    enabled?: boolean;
+    /** Ingress agent runs must include a `linktrendGovernance` payload on the agent RPC. */
+    requireIngressGovernancePayload?: boolean;
+    /** Bootstrap `authorizationState` must be `granted` (denies pending/omitted). */
+    requireBootstrapAuthorization?: boolean;
+    /** Mission block must be present on the governance payload. */
+    requireMissionContext?: boolean;
+  };
 };
 
 declare const openClawConfigStateBrand: unique symbol;

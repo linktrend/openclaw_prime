@@ -6,6 +6,64 @@ import {
 } from "../../../agents/internal-event-contract.js";
 import { InputProvenanceSchema, NonEmptyString, SessionLabelString } from "./primitives.js";
 
+export const LinktrendGovernanceParamsSchema = Type.Object(
+  {
+    bootstrap: Type.Optional(
+      Type.Object(
+        {
+          workerIdentityRef: Type.Optional(Type.String()),
+          authorizationState: Type.String({
+            enum: ["granted", "denied", "pending"],
+          }),
+          traceCorrelationId: Type.Optional(Type.String()),
+          denialReasonCategory: Type.Optional(Type.String()),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    mission: Type.Optional(
+      Type.Object(
+        {
+          missionId: Type.Optional(Type.String()),
+          summaryText: Type.Optional(Type.String()),
+          objective: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    runtimeInstructions: Type.Optional(
+      Type.Object(
+        {
+          text: Type.Optional(Type.String()),
+          skillVersionRef: Type.Optional(Type.String()),
+          segments: Type.Optional(
+            Type.Array(
+              Type.Object(
+                {
+                  title: Type.Optional(Type.String()),
+                  body: Type.String(),
+                },
+                { additionalProperties: false },
+              ),
+            ),
+          ),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    approvedTools: Type.Optional(
+      Type.Object(
+        {
+          toolNames: Type.Optional(Type.Array(Type.String())),
+          restrictToApprovedList: Type.Optional(Type.Boolean()),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 export const AgentInternalEventSchema = Type.Object(
   {
     type: Type.Literal(AGENT_INTERNAL_EVENT_TYPE_TASK_COMPLETION),
@@ -157,6 +215,7 @@ export const AgentParamsSchema = Type.Object(
     inputProvenance: Type.Optional(InputProvenanceSchema),
     idempotencyKey: NonEmptyString,
     label: Type.Optional(SessionLabelString),
+    linktrendGovernance: Type.Optional(LinktrendGovernanceParamsSchema),
   },
   { additionalProperties: false },
 );
