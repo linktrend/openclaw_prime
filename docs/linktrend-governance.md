@@ -73,3 +73,13 @@ import { applyLinktrendGovernanceToAgentCommand, resolveLinktrendGovernance } fr
 ```
 
 These symbols are re-exported from the package root (`src/library.ts`) for monorepo wrappers and tests.
+
+## LiNKbrain virtual file HTTP bridge (LiNKaios)
+
+The monorepo can expose **published** virtual markdown (Pattern A) and **retrieval tiers** over HTTPS so this fork never needs Supabase credentials.
+
+- **`POST /api/brain/published`** on LiNKaios — JSON body `{ "scope": "company" | "mission" | "agent", "logicalPath": "SOUL.md", "missionId"?: "<uuid>", "agentId"?: "<uuid>" }`. Header `Authorization: Bearer <BOT_BRAIN_API_SECRET>`. Response `{ "fileId": "<uuid> | null", "body": "<markdown>" }`.
+
+- **`POST /api/brain/retrieve`** — JSON `{ "scope", "logicalPath", "query", "missionId"?, "agentId"?, "topK"? }` with the same bearer secret. Response matches `BrainRetrieveContextResult` from `@linktrend/linklogic-sdk` (index cards plus ranked chunk excerpts; semantic ranking when `GEMINI_API_KEY` is set on the server).
+
+Implement a small HTTP client at the workspace read boundary if you want canonical files to mirror central truth; keep persistence and RLS ownership in the monorepo.
