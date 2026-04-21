@@ -43,6 +43,7 @@ import {
   buildOpenAICodexForwardCompatExpectation,
   makeModel,
   mockDiscoveredModel,
+  OPENAI_CODEX_TEMPLATE_MODEL,
   mockOpenAICodexTemplateModel,
   resetMockDiscoverModels,
 } from "./model.test-harness.js";
@@ -827,6 +828,71 @@ describe("resolveModel", () => {
     expect(result.model).toMatchObject(buildOpenAICodexForwardCompatExpectation("gpt-5.4"));
   });
 
+  it("upgrades stale exact openai-codex gpt-5.4 registry metadata via forward-compat", () => {
+    vi.mocked(discoverModels).mockReturnValue({
+      find: vi.fn((provider: string, modelId: string) => {
+        if (provider !== "openai-codex") {
+          return null;
+        }
+        if (modelId === "gpt-5.4") {
+          return {
+            ...OPENAI_CODEX_TEMPLATE_MODEL,
+            id: "gpt-5.4",
+            name: "GPT-5.4",
+            contextWindow: 272000,
+          };
+        }
+        if (modelId === "gpt-5.3-codex") {
+          return {
+            ...OPENAI_CODEX_TEMPLATE_MODEL,
+            id: "gpt-5.3-codex",
+            name: "GPT-5.3 Codex",
+          };
+        }
+        return null;
+      }),
+    } as unknown as ReturnType<typeof discoverModels>);
+
+    const result = resolveModelForTest("openai-codex", "gpt-5.4", "/tmp/agent");
+
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "openai-codex",
+      id: "gpt-5.4",
+      contextWindow: 1_050_000,
+      maxTokens: 128000,
+    });
+  });
+
+  it("does not downgrade exact openai-codex gpt-5.3-codex registry metadata", () => {
+    vi.mocked(discoverModels).mockReturnValue({
+      find: vi.fn((provider: string, modelId: string) => {
+        if (provider !== "openai-codex") {
+          return null;
+        }
+        if (modelId === "gpt-5.3-codex") {
+          return {
+            ...OPENAI_CODEX_TEMPLATE_MODEL,
+            id: "gpt-5.3-codex",
+            name: "GPT-5.3 Codex",
+            contextWindow: 272000,
+          };
+        }
+        return null;
+      }),
+    } as unknown as ReturnType<typeof discoverModels>);
+
+    const result = resolveModelForTest("openai-codex", "gpt-5.3-codex", "/tmp/agent");
+
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "openai-codex",
+      id: "gpt-5.3-codex",
+      contextWindow: 272000,
+      maxTokens: 128000,
+    });
+  });
+
   it("canonicalizes the legacy openai-codex gpt-5.4-codex alias at runtime", () => {
     mockOpenAICodexTemplateModel(discoverModels);
 
@@ -1000,6 +1066,79 @@ describe("resolveModel", () => {
       id: "gpt-5.4",
       contextWindow: 1_050_000,
       contextTokens: 272_000,
+    });
+  });
+
+  it("normalizes stale discovered openai-codex /backend-api/v1 metadata", () => {
+    mockDiscoveredModel(discoverModels, {
+      provider: "openai-codex",
+      modelId: "gpt-5.4",
+      templateModel: {
+        ...buildOpenAICodexForwardCompatExpectation("gpt-5.4"),
+        name: "GPT-5.4",
+        baseUrl: "https://chatgpt.com/backend-api/v1",
+      },
+    });
+
+    const result = resolveModelForTest("openai-codex", "gpt-5.4", "/tmp/agent");
+
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "openai-codex",
+      id: "gpt-5.4",
+      api: "openai-codex-responses",
+      baseUrl: "https://chatgpt.com/backend-api",
+    });
+  });
+
+  it("normalizes stale discovered openrouter /v1 metadata", () => {
+    mockDiscoveredModel(discoverModels, {
+      provider: "openrouter",
+      modelId: "openai/gpt-5.4",
+      templateModel: {
+        provider: "openrouter",
+        id: "openai/gpt-5.4",
+        name: "GPT-5.4",
+        api: "openai-completions",
+        baseUrl: "https://openrouter.ai/v1",
+        reasoning: true,
+        input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 200_000,
+        maxTokens: 8_192,
+      },
+    });
+
+    const result = resolveModelForTest("openrouter", "openai/gpt-5.4", "/tmp/agent");
+
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "openrouter",
+      id: "openai/gpt-5.4",
+      api: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+    });
+  });
+
+  it("normalizes discovered openai-codex metadata when api is missing", () => {
+    mockDiscoveredModel(discoverModels, {
+      provider: "openai-codex",
+      modelId: "gpt-5.4",
+      templateModel: {
+        ...buildOpenAICodexForwardCompatExpectation("gpt-5.4"),
+        name: "GPT-5.4",
+        api: undefined,
+      },
+    });
+
+    const result = resolveModelForTest("openai-codex", "gpt-5.4", "/tmp/agent");
+
+    expect(result.error).toBeUndefined();
+    expect(result.model).toMatchObject({
+      provider: "openai-codex",
+      id: "gpt-5.4",
+      api: "openai-codex-responses",
+      baseUrl: "https://chatgpt.com/backend-api",
     });
   });
 
