@@ -389,6 +389,16 @@ export type GatewayWebchatConfig = {
   chatHistoryMaxChars?: number;
 };
 
+export type GatewayLinktrendAgentRunConfig = {
+  /**
+   * When set, POST /v1/linktrend/agent-run requires `Authorization: Bearer` matching this secret.
+   * Also honors `OPENCLAW_LINKTREND_RUN_BEARER` env at runtime when non-empty.
+   */
+  bearerToken?: SecretInput;
+  /** Override URL path (must start with `/`, default `/v1/linktrend/agent-run`). */
+  path?: string;
+};
+
 export type GatewayConfig = {
   /** Single multiplexed port for Gateway WS + HTTP (default: 18789). */
   port?: number;
@@ -433,6 +443,11 @@ export type GatewayConfig = {
   tools?: GatewayToolsConfig;
   /** WebChat display/history settings. */
   webchat?: GatewayWebchatConfig;
+  /**
+   * HTTP ingress for LiNKtrend bot-runtime POST agent runs (`/v1/linktrend/agent-run`).
+   * @see docs/linktrend-governance.md
+   */
+  linktrendAgentRun?: GatewayLinktrendAgentRunConfig;
   /**
    * Channel health monitor interval in minutes.
    * Periodically checks channel health and restarts unhealthy channels.

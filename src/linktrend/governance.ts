@@ -8,6 +8,9 @@ const log = createSubsystemLogger("linktrend/governance");
 
 const GOV_EVENT_KIND = "linktrend.gov";
 
+/** User-visible text for `AgentParamsGovernanceOnlySchema` runs (no top-level `message`). */
+export const LINKTREND_GOVERNANCE_ONLY_DEFAULT_MESSAGE = "(linktrend governance run)";
+
 export type LinktrendGovernanceApplyContext = {
   runId: string;
   sessionKey?: string;
@@ -40,6 +43,9 @@ function buildMissionInstructionBlock(input: LinktrendGovernanceInput): string |
     const lines: string[] = [header];
     if (m.missionId) {
       lines.push(`Mission id: ${m.missionId}`);
+    }
+    if (m.title?.trim()) {
+      lines.push(`Mission title: ${m.title.trim()}`);
     }
     if (m.summaryText?.trim()) {
       lines.push(`Summary: ${m.summaryText.trim()}`);
@@ -161,6 +167,14 @@ export function resolveLinktrendGovernance(params: {
     detail: {
       traceCorrelationId: governance.bootstrap?.traceCorrelationId,
       workerIdentityRef: governance.bootstrap?.workerIdentityRef,
+      skillName: governance.skillName,
+      skillVersion: governance.skillVersion,
+      skillId: governance.skillId,
+      ...(governance.skillDeclaredTools?.toolNames?.length
+        ? {
+            declaredToolCount: governance.skillDeclaredTools.toolNames.length,
+          }
+        : {}),
     },
   });
 
@@ -180,13 +194,17 @@ export function resolveLinktrendGovernance(params: {
 
   let toolsAllow: string[] | undefined;
   const approved = governance.approvedTools;
+  const declaredNames = governance.skillDeclaredTools?.toolNames;
   if (approved?.toolNames && approved.toolNames.length > 0) {
     toolsAllow = [...new Set(approved.toolNames.map((n) => n.trim()).filter(Boolean))];
     emitGov({
       runId: ctx.runId,
       sessionKey: ctx.sessionKey,
       phase: "capability_surface_set",
-      detail: { toolCount: toolsAllow.length },
+      detail: {
+        toolCount: toolsAllow.length,
+        ...(declaredNames?.length ? { declaredToolCount: declaredNames.length } : {}),
+      },
     });
   }
 
