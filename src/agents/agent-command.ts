@@ -16,7 +16,6 @@ import {
 } from "../infra/agent-events.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { buildOutboundSessionContext } from "../infra/outbound/session-context.js";
-import { getRemoteSkillEligibility } from "../infra/skills-remote.js";
 import { applyLinktrendGovernanceToAgentCommand } from "../linktrend/governance.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { normalizeAgentId } from "../routing/session-key.js";

@@ -32,6 +32,8 @@ import {
 import { shouldDowngradeDeliveryToSessionOnly } from "../../infra/outbound/best-effort-delivery.js";
 import { resolveMessageChannelSelection } from "../../infra/outbound/channel-selection.js";
 import type { LinktrendGovernanceInput } from "../../linktrend/governance-types.js";
+import { LINKTREND_GOVERNANCE_ONLY_DEFAULT_MESSAGE } from "../../linktrend/governance.js";
+import { normalizeLinktrendGovernanceInbound } from "../../linktrend/normalize-governance-inbound.js";
 import type { PromptImageOrderEntry } from "../../media/prompt-image-order.js";
 import {
   classifySessionKeyShape,
@@ -319,7 +321,23 @@ export const agentHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const request = p as {
+    const mutableParams: Record<string, unknown> = { ...p };
+    if (!("message" in mutableParams)) {
+      mutableParams.message = LINKTREND_GOVERNANCE_ONLY_DEFAULT_MESSAGE;
+    }
+    const idemIncoming = mutableParams.idempotencyKey;
+    if (typeof idemIncoming !== "string" || !idemIncoming.trim()) {
+      mutableParams.idempotencyKey = randomUUID();
+    }
+    if (
+      mutableParams.linktrendGovernance &&
+      typeof mutableParams.linktrendGovernance === "object"
+    ) {
+      mutableParams.linktrendGovernance = normalizeLinktrendGovernanceInbound(
+        mutableParams.linktrendGovernance as LinktrendGovernanceInput,
+      );
+    }
+    const request = mutableParams as {
       message: string;
       agentId?: string;
       provider?: string;

@@ -61,6 +61,7 @@ import {
 } from "./http-utils.js";
 import { resolveRequestClientIp } from "./net.js";
 import { DEDUPE_MAX, DEDUPE_TTL_MS } from "./server-constants.js";
+import type { GatewayRequestContext } from "./server-methods/types.js";
 import { authorizeCanvasRequest, isCanvasPath } from "./server/http-auth.js";
 import { resolvePluginRouteRuntimeOperatorScopes } from "./server/plugin-route-runtime-scopes.js";
 import {
@@ -689,6 +690,7 @@ export function createHooksRequestHandler(
           model: normalized.value.model ?? null,
           thinking: normalized.value.thinking ?? null,
           timeoutSeconds: normalized.value.timeoutSeconds ?? null,
+          linktrendGovernance: normalized.value.linktrendGovernance ?? null,
         },
       });
       const cachedRunId = resolveCachedHookRunId(replayKey, now);
@@ -860,6 +862,8 @@ export function createGatewayHttpServer(opts: {
   rateLimiter?: AuthRateLimiter;
   getReadiness?: ReadinessChecker;
   tlsOptions?: TlsOptions;
+  /** Filled after gateway WebSocket context is created; enables LiNKtrend HTTP agent runs. */
+  gatewayHttpRequestContextRef?: { current: GatewayRequestContext | null };
 }): HttpServer {
   const {
     canvasHost,
@@ -878,6 +882,7 @@ export function createGatewayHttpServer(opts: {
     resolvedAuth,
     rateLimiter,
     getReadiness,
+    gatewayHttpRequestContextRef,
   } = opts;
   const getResolvedAuth = opts.getResolvedAuth ?? (() => resolvedAuth);
   const openAiCompatEnabled = openAiChatCompletionsEnabled || openResponsesEnabled;
@@ -920,6 +925,23 @@ export function createGatewayHttpServer(opts: {
         {
           name: "hooks",
           run: () => handleHooksRequest(req, res),
+        },
+        {
+          name: "linktrend-agent-run",
+          run: async () => {
+            if (!gatewayHttpRequestContextRef) {
+              return false;
+            }
+            const { handleLinktrendAgentRunHttpRequest } =
+              await import("./linktrend-agent-http.js");
+            return await handleLinktrendAgentRunHttpRequest(req, res, {
+              gatewayRequestContextRef: gatewayHttpRequestContextRef,
+              trustedProxies,
+              allowRealIpFallback,
+              rateLimiter,
+              resolvedAuth,
+            });
+          },
         },
       ];
       if (openAiCompatEnabled && isOpenAiModelsPath(requestPath)) {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sanitizeInboundSystemTags } from "../../auto-reply/reply/inbound-text.js";
 import type { CliDeps } from "../../cli/deps.types.js";
+import { agentCommandFromIngress } from "../../commands/agent.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveMainSessionKeyFromConfig } from "../../config/sessions.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
@@ -8,8 +9,11 @@ import { runCronIsolatedAgentTurn } from "../../cron/isolated-agent.js";
 import type { CronJob } from "../../cron/types.js";
 import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
+import { normalizeLinktrendGovernanceInbound } from "../../linktrend/normalize-governance-inbound.js";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
+import { defaultRuntime } from "../../runtime.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
+import { normalizeMessageChannel } from "../../utils/message-channel.js";
 import { type HookAgentDispatchPayload, type HooksConfigResolved } from "../hooks.js";
 import { createHooksRequestHandler, type HookClientIpConfig } from "../server-http.js";
 
@@ -44,6 +48,52 @@ export function createGatewayHooksRequestHandler(params: {
     const sessionKey = value.sessionKey;
     const mainSessionKey = resolveMainSessionKeyFromConfig();
     const safeName = sanitizeInboundSystemTags(value.name);
+
+    if (value.linktrendGovernance != null) {
+      const governed = normalizeLinktrendGovernanceInbound(value.linktrendGovernance)!;
+      const runHook = randomUUID();
+      void (async () => {
+        try {
+          const channelResolved =
+            value.channel && value.channel !== "last"
+              ? (normalizeMessageChannel(value.channel) ?? undefined)
+              : undefined;
+          await agentCommandFromIngress(
+            {
+              message: value.message,
+              sessionKey,
+              agentId: value.agentId,
+              channel: channelResolved,
+              model: value.model,
+              thinking: value.thinking,
+              timeout:
+                typeof value.timeoutSeconds === "number" ? String(value.timeoutSeconds) : undefined,
+              deliver: value.deliver,
+              to: value.to,
+              linktrendGovernance: governed,
+              senderIsOwner: false,
+              allowModelOverride: false,
+              runId: runHook,
+              lane: "cron",
+              inputProvenance: { kind: "internal_system", sourceTool: "hook:linktrend" },
+            },
+            defaultRuntime,
+            deps,
+          );
+        } catch (err) {
+          logHooks.warn(`hook agent (linktrend) failed: ${String(err)}`);
+          enqueueSystemEvent(`Hook ${safeName} (governance error): ${String(err)}`, {
+            sessionKey: mainSessionKey,
+            trusted: false,
+          });
+          if (value.wakeMode === "now") {
+            requestHeartbeatNow({ reason: `hook:linktrend:error` });
+          }
+        }
+      })();
+      return runHook;
+    }
+
     const jobId = randomUUID();
     const now = Date.now();
     const delivery = value.deliver

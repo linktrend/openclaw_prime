@@ -100,6 +100,8 @@ export type {
 export {
   applyLinktrendGovernanceToAgentCommand,
   GOV_EVENT_KIND,
+  LINKTREND_GOVERNANCE_ONLY_DEFAULT_MESSAGE,
   resolveLinktrendGovernance,
 } from "./linktrend/governance.js";
 export type { LinktrendGovernanceApplyContext } from "./linktrend/governance.js";
+export { normalizeLinktrendGovernanceInbound } from "./linktrend/normalize-governance-inbound.js";
