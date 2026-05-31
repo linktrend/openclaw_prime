@@ -3,7 +3,7 @@
 **Status:** Canonical for MVO multi-repo development (May 2026)  
 **Workspace file:** `LiNKtrend-System.code-workspace` (same folder as this doc)
 
-This document unifies Git workflow across the four active MVO repositories opened together in Cursor. It aligns per-repo SOP with **LiNKdev** factory laws where LiNKtrend-System is the program host.
+This document unifies Git workflow across the four active MVO repositories opened together in Cursor. **All four repos follow the same branch model** as **LiNKdev SPEC §8** (`LiNKdev/factory/SPEC.md`).
 
 ---
 
@@ -22,33 +22,35 @@ This document unifies Git workflow across the four active MVO repositories opene
 
 ## Branch model (all four repos)
 
-Two models coexist — use the one each repo documents in `.cursor/rules/`:
-
-### LiNKtrend-System (LiNKdev factory)
+**All four MVO repos use the identical branch model** — same as **LiNKdev SPEC §8** and `LiNKdev/factory/rules/01-git-branching.mdc`:
 
 | Branch | Purpose | Who merges |
 |--------|---------|------------|
-| `development` | Integration trunk for program issues | Integrator (agents) |
-| `staging` | Pre-production validation | **Principal only** (Release OK) |
-| `main` | Production | **Principal only** (Release OK) |
-| `issue/<id>-<slug>` | One branch per LiNKdev issue from `development` | Executor |
+| **`development`** | Integration trunk — all agent and ad-hoc work lands here via PR | **Integrator** (after Reviewer PASS) |
+| **`staging`** | Pre-production validation | **Principal only** (Release OK) |
+| **`main`** | Production | **Principal only** (Release OK) |
+| `issue/<id>-<slug>` | One branch per LiNKdev issue from `development` | Executor → PR → Integrator merges to `development` |
+| `dev/<machine><ide>` | Optional ad-hoc IDE work (e.g. `dev/blackcursor`) | PR → **`development`** |
+
+**Promotion flow:**
+
+```
+issue/* or dev/*  →  PR to development  →  Integrator merges when merge-ready
+development       →  PR to staging      →  Principal only
+staging           →  PR to main         →  Principal only
+```
+
+- **Integrator** merges only into **`development`** — never `staging` or `main`.
+- **Principal** approves promotion **`development` → `staging` → `main`** (LAW-06).
+- No direct pushes to `staging` or `main`.
+- Allowed PR sources into `development` are enforced in `.github/workflows/branch-source-policy.yml`.
 
 **Laws:** `LiNKdev/factory/laws/LINKDEV_LAWS.md` — LAW-05 (one branch per issue), LAW-06 (no staging/main without Principal Release OK).
 
-### LiNKbot-core, LiNKautowork, LiNKsites (SOP v2)
-
-| Branch | Purpose | Who merges |
-|--------|---------|------------|
-| `dev/<machine><ide>` | Per-operator working branch (e.g. `dev/blackcursor`) | Developer/agent on that branch |
-| `staging` | Integration | PR + approval |
-| `main` | Production | PR + approval |
-
-**Flow:** `dev/*` → PR to `staging` → PR to `main`. No direct pushes to `staging` or `main`.
-
 ### Cross-repo coordination
 
-- **LiNKtrend-System** program issues may touch only System, or may specify companion PRs in sibling repos — record linked PR URLs in issue `report_path`.
-- Do not assume branch names match across repos (`development` vs `dev/blackcursor`).
+- Program issues may touch only one repo, or may specify companion PRs in sibling repos — record linked PR URLs in issue `report_path`.
+- Branch names and promotion rules are **identical** across all four repos.
 - MVO proof spans repos: one LinkSites lead loop may require merges in System + LiNKsites + LiNKautowork; trace artifacts must land in LiNKbrain via System orchestration.
 
 ---
@@ -78,7 +80,7 @@ Labels: `LiNKdev/factory/contracts/labels.md` (`linkdev:ready`, `linkdev:merge-r
 
 ## Fork policy (`link-*` repos)
 
-LiNKbot-core is an OpenClaw fork. Modify for LiNKtrend integration; **never push upstream**. Upstream sync lands in `staging` with conflict resolution before `main`.
+LiNKbot-core is an OpenClaw fork. Modify for LiNKtrend integration; **never push upstream**. Upstream sync lands in **`development`** with conflict resolution before Principal promotion to `staging`/`main`.
 
 ---
 
