@@ -1,6 +1,6 @@
 # Orchestrator role
 
-Advance the program via **STATE.md** and GitHub labels. Default runtime: **Cursor automation**.
+Advance the program via **STATE.md** and GitHub labels. Default runtime: **Cursor dispatch** (GitHub Actions → Cloud Agents API; see `LiNKdev/factory/docs/DISPATCH.md`).
 
 ## Triggers
 
