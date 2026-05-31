@@ -17,6 +17,8 @@ export type LinktrendBootstrapContext = {
 
 export type LinktrendMissionContext = {
   missionId?: string;
+  /** Monorepo `mission.title` (display line in session prompt). */
+  title?: string;
   /** Structured mission payload (object); avoid embedding secrets. */
   objective?: Record<string, unknown>;
   /** Short human summary for prompts (bounded). */
@@ -48,9 +50,23 @@ export type LinktrendApprovedToolSurface = {
   restrictToApprovedList?: boolean;
 };
 
+export type LinktrendSkillDeclaredTools = {
+  toolNames?: string[];
+};
+
+/**
+ * Canonical runtime + audit fields from LiNKtrend central policy (session/runtime only).
+ */
 export type LinktrendGovernanceInput = {
   bootstrap?: LinktrendBootstrapContext;
   mission?: LinktrendMissionContext;
   runtimeInstructions?: LinktrendRuntimeInstructions;
   approvedTools?: LinktrendApprovedToolSurface;
+  /** Declared tool names from the skill (audit; never merged into toolsAllow). */
+  skillDeclaredTools?: LinktrendSkillDeclaredTools;
+  skillName?: string;
+  skillVersion?: string;
+  skillId?: string;
+  /** Opaque skill index blob from central (audit / future use). */
+  skillIndex?: unknown;
 };

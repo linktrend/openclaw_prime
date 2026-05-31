@@ -32,6 +32,7 @@ import {
   createGatewayHttpServer,
   type HookClientIpConfig,
 } from "./server-http.js";
+import type { GatewayRequestContext } from "./server-methods/types.js";
 import type { DedupeEntry } from "./server-shared.js";
 import { createGatewayHooksRequestHandler } from "./server/hooks.js";
 import { listenGatewayHttpServer } from "./server/http-listen.js";
@@ -78,6 +79,8 @@ export async function createGatewayRuntimeState(params: {
   logHooks: ReturnType<typeof createSubsystemLogger>;
   logPlugins: ReturnType<typeof createSubsystemLogger>;
   getReadiness?: ReadinessChecker;
+  /** Set by server.impl after `createGatewayRequestContext`; used by LiNKtrend HTTP ingress. */
+  gatewayHttpRequestContextRef?: { current: GatewayRequestContext | null };
 }): Promise<{
   canvasHost: CanvasHostHandler | null;
   releasePluginRouteRegistry: () => void;
@@ -200,6 +203,7 @@ export async function createGatewayRuntimeState(params: {
         rateLimiter: params.rateLimiter,
         getReadiness: params.getReadiness,
         tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
+        gatewayHttpRequestContextRef: params.gatewayHttpRequestContextRef,
       });
       // Attach upgrade handler BEFORE listening to prevent race condition
       attachGatewayUpgradeHandler({

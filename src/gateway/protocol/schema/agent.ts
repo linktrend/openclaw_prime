@@ -6,6 +6,17 @@ import {
 } from "../../../agents/internal-event-contract.js";
 import { InputProvenanceSchema, NonEmptyString, SessionLabelString } from "./primitives.js";
 
+/** Accepts both fork segment shape (`title`/`body`) and monorepo (`label`/`text`). */
+const LinktrendRuntimeInstructionSegmentParamsSchema = Type.Object(
+  {
+    title: Type.Optional(Type.String()),
+    body: Type.Optional(Type.String()),
+    label: Type.Optional(Type.String()),
+    text: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
 export const LinktrendGovernanceParamsSchema = Type.Object(
   {
     bootstrap: Type.Optional(
@@ -25,6 +36,10 @@ export const LinktrendGovernanceParamsSchema = Type.Object(
       Type.Object(
         {
           missionId: Type.Optional(Type.String()),
+          /** Monorepo mission primary id. */
+          id: Type.Optional(Type.String()),
+          /** Monorepo mission display title. */
+          title: Type.Optional(Type.String()),
           summaryText: Type.Optional(Type.String()),
           objective: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
         },
@@ -36,17 +51,7 @@ export const LinktrendGovernanceParamsSchema = Type.Object(
         {
           text: Type.Optional(Type.String()),
           skillVersionRef: Type.Optional(Type.String()),
-          segments: Type.Optional(
-            Type.Array(
-              Type.Object(
-                {
-                  title: Type.Optional(Type.String()),
-                  body: Type.String(),
-                },
-                { additionalProperties: false },
-              ),
-            ),
-          ),
+          segments: Type.Optional(Type.Array(LinktrendRuntimeInstructionSegmentParamsSchema)),
         },
         { additionalProperties: false },
       ),
@@ -60,6 +65,18 @@ export const LinktrendGovernanceParamsSchema = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    skillDeclaredTools: Type.Optional(
+      Type.Object(
+        {
+          toolNames: Type.Optional(Type.Array(Type.String())),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    skillName: Type.Optional(Type.String()),
+    skillVersion: Type.Optional(Type.String()),
+    skillId: Type.Optional(Type.String()),
+    skillIndex: Type.Optional(Type.Unknown()),
   },
   { additionalProperties: false },
 );
@@ -184,7 +201,8 @@ export const PollParamsSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export const AgentParamsSchema = Type.Object(
+/** Standard `agent` RPC with a non-empty user message (and optional governance). */
+export const AgentParamsStandardSchema = Type.Object(
   {
     message: NonEmptyString,
     agentId: Type.Optional(NonEmptyString),
@@ -222,6 +240,25 @@ export const AgentParamsSchema = Type.Object(
     linktrendGovernance: Type.Optional(LinktrendGovernanceParamsSchema),
   },
   { additionalProperties: false },
+);
+
+/**
+ * Governance-only ingress (monorepo `governance_only`): no `message`; default text is filled in server-side.
+ * Placed before the standard branch in `AgentParamsSchema` union so it matches without a message field.
+ */
+export const AgentParamsGovernanceOnlySchema = Type.Object(
+  {
+    linktrendGovernance: LinktrendGovernanceParamsSchema,
+    idempotencyKey: Type.Optional(NonEmptyString),
+    sessionKey: Type.Optional(Type.String()),
+    agentId: Type.Optional(NonEmptyString),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentParamsSchema = Type.Union(
+  [AgentParamsGovernanceOnlySchema, AgentParamsStandardSchema],
+  { description: "Gateway agent RPC params" },
 );
 
 export const AgentIdentityParamsSchema = Type.Object(

@@ -29,13 +29,13 @@ Stack, boundaries, and non-goals for **this execution-target repository**.
 - Upstream absorption via LiNKtrend sync workflows targeting **`development`**
 - LiNKtrend-specific behavior stays in narrow hooks — do not absorb platform policy into core engine paths
 
-## Active integration branch
+## Governance integration (merged)
 
-Governance integration work lives on **`feat/linktrend-governance-integration`** until merged to **`development`**.
+LiNKtrend governance ingress is on **`development`** (merged from **`feat/linktrend-governance-integration`**, 2026-05).
 
-- Branch tip (2026-05): adds governed ingress, HTTP agent-run, hooks + schema ([docs/linktrend-governance.md](../../../docs/linktrend-governance.md))
-- **Not yet merged:** fast-forward blocked by CI workflow conflicts (`codeql.yml`, `macos-release.yml` deleted on `development`, modified on feature branch)
-- Continue feature work on that branch; merge via PR with explicit conflict resolution — do not assume it is on `development` until merge commit lands
+- Governed ingress, HTTP agent-run, hooks + schema: [docs/linktrend-governance.md](../../../docs/linktrend-governance.md)
+- Merge conflict resolution kept **`development`** CI posture: `codeql.yml` and `macos-release.yml` remain removed; consolidated changes live in **`ci.yml`** and LiNKdev guard workflows.
+- New governance work branches from **`development`**; retire the feature branch after remote sync.
 
 ## Security and cost
 

@@ -223,6 +223,8 @@ export type HookAgentPayload = {
   model?: string;
   thinking?: string;
   timeoutSeconds?: number;
+  /** LiNKtrend governance slip (validated when hook runs via gateway ingress path). */
+  linktrendGovernance?: Record<string, unknown>;
 };
 
 export type HookAgentDispatchPayload = Omit<HookAgentPayload, "sessionKey"> & {
@@ -433,6 +435,11 @@ export function normalizeAgentPayload(payload: Record<string, unknown>):
     typeof timeoutRaw === "number" && Number.isFinite(timeoutRaw) && timeoutRaw > 0
       ? Math.floor(timeoutRaw)
       : undefined;
+  const lg = payload.linktrendGovernance;
+  const linktrendGovernance =
+    lg !== undefined && typeof lg === "object" && lg !== null && !Array.isArray(lg)
+      ? (lg as Record<string, unknown>)
+      : undefined;
   return {
     ok: true,
     value: {
@@ -448,6 +455,7 @@ export function normalizeAgentPayload(payload: Record<string, unknown>):
       model,
       thinking,
       timeoutSeconds,
+      ...(linktrendGovernance ? { linktrendGovernance } : {}),
     },
   };
 }

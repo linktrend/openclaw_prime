@@ -51,6 +51,7 @@ import { applyGatewayLaneConcurrency } from "./server-lanes.js";
 import { createGatewayServerLiveState, type GatewayServerLiveState } from "./server-live-state.js";
 import { GATEWAY_EVENTS } from "./server-methods-list.js";
 import { coreGatewayHandlers } from "./server-methods.js";
+import type { GatewayRequestContext } from "./server-methods/types.js";
 import { loadGatewayModelCatalog } from "./server-model-catalog.js";
 import { createGatewayNodeSessionRuntime } from "./server-node-session-runtime.js";
 import { reloadDeferredGatewayPlugins } from "./server-plugin-bootstrap.js";
@@ -477,6 +478,9 @@ export async function startGatewayServer(
     getStartupPending: () => !startupSidecarsReady,
   });
   log.info("starting HTTP server...");
+  const gatewayHttpRequestContextRef: { current: GatewayRequestContext | null } = {
+    current: null,
+  };
   const {
     canvasHost,
     releasePluginRouteRegistry,
@@ -529,6 +533,7 @@ export async function startGatewayServer(
       logHooks,
       logPlugins,
       getReadiness,
+      gatewayHttpRequestContextRef,
     }),
   );
   const {
@@ -759,6 +764,7 @@ export async function startGatewayServer(
       broadcastVoiceWakeChanged,
       unavailableGatewayMethods,
     });
+    gatewayHttpRequestContextRef.current = gatewayRequestContext;
 
     setFallbackGatewayContextResolver(() => gatewayRequestContext);
 
