@@ -1,5 +1,7 @@
 name: Branch Source Policy
 
+# LiNKdev issue/* may target development (LiNKdev/factory/SPEC.md §8).
+
 on:
   pull_request:
     branches: [main, staging, development]
