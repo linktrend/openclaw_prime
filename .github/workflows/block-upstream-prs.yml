@@ -1,0 +1,25 @@
+name: Block upstream PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  block-upstream-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject non-LiNKbot-core base or openclaw/openclaw head
+        env:
+          BASE_REPO: ${{ github.repository }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          set -euo pipefail
+          if [ "${BASE_REPO}" != "linktrend/LiNKbot-core" ]; then
+            echo "PR base must be linktrend/LiNKbot-core (got ${BASE_REPO})."
+            exit 1
+          fi
+          if [ "${HEAD_REPO}" = "openclaw/openclaw" ]; then
+            echo "PRs from openclaw/openclaw are blocked. Sync upstream into development instead."
+            exit 1
+          fi
+          echo "PR source ${HEAD_REPO} -> ${BASE_REPO} is allowed."
