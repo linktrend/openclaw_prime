@@ -24,7 +24,12 @@ const lintExts = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"]);
 const formatExts = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".md", ".mdx"]);
 const formatIgnoredPaths = new Set(["src/canvas-host/a2ui/a2ui.bundle.js"]);
 
+const preCommitSkippedPrefixes = ["LiNKdev/"];
+
 const shouldSelect = (filePath) => {
+  if (preCommitSkippedPrefixes.some((prefix) => filePath.startsWith(prefix))) {
+    return false;
+  }
   const ext = path.extname(filePath).toLowerCase();
   if (mode === "lint") {
     return lintExts.has(ext);

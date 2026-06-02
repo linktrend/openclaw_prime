@@ -1,0 +1,45 @@
+---
+description: "LiNKbot-core fork — OpenClaw runtime + LiNKtrend MVO boundaries"
+globs: "**/*"
+alwaysApply: false
+---
+
+# LiNKbot-core (LiNKtrend fork)
+
+This repository is **`linktrend/LiNKbot-core`** — a LiNKtrend-managed fork of [OpenClaw](https://github.com/openclaw/openclaw). It is the **LiNKbot runtime plane** (role-bound AI employee execution), not the LiNKaios control-plane monorepo.
+
+## Runtime authority (OpenClaw)
+
+For engine layout, build gates, extension boundaries, and upstream conventions, follow the repo-root **`AGENTS.md`** and scoped guides (`src/**/AGENTS.md`, `extensions/AGENTS.md`, `docs/AGENTS.md`).
+
+- Product name in docs/UI: **OpenClaw**; CLI/package paths: `openclaw`
+- Node 22+; prefer `pnpm check:changed` for local gates
+- Extensions cross into core only via `openclaw/plugin-sdk/*` — no deep imports across packages
+
+## LiNKtrend / MVO authority (LiNKdev)
+
+For program ownership, issue execution, grounding, and cross-repo boundaries, follow **`LiNKdev/AGENTS.md`** and **`LiNKdev/product/grounding/`** (only files listed on the active issue `read_first`).
+
+| Question | Answer |
+|----------|--------|
+| Canonical LiNKdev program | **`linktrend-system`** in **[LiNKtrend-System](https://github.com/linktrend/LiNKtrend-System)** |
+| This repo's program | **`linkbot-core`** — execution target only; **no Planner / Go here** |
+| Cross-repo architecture | `LiNKdev/product/grounding/ARCHITECTURE_POINTER.md` |
+
+LiNKtrend governance hooks for bot-runtime: [docs/linktrend-governance.md](../../docs/linktrend-governance.md).
+
+## Fork rules
+
+- **Never** open pull requests to **`openclaw/openclaw`**
+- Upstream sync lands on **`development`** via LiNKtrend automation (see `.github/workflows/` and `.cursor/rules/01-git-branching.mdc`)
+- LiNKtrend-specific runtime surfaces stay narrow — central policy, skills, memory, and leases live in **LiNKtrend-System** (`LiNKbot/`, LinkSkills, LiNKbrain)
+
+## What this repo owns vs System
+
+| Owns (here) | Owns (LiNKtrend-System) |
+|-------------|-------------------------|
+| OpenClaw gateway, channels, extensions, CLI | LiNKaios UI/kernel, suites, projects, traces |
+| Governed ingress hooks (`linktrendGovernance`, `/v1/linktrend/agent-run`) | Role packs, communication profiles, mission payloads |
+| Runtime adapters and session/reasoning packaging | Canonical memory, capability leases, deterministic workflows |
+
+When an issue spans repos, read **`ARCHITECTURE_POINTER.md`** before assuming monorepo paths exist in this checkout.

@@ -1,0 +1,56 @@
+{
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": {
+        "source": "env",
+        "provider": "default",
+        "id": "OPENCLAW_GATEWAY_TOKEN"
+      }
+    },
+    "controlUi": {
+      "allowedOrigins": ["https://linkbot.linktrend.internal"]
+    },
+    "linktrendAgentRun": {
+      "path": "/v1/linktrend/agent-run"
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/data/workspace/shared",
+      "userTimezone": "Asia/Taipei",
+      "skipBootstrap": true,
+      "model": {
+        "primary": "openrouter/anthropic/claude-sonnet-4-6"
+      }
+    },
+    "list": [
+      {
+        "id": "linksites-builder",
+        "name": "LinkSites Builder",
+        "default": true,
+        "workspace": "/data/workspace/linksites-builder",
+        "agentDir": "/data/.openclaw/agents/linksites-builder/agent"
+      },
+      {
+        "id": "linksites-ops",
+        "name": "LinkSites Ops",
+        "workspace": "/data/workspace/linksites-ops",
+        "agentDir": "/data/.openclaw/agents/linksites-ops/agent"
+      },
+      {
+        "id": "lisa",
+        "name": "Lisa",
+        "workspace": "/data/workspace/lisa",
+        "agentDir": "/data/.openclaw/agents/lisa/agent"
+      },
+      {
+        "id": "librarian",
+        "name": "LiNKbrain Librarian",
+        "workspace": "/data/workspace/librarian",
+        "agentDir": "/data/.openclaw/agents/librarian/agent"
+      }
+    ]
+  }
+}
