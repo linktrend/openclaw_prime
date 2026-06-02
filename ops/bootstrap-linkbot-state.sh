@@ -12,16 +12,18 @@ CFG="${DATA_ROOT}/config"
 RUN_UID="${LINKBOT_RUN_UID:-1000}"
 RUN_GID="${LINKBOT_RUN_GID:-1000}"
 
-AGENTS=(shared linksites-builder linksites-ops lisa)
+AGENTS=(shared linksites-builder linksites-ops lisa librarian)
 
 mkdir -p \
   "${WS}/shared" \
   "${WS}/linksites-builder" \
   "${WS}/linksites-ops" \
   "${WS}/lisa" \
+  "${WS}/librarian" \
   "${CFG}/agents/linksites-builder/agent" \
   "${CFG}/agents/linksites-ops/agent" \
-  "${CFG}/agents/lisa/agent"
+  "${CFG}/agents/lisa/agent" \
+  "${CFG}/agents/librarian/agent"
 
 seed_workspace() {
   local agent_id="$1"
