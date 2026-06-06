@@ -23,34 +23,54 @@
       "skipBootstrap": true,
       "model": {
         "primary": "openrouter/anthropic/claude-sonnet-4-6"
+      },
+      "subagents": {
+        "model": {
+          "primary": "openrouter/anthropic/claude-haiku-4-5"
+        },
+        "maxConcurrent": 8,
+        "archiveAfterMinutes": 60
       }
     },
     "list": [
       {
-        "id": "linksites-builder",
-        "name": "LinkSites Builder",
+        "id": "admin-openclaw",
+        "name": "Admin OpenClaw",
+        "workspace": "/data/workspace/admin-openclaw",
+        "agentDir": "/data/.openclaw/agents/admin-openclaw/agent"
+      },
+      {
+        "id": "ceo-client",
+        "name": "Client CEO",
         "default": true,
-        "workspace": "/data/workspace/linksites-builder",
-        "agentDir": "/data/.openclaw/agents/linksites-builder/agent"
+        "workspace": "/data/workspace/ceo-client",
+        "agentDir": "/data/.openclaw/agents/ceo-client/agent"
       },
       {
-        "id": "linksites-ops",
-        "name": "LinkSites Ops",
-        "workspace": "/data/workspace/linksites-ops",
-        "agentDir": "/data/.openclaw/agents/linksites-ops/agent"
+        "id": "linksites-head",
+        "name": "LinkSites Head",
+        "workspace": "/data/workspace/linksites-head",
+        "agentDir": "/data/.openclaw/agents/linksites-head/agent"
       },
       {
-        "id": "lisa",
-        "name": "Lisa",
-        "workspace": "/data/workspace/lisa",
-        "agentDir": "/data/.openclaw/agents/lisa/agent"
+        "id": "linkdeveloper-orchestrator",
+        "name": "LiNKdeveloper Orchestrator",
+        "workspace": "/data/workspace/linkdeveloper-orchestrator",
+        "agentDir": "/data/.openclaw/agents/linkdeveloper-orchestrator/agent"
       },
       {
-        "id": "librarian",
-        "name": "LiNKbrain Librarian",
-        "workspace": "/data/workspace/librarian",
-        "agentDir": "/data/.openclaw/agents/librarian/agent"
+        "id": "linkdeveloper-steward",
+        "name": "LiNKdeveloper Steward",
+        "workspace": "/data/workspace/linkdeveloper-steward",
+        "agentDir": "/data/.openclaw/agents/linkdeveloper-steward/agent"
       }
     ]
+  },
+  "plugins": {
+    "entries": {
+      "openrouter": {
+        "enabled": true
+      }
+    }
   }
 }

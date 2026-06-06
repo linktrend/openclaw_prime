@@ -12,18 +12,21 @@ CFG="${DATA_ROOT}/config"
 RUN_UID="${LINKBOT_RUN_UID:-1000}"
 RUN_GID="${LINKBOT_RUN_GID:-1000}"
 
-AGENTS=(shared linksites-builder linksites-ops lisa librarian)
+AGENTS=(
+  shared
+  admin-openclaw
+  ceo-client
+  linksites-head
+  linkdeveloper-orchestrator
+  linkdeveloper-steward
+)
 
-mkdir -p \
-  "${WS}/shared" \
-  "${WS}/linksites-builder" \
-  "${WS}/linksites-ops" \
-  "${WS}/lisa" \
-  "${WS}/librarian" \
-  "${CFG}/agents/linksites-builder/agent" \
-  "${CFG}/agents/linksites-ops/agent" \
-  "${CFG}/agents/lisa/agent" \
-  "${CFG}/agents/librarian/agent"
+mkdir -p "${WS}/shared"
+for agent_id in admin-openclaw ceo-client linksites-head linkdeveloper-orchestrator linkdeveloper-steward; do
+  mkdir -p \
+    "${WS}/${agent_id}" \
+    "${CFG}/agents/${agent_id}/agent"
+done
 
 seed_workspace() {
   local agent_id="$1"

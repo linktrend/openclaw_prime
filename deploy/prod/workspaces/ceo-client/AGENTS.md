@@ -1,6 +1,6 @@
-# AGENTS.md - Lisa executive workspace
+# AGENTS.md - Client CEO workspace
 
-This workspace belongs to **Lisa** (`agentId: lisa`), CEO LiNKbot on the OpenClaw gateway.
+Workspace for `agentId: ceo-client`, tenant CEO LiNKbot on the OpenClaw gateway.
 
 ## Startup
 
