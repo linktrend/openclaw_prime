@@ -50,6 +50,7 @@ services:
       - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-linkbot}.entrypoints=${TRAEFIK_ENTRYPOINTS:-websecure}
       - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-linkbot}.tls=true
       - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-linkbot}.service=${TRAEFIK_ROUTER_NAME:-linkbot}
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-linkbot}.priority=20
       - traefik.http.services.${TRAEFIK_ROUTER_NAME:-linkbot}.loadbalancer.server.port=18789
     networks:
       - linktrend-network
