@@ -415,6 +415,7 @@ jobs:
     permissions:
       contents: read
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    continue-on-error: ${{ github.repository != 'openclaw/openclaw' }}
     runs-on: ${{ github.repository == 'openclaw/openclaw' && 'blacksmith-16vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
@@ -444,6 +445,7 @@ jobs:
     steps:
       - name: Verify fast security jobs
         env:
+          CANONICAL_REPOSITORY: ${{ github.repository == 'openclaw/openclaw' }}
           DEPENDENCY_AUDIT_RESULT: ${{ needs.security-dependency-audit.result }}
           SCM_RESULT: ${{ needs.security-scm-fast.result }}
         run: |
@@ -456,6 +458,10 @@ jobs:
           do
             job="${result%%=*}"
             status="${result#*=}"
+            if [ "$job" = "security-dependency-audit" ] && [ "$CANONICAL_REPOSITORY" != "true" ] && [ "$status" != "success" ]; then
+              echo "::warning::${job} ended with ${status}; dependency audit is report-only on forks"
+              continue
+            fi
             if [ "$status" != "success" ]; then
               echo "::error::${job} ended with ${status}"
               failed=1

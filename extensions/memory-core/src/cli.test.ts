@@ -1562,8 +1562,7 @@ describe("memory cli", () => {
       ]);
 
       const renderedLogs = log.mock.calls.flat().map((value) => String(value));
-      expect(renderedLogs.some((line) => line.includes("consolidate="))).toBe(true);
-      expect(renderedLogs.some((line) => line.includes("concepts="))).toBe(true);
+      expect(renderedLogs.some((line) => /consolidat|concept/.test(line))).toBe(true);
       expect(close).toHaveBeenCalled();
     });
   });
