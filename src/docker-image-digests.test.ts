@@ -2,8 +2,6 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parse } from "yaml";
-
 const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 
 const DIGEST_PINNED_DOCKERFILES = [
@@ -17,21 +15,6 @@ const DIGEST_PINNED_DOCKERFILES = [
   "scripts/e2e/Dockerfile",
   "scripts/e2e/Dockerfile.qr-import",
 ] as const;
-
-type DependabotDockerGroup = {
-  patterns?: string[];
-};
-
-type DependabotUpdate = {
-  "package-ecosystem"?: string;
-  directory?: string;
-  schedule?: { interval?: string };
-  groups?: Record<string, DependabotDockerGroup>;
-};
-
-type DependabotConfig = {
-  updates?: DependabotUpdate[];
-};
 
 function resolveFirstFromReference(dockerfile: string): string | undefined {
   const argDefaults = new Map<string, string>();
@@ -84,15 +67,9 @@ describe("docker base image pinning", () => {
     }
   });
 
-  it("keeps Dependabot Docker updates enabled for root Dockerfiles", async () => {
-    const raw = await readFile(resolve(repoRoot, ".github/dependabot.yml"), "utf8");
-    const config = parse(raw) as DependabotConfig;
-    const dockerUpdate = config.updates?.find(
-      (update) => update["package-ecosystem"] === "docker" && update.directory === "/",
-    );
-
-    expect(dockerUpdate).toBeDefined();
-    expect(dockerUpdate?.schedule?.interval).toBe("weekly");
-    expect(dockerUpdate?.groups?.["docker-images"]?.patterns).toContain("*");
+  it("does not require Dependabot configuration when repo lifecycle owns dependency hygiene", async () => {
+    await expect(readFile(resolve(repoRoot, ".github/dependabot.yml"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

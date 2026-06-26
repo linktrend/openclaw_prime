@@ -11,4 +11,3 @@ permissions:
 jobs:
   promote-development:
     uses: linktrend/LiNKtrend-System/.github/workflows/reusable-development-to-staging.yml@main
-    secrets: inherit
