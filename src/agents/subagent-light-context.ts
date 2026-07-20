@@ -9,9 +9,9 @@
 import { splitModelRef } from "./subagent-spawn-plan.js";
 
 /** Models at or below this context window auto-enable lightContext. */
-export const SMALL_CONTEXT_LIGHT_CONTEXT_TOKEN_LIMIT = 65_536;
+const SMALL_CONTEXT_LIGHT_CONTEXT_TOKEN_LIMIT = 65_536;
 
-export type ResolveSubagentLightContextParams = {
+type ResolveSubagentLightContextParams = {
   /** Explicit sessions_spawn.lightContext override. */
   lightContext?: boolean;
   /** Resolved child model ref (provider/model). */

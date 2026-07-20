@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import {
-  resolveSubagentLightContext,
-  SMALL_CONTEXT_LIGHT_CONTEXT_TOKEN_LIMIT,
-} from "./subagent-light-context.js";
+import { resolveSubagentLightContext } from "./subagent-light-context.js";
+
+const SMALL_CONTEXT_LIGHT_CONTEXT_TOKEN_LIMIT = 65_536;
 
 describe("resolveSubagentLightContext", () => {
   it("honors explicit lightContext true", () => {

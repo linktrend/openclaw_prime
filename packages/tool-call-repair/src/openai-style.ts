@@ -77,12 +77,15 @@ export function parseOpenAiStyleToolCallBlockAt(params: {
   }
   const record = parsed as Record<string, unknown>;
   const name = typeof record.name === "string" ? record.name.trim() : "";
-  if (
-    !name ||
-    name.length > MAX_TOOL_NAME_CHARS ||
-    [...name].some((char) => !isPlainTextToolNameChar(char)) ||
-    (params.allowedToolNames && !params.allowedToolNames.has(name))
-  ) {
+  if (!name || name.length > MAX_TOOL_NAME_CHARS) {
+    return null;
+  }
+  for (const char of name) {
+    if (!isPlainTextToolNameChar(char)) {
+      return null;
+    }
+  }
+  if (params.allowedToolNames && !params.allowedToolNames.has(name)) {
     return null;
   }
   const args = parseArguments(record.arguments ?? record.parameters ?? record.input);
