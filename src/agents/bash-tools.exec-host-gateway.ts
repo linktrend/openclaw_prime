@@ -671,7 +671,7 @@ export async function processGatewayAllowlist(
     }) && !(hostSecurity === "full" && hostAsk === "off");
   // Denylist hits intentionally have no yolo-mode escape: the STOP list exists
   // to interrupt auto-allowed commands, and durable trust never clears a hit.
-  const denylistEvaluation = evaluateExecDenylist({
+  const denylistEvaluation = await evaluateExecDenylist({
     denylist: approvals.denylist,
     segments: allowlistEval.segments,
     analysisOk,

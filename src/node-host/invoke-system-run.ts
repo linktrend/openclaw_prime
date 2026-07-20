@@ -629,7 +629,7 @@ async function evaluateSystemRunPolicyPhase(
     allowlist: approvals.allowlist,
     commandText: parsed.commandText,
   });
-  const denylistEvaluation = evaluateExecDenylist({
+  const denylistEvaluation = await evaluateExecDenylist({
     denylist: approvals.denylist,
     segments,
     analysisOk: allowlistEvaluation.analysisOk,

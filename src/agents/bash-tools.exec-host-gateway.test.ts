@@ -1634,12 +1634,13 @@ describe("processGatewayAllowlist", () => {
 
   it("requires approval for denylist matches even in yolo mode", async () => {
     mockDenylistContext(["git push*--force*"]);
-    evaluateShellAllowlistMock.mockReturnValue({
+    evaluateShellAllowlistWithAuthorizationMock.mockReturnValue({
       allowlistMatches: [],
       analysisOk: true,
       allowlistSatisfied: false,
       segments: [{ resolution: null, argv: ["git", "push", "--force"] }],
       segmentAllowlistEntries: [],
+      segmentSatisfiedBy: [],
     });
 
     const result = await runGatewayAllowlist({
@@ -1655,12 +1656,13 @@ describe("processGatewayAllowlist", () => {
   it("keeps denylist matches off the auto-review path", async () => {
     const warnings: string[] = [];
     mockDenylistContext(["git push*--force*"]);
-    evaluateShellAllowlistMock.mockReturnValue({
+    evaluateShellAllowlistWithAuthorizationMock.mockReturnValue({
       allowlistMatches: [],
       analysisOk: true,
       allowlistSatisfied: false,
       segments: [{ resolution: null, argv: ["git", "push", "--force"] }],
       segmentAllowlistEntries: [],
+      segmentSatisfiedBy: [],
     });
 
     const result = await runGatewayAllowlist({
@@ -1680,12 +1682,13 @@ describe("processGatewayAllowlist", () => {
   it("asks again for denylist matches despite durable allow-always trust", async () => {
     mockDenylistContext(["git push*--force*"]);
     hasDurableExecApprovalMock.mockReturnValue(true);
-    evaluateShellAllowlistMock.mockReturnValue({
+    evaluateShellAllowlistWithAuthorizationMock.mockReturnValue({
       allowlistMatches: [],
       analysisOk: true,
       allowlistSatisfied: false,
       segments: [{ resolution: null, argv: ["git", "push", "--force"] }],
       segmentAllowlistEntries: [],
+      segmentSatisfiedBy: [],
     });
 
     const result = await runGatewayAllowlist({
@@ -1700,12 +1703,13 @@ describe("processGatewayAllowlist", () => {
 
   it("does not require approval for commands that miss the denylist", async () => {
     mockDenylistContext(["git push*--force*"]);
-    evaluateShellAllowlistMock.mockReturnValue({
+    evaluateShellAllowlistWithAuthorizationMock.mockReturnValue({
       allowlistMatches: [],
       analysisOk: true,
       allowlistSatisfied: false,
       segments: [{ resolution: null, argv: ["git", "status"] }],
       segmentAllowlistEntries: [],
+      segmentSatisfiedBy: [],
     });
 
     await runGatewayAllowlist({
@@ -1719,12 +1723,13 @@ describe("processGatewayAllowlist", () => {
 
   it("requires approval for unanalyzable commands when a denylist is configured", async () => {
     mockDenylistContext(["git push*--force*"]);
-    evaluateShellAllowlistMock.mockReturnValue({
+    evaluateShellAllowlistWithAuthorizationMock.mockReturnValue({
       allowlistMatches: [],
       analysisOk: false,
       allowlistSatisfied: false,
       segments: [],
       segmentAllowlistEntries: [],
+      segmentSatisfiedBy: [],
     });
 
     const result = await runGatewayAllowlist({

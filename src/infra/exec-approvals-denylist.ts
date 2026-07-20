@@ -9,8 +9,9 @@
  * still be confined with `security=allowlist` or `security=deny`.
  */
 import path from "node:path";
-import { analyzeShellCommand, type ExecCommandSegment } from "./exec-approvals-analysis.js";
+import type { ExecCommandSegment } from "./exec-approvals-analysis.js";
 import type { ExecDenylistEntry } from "./exec-approvals.types.js";
+import { planShellAuthorization } from "./exec-authorization-plan.js";
 import { normalizeExecutableToken } from "./exec-wrapper-resolution.js";
 import { POSIX_INLINE_COMMAND_FLAGS, resolveInlineCommandMatch } from "./shell-inline-command.js";
 import {
@@ -154,14 +155,14 @@ function resolvePosixInlineCommand(argv: string[]): string | null {
   return inline && inline.length > 0 ? inline : null;
 }
 
-function evaluateSegmentsAgainstDenylist(params: {
+async function evaluateSegmentsAgainstDenylist(params: {
   segments: readonly ExecCommandSegment[];
   matchers: readonly DenylistMatcher[];
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   platform?: string | null;
   depth: number;
-}): ExecDenylistEvaluation {
+}): Promise<ExecDenylistEvaluation> {
   for (const segment of params.segments) {
     for (const candidate of buildSegmentCandidateTexts(segment)) {
       for (const matcher of params.matchers) {
@@ -185,17 +186,23 @@ function evaluateSegmentsAgainstDenylist(params: {
     if (params.depth + 1 >= MAX_DENYLIST_INLINE_DEPTH) {
       return UNANALYZABLE_HIT;
     }
-    const inlineAnalysis = analyzeShellCommand({
+    // Upstream replaced sync analyzeShellCommand with async shell planning.
+    const inlinePlan = await planShellAuthorization({
       command: inlineCommand,
       cwd: params.cwd,
       env: params.env,
       platform: params.platform,
     });
-    if (!inlineAnalysis.ok || inlineAnalysis.segments.length === 0) {
+    const inlineSegments = inlinePlan.ok
+      ? inlinePlan.groups.flatMap((group) =>
+          group.candidates.map((candidate) => candidate.sourceSegment),
+        )
+      : [];
+    if (!inlinePlan.ok || inlineSegments.length === 0) {
       return UNANALYZABLE_HIT;
     }
-    const inlineEvaluation = evaluateSegmentsAgainstDenylist({
-      segments: inlineAnalysis.segments,
+    const inlineEvaluation = await evaluateSegmentsAgainstDenylist({
+      segments: inlineSegments,
       matchers: params.matchers,
       cwd: params.cwd,
       env: params.env,
@@ -217,14 +224,14 @@ function evaluateSegmentsAgainstDenylist(params: {
  * is configured, the evaluation conservatively reports a hit because the
  * command cannot be proven to miss the STOP list.
  */
-export function evaluateExecDenylist(params: {
+export async function evaluateExecDenylist(params: {
   denylist: readonly ExecDenylistEntry[] | undefined | null;
   segments: readonly ExecCommandSegment[];
   analysisOk: boolean;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   platform?: string | null;
-}): ExecDenylistEvaluation {
+}): Promise<ExecDenylistEvaluation> {
   const entries = sanitizeExecDenylistEntries(params.denylist);
   if (entries.length === 0) {
     return NOT_MATCHED;
@@ -233,7 +240,7 @@ export function evaluateExecDenylist(params: {
     return UNANALYZABLE_HIT;
   }
   const caseInsensitive = (params.platform ?? process.platform) === "win32";
-  return evaluateSegmentsAgainstDenylist({
+  return await evaluateSegmentsAgainstDenylist({
     segments: params.segments,
     matchers: buildDenylistMatchers(entries, caseInsensitive),
     cwd: params.cwd,
