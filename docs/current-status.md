@@ -113,3 +113,17 @@ Review the completed documentation-only diff and decide whether to commit or ope
 - No secrets printed; no macOS `security`/Keychain commands run.
 - No commit, PR, merge, rebase, or runtime change performed.
 - `pnpm docs:list`, targeted `oxfmt --check`, path/stale-instruction checks, and `git diff --check` completed successfully for this documentation task.
+
+## Final Cursor Local Agent PR Handoff - 2026-07-23 14:12 Asia/Taipei
+
+Carlos explicitly requested the Lisa management period work be committed, pushed, and PR'd into `development`, `staging`, and `main` so it is not lost. Cursor Local Agent completed the preservation path with target-specific branches to avoid carrying unrelated main-only history into `development` or `staging`.
+
+- Development PR: https://github.com/linktrend/openclaw_prime/pull/18 (`docs/initial-agent-handoff-20260723-development` -> `development`)
+- Staging PR: https://github.com/linktrend/openclaw_prime/pull/19 (`docs/initial-agent-handoff-20260723-staging` -> `staging`)
+- Main PR: https://github.com/linktrend/openclaw_prime/pull/20 (`docs/initial-agent-handoff-20260723` -> `main`)
+
+Preserved in git: `AGENTS.md`, `README.md`, `docs/agent-briefing.md`, `docs/agent-coordination.md`, `docs/current-status.md`, `docs/agent-sessions/`, `docs/handoffs/`, and `linkbots/` including Lisa workshop/personality/docs/config snapshots and David placeholder.
+
+Deliberately excluded: unrelated modified application files in `extensions/acpx/src/cursor-model.ts`, `extensions/acpx/src/runtime.test.ts`, `extensions/github-copilot/dynamic-models.ts`, `src/agents/cursor-acp-model.test.ts`, `src/agents/cursor-acp-model.ts`, and `src/infra/exec-approvals-denylist.ts`; `.DS_Store` metadata files; live runtime `~/.openclaw-lisa`; and any `.env`, credential dumps, private keys, OAuth files, or raw token values.
+
+Merge status at handoff: PRs are open for review/CI; no merges were performed in this final session.
