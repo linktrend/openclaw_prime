@@ -41,13 +41,13 @@ Stage 1 coordination remains repository-local. This dashboard is an Orchestrator
 2. Cursor Local Agent `cursor-local-20260723-1105` onboarded, then later completed preservation commit/push/PR work (historical; now retired by Carlos).
 3. Codex Desktop Agent `codex-desktop-agent-20260723-1110` completed the two-stage coordination protocol (completed record retained).
 4. Preservation PRs merged (directly verified via `gh pr view --repo linktrend/openclaw_prime`):
-   - #18 → `development` — MERGED — `f544ba7647d` — https://github.com/linktrend/openclaw_prime/pull/18
-   - #19 → `staging` — MERGED — `8175f561fab` — https://github.com/linktrend/openclaw_prime/pull/19
-   - #20 → `main` — MERGED — `e35f1c0659a` — https://github.com/linktrend/openclaw_prime/pull/20
+   - #18 → `development` — MERGED — `f544ba7647d` — <https://github.com/linktrend/openclaw_prime/pull/18>
+   - #19 → `staging` — MERGED — `8175f561fab` — <https://github.com/linktrend/openclaw_prime/pull/19>
+   - #20 → `main` — MERGED — `e35f1c0659a` — <https://github.com/linktrend/openclaw_prime/pull/20>
 5. Merge-completion recording PRs also merged:
-   - #21 → `main` — MERGED — https://github.com/linktrend/openclaw_prime/pull/21
-   - #22 → `development` — MERGED — https://github.com/linktrend/openclaw_prime/pull/22
-   - #23 → `staging` — MERGED — https://github.com/linktrend/openclaw_prime/pull/23
+   - #21 → `main` — MERGED — <https://github.com/linktrend/openclaw_prime/pull/21>
+   - #22 → `development` — MERGED — <https://github.com/linktrend/openclaw_prime/pull/22>
+   - #23 → `staging` — MERGED — <https://github.com/linktrend/openclaw_prime/pull/23>
 6. Codex Feature session completed Cursor ACP high-fast normalization as local commit `08d19b39957` on `wip/cursor-acp-high-fast/codex-desktop-agent-20260723-1556`; focused tests and autoreview passed. Not pushed or integrated.
 7. Codex Lisa session verified the trusted-cron/sandbox boundary and completed safe Google denial guidance as local commit `0a3be6cf905` on `wip/lisa-safe-exec-guidance/codex-desktop-agent-20260723-1556`; focused tests and autoreview passed. Not pushed, integrated, or deployed.
 
@@ -152,9 +152,9 @@ Directly verified:
 
 Carlos-authorized preservation PRs are merged with merge commits (repo norm):
 
-- https://github.com/linktrend/openclaw_prime/pull/18 -> `development` (`f544ba7647d`)
-- https://github.com/linktrend/openclaw_prime/pull/19 -> `staging` (`8175f561fab`)
-- https://github.com/linktrend/openclaw_prime/pull/20 -> `main` (`e35f1c0659a`)
+- <https://github.com/linktrend/openclaw_prime/pull/18> -> `development` (`f544ba7647d`)
+- <https://github.com/linktrend/openclaw_prime/pull/19> -> `staging` (`8175f561fab`)
+- <https://github.com/linktrend/openclaw_prime/pull/20> -> `main` (`e35f1c0659a`)
 
 CI at merge time was `UNSTABLE` with no required status checks on the protected branches. Failures observed: `auto-response` / `label` (missing GitHub App private-key secrets) and `security-fast` (pre-existing HIGH prod dependency advisories: otel jaeger propagator, axios, fast-uri). Many other CI jobs were still pending. Merges used `gh pr merge --merge` without admin bypass or force push.
 
