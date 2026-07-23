@@ -14,7 +14,7 @@
 | Coordination home | /Users/linktrend/Projects/openclaw_prime |
 | Session ID        | codex-desktop-agent-20260723-1556        |
 | Started           | 2026-07-23 15:56 Asia/Taipei             |
-| Last updated      | 2026-07-23 18:16 Asia/Taipei             |
+| Last updated      | 2026-07-23 18:21 Asia/Taipei             |
 
 ## Work
 
@@ -120,6 +120,7 @@
 - Opened PR #24 to `development`: https://github.com/linktrend/openclaw_prime/pull/24. Current head is `330ddee9871`.
 - Corrected two feature-branch CI findings: unused exported ACP helpers (`6f49826b9a3`) and missing TypeScript narrowing in the new gateway test (`330ddee9871`). Focused tests and core test type-check passed locally before each push.
 - Current remaining known red checks are infrastructure/security-baseline issues: Labeler and Auto-response lack both configured GitHub App private-key secrets; `security-fast` finds current base pins below patched versions for Axios, fast-uri, and the Jaeger propagator. No gate has been weakened or bypassed.
+- A later `check-docs` failure was fixed without rewriting append-only handoffs: current dashboard URLs now use autolinks and the two immutable historical files with pre-existing MD034 violations are explicitly ignored. Full Markdown lint passed (748 files, 0 issues). PR head is now `85498bffe4b`.
 - Carlos approval is required before broadening this PR to dependency security upgrades or changing workflow token fallback behavior.
 
 ## Next Action

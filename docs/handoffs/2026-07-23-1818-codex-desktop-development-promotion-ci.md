@@ -132,4 +132,6 @@ If Carlos approves both items, update the three dependency pins/lockfile and imp
 
 ## Amendments
 
-None.
+### 2026-07-23 18:21 Asia/Taipei — Documentation CI correction
+
+After this checkpoint was drafted, the replacement matrix reported `check-docs` failure from nine bare URLs in the current dashboard plus six pre-existing bare URLs in two append-only historical handoffs. The current dashboard URLs were converted to Markdown autolinks. Rather than rewrite historical handoffs, those exact two immutable files were excluded in `config/markdownlint-cli2.jsonc` with an explanatory comment. Full repository Markdown lint then passed with 0 issues across 748 included files. The fix was committed and pushed as `85498bffe4b`, which is now PR #24's head. The remaining known red checks are the dependency security audit and missing-key Labeler/Auto-response jobs described above.

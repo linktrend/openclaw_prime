@@ -2,7 +2,7 @@
 
 ## Status Metadata
 
-- Last updated: 2026-07-23 18:16 Asia/Taipei
+- Last updated: 2026-07-23 18:21 Asia/Taipei
 - Agent: Codex Desktop Agent (primary OpenClaw Prime Orchestrator)
 - Session ID: codex-desktop-agent-20260723-1556
 - Orchestrator key: codex-mac-mini-desktop-app-orchestrator
@@ -31,7 +31,7 @@ As of 2026-07-23 18:16 Asia/Taipei:
 - Sanitized task status reports zero active tasks, no stale queued/running tasks, no degraded plugins, and no queued system events. Historical state includes 18 terminal failures and one retained lost task with one `delivery_failed` audit warning; this is not evidence of a current outage.
 - No Lisa restart, reload, repair, config change, or deployment change is currently justified. The Codex Orchestrator owns further Lisa/profile troubleshooting and will request Carlos approval before unsafe or mutating operations.
 - Carlos may assign any Cursor, Codex, or ChatGPT agent directly. The primary Codex Orchestrator coordinates shared state and conflicts; it is not an approval gateway between Carlos and another agent.
-- Carlos authorized pushing and integrating `08d19b39957` and `0a3be6cf905` into `development`, then promoting the resulting change through PRs into `staging` and `main`, with required CI green before each promotion. Development PR #24 is open at head `330ddee9871`; CI is in progress.
+- Carlos authorized pushing and integrating `08d19b39957` and `0a3be6cf905` into `development`, then promoting the resulting change through PRs into `staging` and `main`, with required CI green before each promotion. Development PR #24 is open at head `85498bffe4b`; CI is in progress.
 
 Stage 1 coordination remains repository-local. This dashboard is an Orchestrator summary; unique session records are ownership authority. Stage 2 LiNKbrain integration is not live.
 
@@ -50,7 +50,7 @@ Stage 1 coordination remains repository-local. This dashboard is an Orchestrator
    - #23 → `staging` — MERGED — https://github.com/linktrend/openclaw_prime/pull/23
 6. Codex Feature session completed Cursor ACP high-fast normalization as local commit `08d19b39957`; focused tests and autoreview passed. Its reviewed result is included in development PR #24.
 7. Codex Lisa session verified the trusted-cron/sandbox boundary and completed safe Google denial guidance as local commit `0a3be6cf905`; focused tests and autoreview passed. Its reviewed result is included in development PR #24 but is not deployed.
-8. Development integration branch `dev/minicodex/WP-0-openclaw-prime-promotion-20260723` was pushed and PR #24 opened against `development`. Two CI-detected test/code-quality issues were fixed at head `330ddee9871`; the current replacement matrix is running.
+8. Development integration branch `dev/minicodex/WP-0-openclaw-prime-promotion-20260723` was pushed and PR #24 opened against `development`. Two test/code-quality issues and one documentation-lint issue were fixed; current head is `85498bffe4b` and the replacement matrix is running.
 
 ## Active Work
 
@@ -95,7 +95,7 @@ The complete authorized coordination package for commit and promotion with the t
 | Problem                                                             | Evidence                                                                                                         | Impact                                                                                  | Owner                           | Next Action                                                                          |
 | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
 | Coordination home dashboard/checkout lag behind merged main lineage | This checkout lacks `docs/handoffs/2026-07-23-1400-...`; file exists on `origin/main`                            | Local dashboard can look stale vs remote truth                                          | Orchestrator/Carlos             | Decide whether to ff/switch coordination home after assignment                       |
-| Authorized task promotion is in progress                            | PR #24 contains the approved work and targets `development`; replacement CI is running at `330ddee9871`          | Requested fixes are not yet merged into integration branches or Lisa's deployed build   | Codex Orchestrator              | Require green CI, merge to development, then create target-specific staging/main PRs |
+| Authorized task promotion is in progress                            | PR #24 contains the approved work and targets `development`; replacement CI is running at `85498bffe4b`          | Requested fixes are not yet merged into integration branches or Lisa's deployed build   | Codex Orchestrator              | Require green CI, merge to development, then create target-specific staging/main PRs |
 | PR #24 has fork-infrastructure and dependency-audit failures        | Labeler/Auto-response have no GitHub App key; security-fast reports Axios, fast-uri, and Jaeger advisories       | PR cannot be literally all-green without an approved auth fallback and security updates | Carlos / Codex Orchestrator     | Carlos decides whether to add fork-safe token fallback and upgrade the three pins    |
 | Separate security-sensitive auth stash remains unresolved           | `stash@{0}: On main: wip-auth-unrelated` changes gateway/Tailscale Control UI authentication and tests           | It is real unfinished security behavior, not safe cleanup debris                        | Carlos / future Feature session | Do not discard or integrate without a separate scoped security review decision       |
 | Two unrelated old PRs remain open and conflicted                    | PR #9 (fleet rollout) and PR #11 (repo lifecycle) target `development` and currently report merge conflicts      | Global repository pending work cannot truthfully be called finished                     | Carlos / original owners        | Decide whether to revive, supersede, or close each PR separately                     |
