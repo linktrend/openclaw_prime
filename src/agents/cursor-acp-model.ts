@@ -9,7 +9,7 @@
  */
 
 /** Canonical Cursor ACP Grok policy id. */
-export const CURSOR_ACP_GROK_ADVERTISED_PREFERENCE = ["grok-4.5[effort=high,fast=true]"] as const;
+const CURSOR_ACP_GROK_ADVERTISED_PREFERENCE = ["grok-4.5[effort=high,fast=true]"] as const;
 
 const CURSOR_GROK_ALIAS_TO_ADVERTISED: Record<string, readonly string[]> = {
   // CLI/catalog aliases map to the canonical ACP session id.
@@ -28,7 +28,7 @@ function normalizeModelId(raw: string): string {
 }
 
 /** True when the id looks like a Cursor ACP advertised bracketed model. */
-export function isCursorAcpAdvertisedModelId(modelId: string): boolean {
+function isCursorAcpAdvertisedModelId(modelId: string): boolean {
   const normalized = normalizeModelId(modelId);
   return /^[a-z0-9][a-z0-9._-]*\[[^\]]+\]$/i.test(normalized);
 }
