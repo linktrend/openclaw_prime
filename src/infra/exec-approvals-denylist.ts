@@ -297,8 +297,8 @@ export function formatUnanalyzableDenylistHardDenyMessage(command?: string): str
     "command substitution, `||`/`&&` chains the planner cannot prove miss the STOP list).",
     "Retry with an analyzable form:",
     "- prefer native `read` / `write` / `list` / `glob` / `sessions_*` tools for files and sessions",
-    "- use bare `gws … --help` (no `| head`, no `2>&1`)",
-    "- for email / Drive / Docs with large bodies or JSON, use `tools/bin/lisa-safe` subcommands",
+    "- for Google work, default to `tools/bin/lisa-safe …` (gmail-triage, calendar-agenda, email-send, …)",
+    "- if lisa-safe has no verb, stop and report — do not improvise bare `gws` or pipes",
     "- never embed large multiline bodies or `$(cat …)` in the exec command line",
     commandLine,
   ]
