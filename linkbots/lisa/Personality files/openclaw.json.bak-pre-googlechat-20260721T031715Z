@@ -1,0 +1,436 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/Users/linktrend/.openclaw-lisa/workspace",
+      "thinkingDefault": "medium",
+      "model": {
+        "primary": "openrouter/deepseek/deepseek-v4-flash",
+        "fallbacks": [
+          "ollama/qwen3.5:4b",
+          "ollama/qwen3.5:9b",
+          "openrouter/z-ai/glm-5.2"
+        ]
+      },
+      "imageModel": {
+        "primary": "openrouter/google/gemini-3-flash-preview"
+      },
+      "models": {
+        "openrouter/deepseek/deepseek-v4-flash": {
+          "alias": "Deepseek V4 Flash (Main)"
+        },
+        "openrouter/z-ai/glm-5.2": {
+          "alias": "GLM 5.2 (General)"
+        },
+        "openrouter/moonshotai/kimi-k2": {
+          "alias": "Kimi K2 (Coding)"
+        },
+        "openrouter/anthropic/claude-sonnet-5": {
+          "alias": "Sonnet 5 (General)"
+        },
+        "openrouter/google/gemini-3-flash-preview": {
+          "alias": "Gemini 3 Flash (Vision)"
+        },
+        "openrouter/nvidia/nemotron-3-super-120b-a12b:free": {
+          "alias": "Nemotron 3 (Eval)"
+        },
+        "ollama/qwen3.5:4b": {
+          "alias": "Qwen 3.5 4B (Coding) (Local)"
+        },
+        "ollama/qwen3.5:9b": {
+          "alias": "Qwen 3.5 9B Auto (Coding) (Local)"
+        },
+        "ollama/qwen2.5-coder:7b": {
+          "alias": "Qwen 2.5 Coder 7B (Local)"
+        },
+        "ollama/gemma4:e2b": {
+          "alias": "Gemma 4 (Heartbeat) (Local)"
+        }
+      },
+      "heartbeat": {
+        "every": "2h",
+        "model": "openrouter/deepseek/deepseek-v4-flash",
+        "lightContext": true,
+        "isolatedSession": true,
+        "includeSystemPromptSection": false,
+        "target": "last",
+        "directPolicy": "allow",
+        "prompt": "This is a heartbeat poll. Ignore any internal/runtime metadata (including chat_id or INTERNAL_CONTEXT blocks); never echo them. Read HEARTBEAT.md from workspace context and follow it strictly using tools as needed. Produce the exact Heartbeat Output Format from HEARTBEAT.md (sections A. Work condensed summary, B. Coding Work & Evals Yes/No topline only, C. Battery Monitoring all 7 items in full). Never invent data; never default Unanswered Messages or Coding Work & Evals to No without checking real session/memory/logs. Do not reply with only HEARTBEAT_OK. Reconcile event-driven battery-monitor-alert-35 from main/heartbeat only (never rely on digest cron.add)."
+      },
+      "subagents": {
+        "runTimeoutSeconds": 900
+      },
+      "sandbox": {
+        "mode": "off",
+        "scope": "agent",
+        "workspaceAccess": "rw",
+        "docker": {
+          "image": "openclaw-sandbox:bookworm-slim"
+        }
+      },
+      "modelPolicy": {
+        "allow": [
+          "openrouter/deepseek/deepseek-v4-flash",
+          "openrouter/z-ai/glm-5.2",
+          "openrouter/moonshotai/kimi-k2",
+          "openrouter/anthropic/claude-sonnet-5",
+          "openrouter/google/gemini-3-flash-preview",
+          "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
+          "ollama/qwen3.5:4b",
+          "ollama/qwen3.5:9b",
+          "ollama/gemma4:e2b",
+          "ollama/qwen2.5-coder:7b"
+        ]
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "thinkingDefault": "medium",
+        "fastModeDefault": false,
+        "identity": {
+          "name": "Lisa",
+          "emoji": "\ud83e\udd9e",
+          "theme": "strategic operations lead",
+          "avatar": "assets/lisa-avatar.png"
+        },
+        "subagents": {
+          "allowAgents": [
+            "local-coder"
+          ]
+        },
+        "skills": [
+          "acp-router",
+          "browser-automation",
+          "canvas",
+          "gemini",
+          "gh-issues",
+          "github",
+          "gog",
+          "healthcheck",
+          "himalaya",
+          "mcporter",
+          "model-usage",
+          "nano-pdf",
+          "node-connect",
+          "peekaboo",
+          "python-debugpy",
+          "session-logs",
+          "summarize",
+          "taskflow",
+          "taskflow-inbox-triage",
+          "things-mac",
+          "tmux",
+          "video-frames",
+          "weather",
+          "xurl",
+          "goplaces",
+          "openai-whisper",
+          "lisa-tasks"
+        ],
+        "heartbeat": {
+          "every": "2h",
+          "model": "openrouter/deepseek/deepseek-v4-flash",
+          "lightContext": true,
+          "isolatedSession": true,
+          "includeSystemPromptSection": false,
+          "target": "last",
+          "directPolicy": "allow",
+          "prompt": "This is a heartbeat poll. Ignore any internal/runtime metadata (including chat_id or INTERNAL_CONTEXT blocks); never echo them. Read HEARTBEAT.md from workspace context and follow it strictly using tools as needed. Produce the exact Heartbeat Output Format from HEARTBEAT.md (sections A. Work condensed summary, B. Coding Work & Evals Yes/No topline only, C. Battery Monitoring all 7 items in full). Never invent data; never default Unanswered Messages or Coding Work & Evals to No without checking real session/memory/logs. Do not reply with only HEARTBEAT_OK. Reconcile event-driven battery-monitor-alert-35 from main/heartbeat only (never rely on digest cron.add)."
+        }
+      },
+      {
+        "id": "local-coder",
+        "name": "Local Coder",
+        "workspace": "/Users/linktrend/.openclaw-lisa/workspace-local-coder",
+        "model": {
+          "primary": "ollama/qwen2.5-coder:7b"
+        },
+        "thinkingDefault": "off",
+        "fastModeDefault": false,
+        "identity": {
+          "name": "Local Coder",
+          "emoji": "\ud83d\udcbb",
+          "theme": "isolated local coding worker"
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "music_generate",
+            "video_generate",
+            "image_generate",
+            "skill_workshop",
+            "browser",
+            "group:web",
+            "sessions_spawn",
+            "sessions_send",
+            "subagents",
+            "message",
+            "cron"
+          ]
+        },
+        "heartbeat": {
+          "every": "0m"
+        },
+        "subagents": {
+          "runTimeoutSeconds": 900
+        }
+      }
+    ]
+  },
+  "gateway": {
+    "mode": "local",
+    "auth": {
+      "mode": "token",
+      "token": {
+        "source": "env",
+        "provider": "default",
+        "id": "OPENCLAW_GATEWAY_TOKEN"
+      },
+      "rateLimit": {
+        "maxAttempts": 10,
+        "windowMs": 60000,
+        "lockoutMs": 300000
+      }
+    },
+    "port": 18790,
+    "bind": "loopback",
+    "trustedProxies": [
+      "127.0.0.1"
+    ],
+    "tailscale": {
+      "mode": "serve",
+      "resetOnExit": false
+    },
+    "controlUi": {
+      "allowedOrigins": [
+        "http://127.0.0.1:18790",
+        "http://localhost:18790",
+        "https://linktrend-mini.tailf7e13a.ts.net"
+      ]
+    }
+  },
+  "session": {
+    "dmScope": "main"
+  },
+  "tools": {
+    "profile": "coding",
+    "deny": [
+      "music_generate",
+      "video_generate",
+      "image_generate",
+      "skill_workshop"
+    ],
+    "byProvider": {
+      "ollama/qwen3.5:4b": {
+        "deny": [
+          "group:web",
+          "browser"
+        ]
+      },
+      "ollama/qwen3.5:9b": {
+        "deny": [
+          "group:web",
+          "browser"
+        ]
+      },
+      "ollama/qwen2.5-coder:7b": {
+        "deny": [
+          "group:web",
+          "browser",
+          "sessions_spawn",
+          "sessions_send",
+          "subagents",
+          "message",
+          "cron"
+        ]
+      }
+    }
+  },
+  "wizard": {
+    "lastRunAt": "2026-07-19T09:28:33.587Z",
+    "lastRunVersion": "2026.7.1-2",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  },
+  "meta": {
+    "lastTouchedVersion": "2026.7.2",
+    "lastTouchedAt": "2026-07-20T05:04:05.560Z",
+    "migrations": {
+      "modelPolicyAllowlist": true
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": {
+        "source": "env",
+        "provider": "default",
+        "id": "TELEGRAM_BOT_TOKEN"
+      },
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist"
+    }
+  },
+  "commands": {
+    "ownerAllowFrom": [
+      "telegram:1123023078"
+    ]
+  },
+  "plugins": {
+    "entries": {
+      "device-pair": {
+        "enabled": true
+      },
+      "acpx": {
+        "enabled": true,
+        "config": {
+          "probeAgent": "cursor",
+          "permissionMode": "approve-all",
+          "nonInteractivePermissions": "fail"
+        }
+      },
+      "openrouter": {
+        "enabled": true
+      },
+      "ollama": {
+        "enabled": true
+      },
+      "perplexity": {
+        "enabled": true
+      }
+    }
+  },
+  "acp": {
+    "enabled": true,
+    "dispatch": {
+      "enabled": true
+    },
+    "backend": "acpx",
+    "defaultAgent": "cursor",
+    "allowedAgents": [
+      "claude",
+      "codex",
+      "copilot",
+      "cursor",
+      "droid",
+      "gemini",
+      "iflow",
+      "kilocode",
+      "kimi",
+      "kiro",
+      "openclaw",
+      "opencode",
+      "pi",
+      "qwen"
+    ]
+  },
+  "diagnostics": {
+    "cacheTrace": {
+      "enabled": false
+    }
+  },
+  "skills": {
+    "entries": {
+      "1password": {
+        "enabled": false
+      },
+      "apple-notes": {
+        "enabled": false
+      },
+      "apple-reminders": {
+        "enabled": false
+      },
+      "bear-notes": {
+        "enabled": false
+      },
+      "blogwatcher": {
+        "enabled": false
+      },
+      "blucli": {
+        "enabled": false
+      },
+      "camsnap": {
+        "enabled": false
+      },
+      "coding-agent": {
+        "enabled": false
+      },
+      "eightctl": {
+        "enabled": false
+      },
+      "gemini": {
+        "enabled": false
+      },
+      "gifgrep": {
+        "enabled": false
+      },
+      "gog": {
+        "enabled": false
+      },
+      "goplaces": {
+        "enabled": false
+      },
+      "himalaya": {
+        "enabled": false
+      },
+      "mcporter": {
+        "enabled": false
+      },
+      "model-usage": {
+        "enabled": false
+      },
+      "nano-pdf": {
+        "enabled": false
+      },
+      "obsidian": {
+        "enabled": false
+      },
+      "openai-whisper": {
+        "enabled": false
+      },
+      "openai-whisper-api": {
+        "enabled": false
+      },
+      "openhue": {
+        "enabled": false
+      },
+      "oracle": {
+        "enabled": false
+      },
+      "ordercli": {
+        "enabled": false
+      },
+      "peekaboo": {
+        "enabled": false
+      },
+      "sag": {
+        "enabled": false
+      },
+      "sherpa-onnx-tts": {
+        "enabled": false
+      },
+      "songsee": {
+        "enabled": false
+      },
+      "sonoscli": {
+        "enabled": false
+      },
+      "spotify-player": {
+        "enabled": false
+      },
+      "summarize": {
+        "enabled": false
+      },
+      "things-mac": {
+        "enabled": false
+      },
+      "trello": {
+        "enabled": false
+      },
+      "xurl": {
+        "enabled": false
+      }
+    }
+  }
+}

@@ -22,6 +22,42 @@ Skills own workflows; root owns hard policy and routing.
 - New channel/plugin/app/doc surface: update `.github/labeler.yml` + GH labels.
 - New `AGENTS.md`: add sibling `CLAUDE.md` symlink; edit `AGENTS.md` only.
 
+## Before Beginning Work
+
+- Read this root `AGENTS.md`, then scoped `AGENTS.md` files for touched paths. For all OpenClaw Prime work, also read `docs/agent-briefing.md`, `docs/agent-coordination.md`, `docs/current-status.md`, potentially overlapping records in `docs/agent-sessions/active/`, and recent relevant handoffs.
+- Inspect fresh coordination state before editing: `git status --short --branch`, `git branch --show-current`, `git branch -vv`, `git remote -v`, `git worktree list`, and `git stash list`.
+- Check the dashboard and session records for overlap. If another session owns the same files, branch, runtime config, service, credentials, deployment path, or functional area, stop and coordinate before editing.
+- Use one branch per task unless Carlos explicitly says otherwise. Prefer separate worktrees/clones for simultaneous work; never switch a shared checkout while another session uses it.
+- Supported agent types remain exactly `Cursor Local Agent`, `Cursor Cloud Agent`, `Codex Desktop Agent`, and `ChatGPT Work Agent`. Also record platform, machine, surface, local/cloud execution, role (`orchestrator`, `lisa`, or `feature`), and matching Orchestrator key per `docs/agent-coordination.md`.
+- Create only your unique `docs/agent-sessions/active/<session-id>.md` record from `docs/agent-sessions/TEMPLATE.md`. Use Asia/Taipei session time. Only Orchestrators edit the shared `docs/current-status.md` dashboard.
+- Preserve existing uncommitted changes. Never overwrite, revert, rebase, merge, delete, or rewrite another branch or another agent's work without explicit Carlos authorization.
+- Keep the requested scope. Do not modify application code, runtime config, services, credentials, deployment settings, or functional files unless the current task explicitly authorizes it.
+- Never reproduce secrets, tokens, private memory contents, emails/messages, credential values, or unrelated private user data. Sensitive locations may be named only when needed, with values redacted. Never run macOS `security` commands or query Keychain without Carlos's explicit approval.
+
+## During Work
+
+- Update your session record at material decisions, milestones, blockers, scope changes, before pausing, before compaction or handoff, and before ending. Orchestrators refresh `docs/current-status.md` from those records.
+- Keep branches separate. Do not merge, rebase, cherry-pick, force-push, or rewrite another task branch without explicit Carlos authorization.
+- If simultaneous agents overlap, stop rather than guess ownership. Record the conflict, affected files/areas, and proposed next action in your session record; the Orchestrator summarizes it in the dashboard.
+- Lisa agents own Lisa-specific profile/workspace/runtime work only. Feature agents own reusable OpenClaw Prime behavior. Orchestrators coordinate and review; they do not silently absorb unrelated Lisa or Feature implementation.
+- Independently created Cursor, Codex, and ChatGPT conversations do not guarantee automatic notification. Use native messaging when available plus the written session record. Agents without canonical repo write access must return the Coordination Relay defined in `docs/agent-coordination.md` to their matching Orchestrator.
+- Verify runtime claims from current evidence. For Lisa, use profile `lisa` and the active runtime paths documented in `docs/agent-briefing.md`; do not confuse the generic gateway service with Lisa's LaunchAgent.
+- Use redaction for any runtime/profile/config inspection. Do not copy private memory, message bodies, emails, OAuth material, service account contents, token values, or personal data into repo docs.
+- Record material decisions with reason, evidence, impact, and whether they were Carlos-approved or implementation judgment.
+- Stage 1 coordination is repository-local and does not claim cross-machine sync. LiNKbrain is the planned Stage 2 institutional-memory layer; do not claim live OpenClaw Prime consumer wiring or use it as a branch lock until that integration is implemented and verified.
+- If blocked, document the blocker, evidence, owner, and next action before pausing.
+
+## Before Ending Work
+
+- Re-run fresh Git status and inspect the final diff. Confirm only files in the authorized scope changed.
+- Verify links and paths you added or changed. For docs-only work, run at least lightweight diff/path sanity; run broader docs checks when dependencies and scope justify it.
+- Create a dated handoff from `docs/handoffs/TEMPLATE.md`. Include files inspected, files created/modified/deleted, commands, validation, decisions, problems, uncommitted changes, risks, remaining work, exact next action, questions, and confidence.
+- Finalize your session record, move it from `docs/agent-sessions/active/` to `completed/`, and ask the matching Orchestrator to refresh `docs/current-status.md`. Orchestrators must state explicitly when no work remains active.
+- Handoffs are append-only. Factual corrections require a dated amendment stating what was wrong, the corrected fact, why, who corrected it, and evidence.
+- List uncommitted changes and distinguish your changes from pre-existing work.
+- State tests or runtime checks actually run; do not claim health, passing tests, or successful delivery without evidence.
+- If confidence is below 98%, leave explicit questions for Carlos and for the incoming agent.
+
 ## ClawSweeper Review Policy
 
 - OpenClaw-specific review rules live here; generic ClawSweeper prompts stay repo-agnostic.

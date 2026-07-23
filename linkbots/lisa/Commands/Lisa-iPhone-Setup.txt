@@ -1,0 +1,143 @@
+Lisa iPhone — FRESH setup code (one-time re-pair only)
+Generated: 2026-07-21 12:43:09 CST
+EXPIRES:   2026-07-21 12:53:09 CST  (≈10 minutes — do not reuse after expiry)
+
+Paste this ENTIRE line in OpenClaw → Settings → Gateway, then Connect:
+
+eyJ1cmwiOiJ3c3M6Ly9saW5rdHJlbmQtbWluaS50YWlsZjdlMTNhLnRzLm5ldDo4NDQzIiwiYm9vdHN0cmFwVG9rZW4iOiJTOTlUT2dYU1NNSzYxSks1aWV5WHgyQXlBamN6bVdibzdFRFlRY0I3M2VzIn0
+
+A watcher on this Mac Mini will auto-approve + label "iPhone" for the next
+~15 minutes. You must Connect while the watcher is running.
+
+After it connects once: delete macmini.local:18790 and any …ts.net :443
+entry (Settings → Gateway → swipe → Forget). Keep only
+linktrend-mini.tailf7e13a.ts.net:8443, and use Reconnect daily — no new code.
+
+============================================================
+DURABLE HOW-TO — daily reconnect does NOT need a new code
+============================================================
+
+Lisa iPhone — how to connect (Tailscale Serve :8443)
+====================================================
+Updated: 2026-07-21
+Home (repo): ~/Documents/LiNKwork/Openclaw Lisa Prime/Commands/
+
+STATUS
+- Prefer ONLY: wss://linktrend-mini.tailf7e13a.ts.net:8443  (Tailscale Serve)
+- Do NOT use: bare :443 — Funnel on :443 is Google Chat /googlechat only (not OpenClaw WS)
+- Do NOT use: macmini.local:18790 (old LAN — delete on the phone; see below)
+- Gateway LaunchAgent: ai.openclaw.lisa
+- Fork: /Users/linktrend/Projects/openclaw_prime  (profile lisa, Node 24)
+
+Serve vs Funnel (why :8443):
+  Control UI / OpenClaw gateway WSS → Serve :8443 → 127.0.0.1:18790 (tailnet only)
+  Google Chat webhook             → Funnel :443 /googlechat (public)
+  Bare https://…ts.net/ on :443   → 404 by design (not the gateway)
+
+------------------------------------------------------------
+DAILY USE (no new setup code)
+------------------------------------------------------------
+After the first successful pairing, reconnect is sticky. You do NOT need a new
+setup code for normal use (app restart, phone reboot, leaving the house).
+
+1. Tailscale on iPhone = Connected (same tailnet as the Mini).
+2. Mac Mini awake; Lisa gateway LaunchAgent running.
+3. Open OpenClaw → Settings → Gateway.
+4. Select / Reconnect the paired Tailscale gateway:
+     linktrend-mini.tailf7e13a.ts.net:8443  (TLS / Secure ON)
+     Full URL if the app asks: wss://linktrend-mini.tailf7e13a.ts.net:8443
+5. Chat with Lisa (main). "Local Coder" in the agent list is normal — see note.
+
+------------------------------------------------------------
+FIX “Gateway error… bad response from the server” (wrong port)
+------------------------------------------------------------
+That error means the phone is still aiming at :443 (Funnel), which is not OpenClaw WS.
+
+1. Settings → Gateway → Forget any entry that is:
+     - linktrend-mini… without :8443 (or port 443)
+     - macmini.local:18790
+2. Add / reconnect with Manual Gateway (if the app offers it):
+     Host / URL: wss://linktrend-mini.tailf7e13a.ts.net:8443
+     Port: 8443   (if Host and Port are separate fields)
+     Secure / TLS: ON
+     Token: see OPENCLAW_GATEWAY_TOKEN below (only if the UI has a token field)
+3. If Connect asks for pairing after the URL change: on Mac Mini run
+     Lisa-Approve-Device.command → type iPhone
+   or double-click Lisa-Make-iPhone-Setup.command for a fresh setup code + watcher.
+
+------------------------------------------------------------
+DELETE old bad entries (phone-only)
+------------------------------------------------------------
+Those names live in the iPhone app’s local “Paired Gateways” list. The Mini
+cannot delete them for you.
+
+1. Open OpenClaw on iPhone.
+2. Settings → Gateway.
+3. Forget: macmini.local:18790, and any …ts.net on port 443 / without :8443.
+4. Keep only: linktrend-mini.tailf7e13a.ts.net:8443
+
+------------------------------------------------------------
+ONE-TIME SETUP / RE-PAIR (only if you Forget the good gateway, reinstall,
+or pairing is broken)
+------------------------------------------------------------
+Setup codes are short-lived (~10 minutes). They are NOT for daily reconnect.
+
+Option A — Setup code (recommended)
+  Why: Manual Gateway UI on iPhone often has Host + Port only (no token field).
+  The setup code carries URL + bootstrap token together.
+
+  On Mac Mini, double-click:
+    Lisa-Make-iPhone-Setup.command
+  That writes a FRESH setup code to the TOP of this file and watches ~15 min
+    to auto-approve as "iPhone". On the phone: paste the new code → Connect
+    while the watcher is still running.
+
+  Or manually:
+    1. Start an approve wait: Lisa-Approve-Device.command → type iPhone
+       (or leave blank after Connect — auto-guess often picks iPhone).
+    2. Generate a code in Terminal on the Mini:
+         export PATH="/opt/homebrew/opt/node@24/bin:$PATH"
+         node /Users/linktrend/Projects/openclaw_prime/openclaw.mjs --profile lisa qr \
+           --public-url wss://linktrend-mini.tailf7e13a.ts.net:8443 --setup-code-only
+    3. Paste that one-line code into OpenClaw → Settings → Gateway → Connect
+       while approval is still available (~5 min pending TTL).
+
+Option B — Manual Gateway
+  Host: linktrend-mini.tailf7e13a.ts.net
+  Port: 8443
+  URL (if single field): wss://linktrend-mini.tailf7e13a.ts.net:8443
+  Secure / TLS: ON
+  Token (if shown): from OPENCLAW_GATEWAY_TOKEN below
+  Prefer Option A (setup code) for first pair / re-pair when there is no
+  token field in the app UI.
+
+Gateway token source of truth (admin / rare manual paste):
+  ~/.openclaw-lisa/service-env/ai.openclaw.lisa.env → OPENCLAW_GATEWAY_TOKEN
+
+------------------------------------------------------------
+MacBook outside the house (same Tailscale idea)
+------------------------------------------------------------
+See Lisa-Control-UI.txt — bookmark with :8443 and #token= works off home Wi‑Fi when
+Tailscale is on on both devices and the Mini/Lisa LaunchAgent is up.
+
+------------------------------------------------------------
+Two agents: Lisa and Local Coder
+------------------------------------------------------------
+Both can appear in the iOS agent list. That is intentional.
+- Chat normally with Lisa (main).
+- Local Coder is a helper for local-model coding (ollama/qwen2.5-coder:7b).
+
+------------------------------------------------------------
+Do NOT use
+------------------------------------------------------------
+- wss://linktrend-mini.tailf7e13a.ts.net  (no port / implied :443 — Funnel only)
+- https://linktrend-mini.tailf7e13a.ts.net/  (404 — not Control UI)
+- macmini.local:18790
+- Unencrypted / cleartext
+- Port 18790 over Tailscale
+- mDNS “LNK’s Mac Mini” discovery as the primary path
+- Any expired setup code from an older Desktop file
+
+Gateway WSS: wss://linktrend-mini.tailf7e13a.ts.net:8443
+Control UI:  https://linktrend-mini.tailf7e13a.ts.net:8443/
+Chat webhook (leave alone): https://linktrend-mini.tailf7e13a.ts.net/googlechat

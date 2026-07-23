@@ -1,0 +1,67 @@
+Lisa Google Chat — HTTP app (not Workspace add-on)
+=================================================
+Updated: 2026-07-21
+
+Root cause of "Lisa not responding":
+  Old LiNKaios (linkbot-901208) Chat app was locked as Workspace add-on.
+  Webhook posts arrived without usable Authorization → "missing token".
+
+Two GCP Chat apps (inventory):
+  OLD (broken / disabled):
+    Project: LiNKaios (linkbot-901208 / App ID 71619887675)
+    Display name: Lisa
+    Type: Workspace add-on (checkbox ON)
+    Status: DISABLED (as of 2026-07-21 — so it should not appear in Find apps)
+  NEW (working HTTP):
+    Project: Lisa Chat HTTP (lisa-chat-http / App ID 979048284525)
+    Display name: Lisa Prime   ← search for this exact name
+    Description: Lisa Prime - LiNKtrend assistant
+    Type: HTTP Chat app (NOT an add-on)
+    Status: LIVE - available to users
+    Webhook: https://linktrend-mini.tailf7e13a.ts.net/googlechat
+    Audience: HTTP endpoint URL
+    Visibility: specific people — calusa@linktrend.media
+    Service account: lisa-chat-bot@lisa-chat-http.iam.gserviceaccount.com
+    Key installed: ~/.openclaw-lisa/googlechat-service-account.json
+
+What was changed for discovery (2026-07-21):
+  - Renamed NEW app display name from "Lisa" → "Lisa Prime"
+  - Set OLD LiNKaios "Lisa" app status to DISABLED
+  - NEW remains LIVE, HTTP endpoint configured, visible to calusa@linktrend.media
+
+--------------------------------------------------------------------
+FOR CARLOS — plain-English: how to add the correct app
+--------------------------------------------------------------------
+You do NOT need Google Workspace Marketplace admin, and you do NOT
+install from Apps admin. Use Google Chat "Find apps" only.
+
+1. Open Google Chat in a browser while signed in as calusa@linktrend.media
+   → https://chat.google.com
+2. In the left sidebar, look for "Apps" (or "Direct messages" / chat list).
+3. Click the + (plus) next to Apps / "Find apps" / "Browse apps"
+   (wording varies slightly; goal is the app finder / marketplace for Chat).
+4. In the search box, type exactly:   Lisa Prime
+   - Do NOT search only "Lisa" (the old broken app was named that).
+   - You should see "Lisa Prime" with description like
+     "Lisa Prime - LiNKtrend assistant".
+5. Click Lisa Prime → Chat / Install / Add (whatever the button says).
+6. Open the new 1:1 chat with Lisa Prime and send:  hi
+7. If Lisa asks for pairing approval, tell the Mini operator to run:
+       PATH="/opt/homebrew/opt/node@24/bin:$PATH"
+       node ~/Projects/openclaw_prime/openclaw.mjs --profile lisa pairing list
+       node ~/Projects/openclaw_prime/openclaw.mjs --profile lisa pairing approve googlechat <CODE>
+
+If you still only see old "Lisa" (not "Lisa Prime"):
+  - Hard-refresh Chat (or try an incognito window as calusa@).
+  - Confirm you are signed in as calusa@linktrend.media (only that
+    address is on the visibility list).
+  - Remove/ignore any old "Lisa" DM if it still sits in your chat list
+    from before — that was the disabled LiNKaios add-on.
+
+Control UI bookmark (tailnet Serve :8443):
+  See Lisa-Control-UI.txt — must include :8443 and #token=
+
+iPhone OpenClaw app (same Serve :8443 — do not confuse with this Chat URL):
+  wss://linktrend-mini.tailf7e13a.ts.net:8443
+  Funnel https://…ts.net/googlechat on :443 is Chat only — not the iPhone gateway.
+  See Lisa-iPhone-Setup.txt.

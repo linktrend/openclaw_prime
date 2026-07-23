@@ -1,0 +1,109 @@
+Lisa Control UI — MacBook one-shot fix
+======================================
+Updated: 2026-07-22
+Home (repo): ~/Documents/LiNKwork/Openclaw Lisa Prime/Commands/
+
+ALLOWED access paths:
+  1. Telegram  — @lisaprime_bot
+  2. Mac Mini Chrome Control UI  — paired as "Mac Mini"
+  3. MacBook Chrome Control UI   — token bookmark; paired as "MacBook" if device auth is re-enabled
+  4. iPhone OpenClaw app (Tailscale) — pair as "iPhone"
+  5. CLI on Mac Mini — admin / AI
+
+Gateway LaunchAgent: ai.openclaw.lisa
+Serve URL (Control UI, tailnet-only): https://linktrend-mini.tailf7e13a.ts.net:8443/
+Funnel (public webhook only): https://linktrend-mini.tailf7e13a.ts.net/googlechat
+Note: bare https://linktrend-mini.tailf7e13a.ts.net/ is NOT Control UI (404 by design).
+
+--------------------------------------------------
+BOOKMARK (required — include :8443 and #token=)
+--------------------------------------------------
+Use this on MacBook AND Mac Mini Chrome:
+
+  https://linktrend-mini.tailf7e13a.ts.net:8443/#token=d5468f13f0fef574d28abe2558c5331ab15dd82c63733f6c88eab0072359bb4b
+
+Source of truth for the token (if bookmark goes stale):
+  ~/.openclaw-lisa/service-env/ai.openclaw.lisa.env
+  → OPENCLAW_GATEWAY_TOKEN
+
+Do NOT use the tokenless URL for MacBook. The token is still the auth boundary.
+Do NOT use portless :443 — after Funnel /googlechat, Control UI is Serve on :8443 only.
+Do NOT copy URLs printed before 2026-07-22 from approve-latest-device; the old helper
+printed the wrong portless URL after approval. It now prints :8443.
+
+Outside the house: same bookmark works when Tailscale is Connected on the
+client AND the Mini (Lisa LaunchAgent running). Not LAN-dependent.
+
+--------------------------------------------------
+A) MacBook Chrome — do this ONCE
+--------------------------------------------------
+1. Tailscale = Connected on the MacBook.
+2. Use Chrome or Safari, but pick one browser and keep using that same browser.
+3. Open the bookmark above exactly:
+     https://linktrend-mini.tailf7e13a.ts.net:8443/#token=...
+4. Click Connect.
+5. If the page still shows an old Pair/Connect loop:
+     - make sure the address bar still says :8443, not just .ts.net/
+     - clear site data only for linktrend-mini.tailf7e13a.ts.net
+     - reopen the bookmark with #token= and click Connect again
+6. Do NOT clear site data after it works unless you are intentionally resetting the browser identity.
+
+Current durable policy:
+  gateway.controlUi.dangerouslyDisableDeviceAuth=true
+
+Meaning:
+  Control UI over the Tailscale Serve URL uses the gateway token instead of repeated
+  browser-device pairing. This is acceptable here because the gateway is bound to
+  loopback, exposed to Carlos only through tailnet Serve :8443, and the public
+  Funnel path is only /googlechat on :443.
+
+If device auth is ever re-enabled:
+  1. MacBook: Connect once to create a pending request.
+  2. Mac Mini: double-click Lisa-Approve-Device.command and type MacBook.
+  3. MacBook: Cmd+R, then Connect again.
+
+--------------------------------------------------
+B) Mac Mini Chrome
+--------------------------------------------------
+Same bookmark. Mini is normally already paired as "Mac Mini"; under the current
+token-only Control UI policy, it should not need repeated Control UI pairing.
+
+--------------------------------------------------
+C) Self-approve next time (no AI)
+--------------------------------------------------
+Normally not needed for Control UI while gateway.controlUi.dangerouslyDisableDeviceAuth=true.
+Use this only for iPhone, CLI/device auth, or if device auth is turned back on.
+
+1. On the client: Connect / open app (creates pending, ~5 min TTL).
+2. On Mac Mini, double-click:
+     Lisa-Approve-Device.command
+   Leave blank to auto-guess, or type: MacBook / iPhone / Mac Mini
+   Or Terminal:
+     ~/.openclaw-lisa/bin/approve-latest-device
+     ~/.openclaw-lisa/bin/approve-latest-device "MacBook"
+     ~/.openclaw-lisa/bin/approve-latest-device "iPhone"
+3. Reload / reopen client.
+
+List paired devices:
+  PATH="/opt/homebrew/opt/node@24/bin:$PATH" \
+  node /Users/linktrend/Projects/openclaw_prime/openclaw.mjs --profile lisa devices list
+
+--------------------------------------------------
+iPhone (OpenClaw app — same Serve :8443, not Funnel :443)
+--------------------------------------------------
+See Lisa-iPhone-Setup.txt in this folder.
+Gateway URL: wss://linktrend-mini.tailf7e13a.ts.net:8443  (TLS ON)
+Do NOT use bare :443 — Funnel is /googlechat only; bare :443 WSS fails.
+One-time setup code vs daily reconnect; forget macmini.local:18790 and any :443 gateway.
+Fresh code: Lisa-Make-iPhone-Setup.command
+Approve: Lisa-Approve-Device.command → iPhone
+
+--------------------------------------------------
+Notes
+--------------------------------------------------
+- Skip-pairing is now explicit in Lisa's config:
+    gateway.controlUi.dangerouslyDisableDeviceAuth=true
+  Control UI over Tailscale Serve + valid gateway token skips browser-device
+  pairing. iOS app still needs one device approval.
+- Telegram and Mac Mini access stay as-is unless you revoke them.
+- Keep CLI. Revoke anything else not on the allowed list.
