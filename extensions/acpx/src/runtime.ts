@@ -518,9 +518,29 @@ function stripCursorAcpModelFlag(command: string): string {
       i += 1; // skip current model value
       continue;
     }
+    if (part?.startsWith("--model=")) {
+      continue;
+    }
     cleaned.push(part ?? "");
   }
   return cleaned.map(quoteShellArg).join(" ");
+}
+
+/** Read a configured Cursor CLI model before removing the ineffective launch flag. */
+function readCursorAcpModelFlag(command: string): string | undefined {
+  const parts = splitCommandParts(command.trim());
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i];
+    if (part === "--model") {
+      const value = parts[i + 1]?.trim();
+      return value || undefined;
+    }
+    if (part?.startsWith("--model=")) {
+      const value = part.slice("--model=".length).trim();
+      return value || undefined;
+    }
+  }
+  return undefined;
 }
 
 /** Inject/replace `--model <id>` before the `acp` subcommand for Cursor CLI ACP. */
@@ -1175,10 +1195,15 @@ export class AcpxRuntime implements AcpRuntime {
         ? classifiedCodexOverride
         : undefined;
     const requestedModel = input.model?.trim();
+    const configuredCursorModel =
+      isCursorAcp && command ? readCursorAcpModelFlag(command) : undefined;
+    const cursorRequestedModel = requestedModel ?? configuredCursorModel;
     // Cursor ACP only accepts advertised bracketed ids (e.g. grok-4.5[effort=high,fast=true]).
     // CLI catalog ids (cursor-grok-4.5-medium) and bare "grok-4.5" fail set_config_option.
     const cursorMappedModel =
-      isCursorAcp && requestedModel ? mapCursorAcpRequestedModel(requestedModel) : undefined;
+      isCursorAcp && cursorRequestedModel
+        ? mapCursorAcpRequestedModel(cursorRequestedModel)
+        : undefined;
     const cursorModelOverride = cursorMappedModel;
     const appliedModel: OpenClawRuntimeHandle["appliedModel"] =
       isCodexAcp && requestedModel
@@ -1518,6 +1543,7 @@ export {
 export const testing = {
   appendCodexAcpConfigOverrides,
   appendCursorAcpModelFlag,
+  readCursorAcpModelFlag,
   stripCursorAcpModelFlag,
   assertSupportedRuntimeSessionMode,
   classifyCodexAcpModelRequest,
