@@ -162,6 +162,10 @@ Not re-verified in this pass:
 
 - Control UI behavior and end-to-end inbound/outbound message delivery were not exercised because that could create user-visible activity.
 
+- Development PR: <https://github.com/linktrend/openclaw_prime/pull/18> (`docs/initial-agent-handoff-20260723-development` -> `development`)
+- Staging PR: <https://github.com/linktrend/openclaw_prime/pull/19> (`docs/initial-agent-handoff-20260723-staging` -> `staging`)
+- Main PR: <https://github.com/linktrend/openclaw_prime/pull/20> (`docs/initial-agent-handoff-20260723` -> `main`)
+
 ## Lisa Verification Notes — 2026-07-23 15:56-15:59 Asia/Taipei
 
 Directly verified by `codex-desktop-agent-20260723-1556`:
