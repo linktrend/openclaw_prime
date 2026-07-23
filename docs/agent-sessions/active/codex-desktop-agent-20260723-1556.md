@@ -14,7 +14,7 @@
 | Coordination home | /Users/linktrend/Projects/openclaw_prime |
 | Session ID        | codex-desktop-agent-20260723-1556        |
 | Started           | 2026-07-23 15:56 Asia/Taipei             |
-| Last updated      | 2026-07-23 17:40 Asia/Taipei             |
+| Last updated      | 2026-07-23 18:16 Asia/Taipei             |
 
 ## Work
 
@@ -111,9 +111,20 @@
 - Scope now includes a fresh audit of all worktrees, local/origin branches, open PRs, the preserved stash, and pending coordination records.
 - Cleanup remains evidence-gated: only clean, unused, merged/obsolete, unowned branches/worktrees may be removed. Another agent's active session record will not be closed by this Orchestrator.
 
+### 2026-07-23 17:40-18:16 Asia/Taipei — Development PR and CI remediation
+
+- Audited worktrees, branches, open PRs, protection settings, and the preserved stash. PRs #9 and #11 remain open/conflicted; the auth stash is substantive security work, so global pending work is not complete and those items remain excluded.
+- Created isolated worktree `../openclaw_prime-integration-development-20260723` on `dev/minicodex/WP-0-openclaw-prime-promotion-20260723` from current `origin/development`.
+- Integrated only the required Cursor ACP prerequisite chain, safe-exec prerequisite, completed Feature/Lisa work, coordination records, and review-found corrections. A rejected attempt to include unrelated main-only work was removed before push after autoreview found out-of-scope defects.
+- Focused Cursor, ACPX, denylist, gateway, node exec-policy, UI, type-test, formatting, diff, live ACP, and autoreview proof passed for the relevant paths. One broad macOS gateway test exposed two unrelated `/var`/`/private/var` and shell-builtin path assumptions; the changed hard-deny test passed.
+- Opened PR #24 to `development`: https://github.com/linktrend/openclaw_prime/pull/24. Current head is `330ddee9871`.
+- Corrected two feature-branch CI findings: unused exported ACP helpers (`6f49826b9a3`) and missing TypeScript narrowing in the new gateway test (`330ddee9871`). Focused tests and core test type-check passed locally before each push.
+- Current remaining known red checks are infrastructure/security-baseline issues: Labeler and Auto-response lack both configured GitHub App private-key secrets; `security-fast` finds current base pins below patched versions for Axios, fast-uri, and the Jaeger propagator. No gate has been weakened or bypassed.
+- Carlos approval is required before broadening this PR to dependency security upgrades or changing workflow token fallback behavior.
+
 ## Next Action
 
-- Exact next action: Audit origin/PR/branch/stash state, assemble a clean integration branch from current `origin/development`, run pre-push proof, open the development PR, and monitor CI before promotion.
+- Exact next action: Finish the current PR #24 CI run, obtain Carlos's decision on the dependency upgrades and fork-safe workflow-token fallback, then make only the approved corrections and require green CI before merging to `development`.
 - Owner: Codex Desktop Orchestrator
 - Questions for Carlos:
   - None required for the current healthy state.
