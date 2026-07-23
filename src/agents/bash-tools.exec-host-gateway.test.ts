@@ -1739,9 +1739,13 @@ describe("processGatewayAllowlist", () => {
     });
 
     expect(createAndRegisterDefaultExecApprovalRequestMock).not.toHaveBeenCalled();
-    expect(result.deniedResult?.details.status).toBe("failed");
-    expect(result.deniedResult?.details.failureKind).toBe("denylist_unanalyzable");
-    expect(String(result.deniedResult?.details.aggregated ?? "")).toContain(
+    const deniedDetails = result.deniedResult?.details;
+    expect(deniedDetails?.status).toBe("failed");
+    if (deniedDetails?.status !== "failed") {
+      throw new Error("expected a failed denylist result");
+    }
+    expect(deniedDetails.failureKind).toBe("denylist_unanalyzable");
+    expect(String(deniedDetails.aggregated ?? "")).toContain(
       "could not be analyzed for denylist screening",
     );
   });
