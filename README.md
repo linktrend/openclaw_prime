@@ -23,6 +23,19 @@ Supported channels include: WhatsApp, Telegram, Slack, Discord, Google Chat, Sig
 
 [Website](https://openclaw.ai) · [Docs](https://docs.openclaw.ai) · [Vision](VISION.md) · [Third-party notices](THIRD_PARTY_NOTICES.md) · [DeepWiki](https://deepwiki.com/openclaw/openclaw) · [Getting Started](https://docs.openclaw.ai/start/getting-started) · [Updating](https://docs.openclaw.ai/install/updating) · [Showcase](https://docs.openclaw.ai/start/showcase) · [FAQ](https://docs.openclaw.ai/help/faq) · [Onboarding](https://docs.openclaw.ai/start/wizard) · [Nix](https://github.com/openclaw/nix-openclaw) · [Docker](https://docs.openclaw.ai/install/docker) · [Discord](https://discord.gg/clawd)
 
+## AI Agent Onboarding and Handoffs
+
+Incoming agents must start with this reading order:
+
+1. [`AGENTS.md`](AGENTS.md)
+2. [`docs/agent-briefing.md`](docs/agent-briefing.md)
+3. [`docs/agent-coordination.md`](docs/agent-coordination.md)
+4. [`docs/current-status.md`](docs/current-status.md)
+5. Potentially overlapping records in [`docs/agent-sessions/active/`](docs/agent-sessions/active/)
+6. Relevant files in [`docs/handoffs/`](docs/handoffs/)
+
+This repo may have Orchestrator, Lisa, and Feature agents working through Cursor, Codex, and ChatGPT on different machines and execution surfaces. Every agent creates its own session record; only Orchestrators maintain the shared dashboard. Use one branch per task, create a dated handoff for material work, and follow the repository-local Stage 1 and future LiNKbrain Stage 2 boundaries in the coordination guide. Verify Git and runtime claims from fresh evidence, never overwrite another session's work, and never include secrets, tokens, private memory, emails/messages, or unrelated private data in coordination records.
+
 New install? Start here: [Getting started](https://docs.openclaw.ai/start/getting-started)
 
 Preferred setup: run `openclaw onboard` in your terminal.
