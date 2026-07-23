@@ -2,18 +2,18 @@
 
 ## Status Metadata
 
-- Last updated: 2026-07-23 12:45 Asia/Taipei
-- Agent: Codex Desktop Agent
-- Session ID: codex-desktop-agent-20260723-1110
-- Branch: `docs/initial-agent-handoff-20260723`
-- Commit: ed4b348d889e1a31da8ec90d13c3508127fd71a6
-- Scope: Completed the two-stage multi-platform agent documentation system: collision-resistant repository-local coordination now and a documented LiNKbrain integration boundary for later. Documentation only; no application, runtime, credential, or deployment changes. No commit/PR authorized.
-- Handoff: `docs/handoffs/2026-07-23-1243-codex-desktop-agent-coordination.md`
-- Session note: Earlier registration temporarily used label `Cursor Desktop Local Mac Mini Agent` / ID `cursor-desktop-local-mac-mini-20260723-1105`. Carlos corrected the agent type to `Cursor Local Agent`; session ID normalized to `cursor-local-20260723-1105` for the same 11:05 start.
+- Last updated: 2026-07-23 14:00 Asia/Taipei
+- Agent: Cursor Local Agent (merge follow-up)
+- Session ID: cursor-local-merge-followup-20260723-1400
+- Branch: `main` (post-merge)
+- Commit: e35f1c0659a40c6b4ccb4b39f7fc1af4bda1c74d (merge of #20); also merged #18 -> development (`f544ba7647d`), #19 -> staging (`8175f561fab`)
+- Scope: Follow-up after Carlos-authorized preservation PRs. Docs/linkbots handoff content is now on `development`, `staging`, and `main`.
+- Handoff: `docs/handoffs/2026-07-23-1400-cursor-local-pr-merges-complete.md`
+- Prior note: Session label normalization to `Cursor Local Agent` / `cursor-local-20260723-1105` remains valid historical context.
 
 ## Current Stable State
 
-As of 2026-07-23 12:45 Asia/Taipei, checkout is on `docs/initial-agent-handoff-20260723` at `ed4b348d889`. Documentation remains uncommitted. Six pre-existing application modifications and untracked `linkbots/` remain preserved. Cursor session `cursor-local-20260723-1105` is still recorded active/waiting. Codex session `codex-desktop-agent-20260723-1110` completed the authorized documentation-system implementation and moved its record to `docs/agent-sessions/completed/`. This session did not re-verify Lisa runtime health.
+As of 2026-07-23 14:00 Asia/Taipei, the Lisa management-period docs/linkbots preservation is merged: PR #18 -> `development`, #19 -> `staging`, #20 -> `main`. Merge commits: `f544ba7647d` (development), `8175f561fab` (staging), `e35f1c0659a` (main). Unrelated local application source modifications were not part of those PRs and may still exist in working checkouts. Lisa live runtime under `~/.openclaw-lisa` was not touched. This follow-up did not re-verify Lisa runtime health.
 
 The coordination design now uses unique per-session records as the ownership authority. This dashboard is an Orchestrator-maintained summary. Stage 1 is repository-local and does not claim automatic cross-machine synchronization. Stage 2 reserves LiNKbrain for canonical knowledge and append-only findings after live OpenClaw Prime consumer wiring is implemented and verified.
 
@@ -113,6 +113,16 @@ Review the completed documentation-only diff and decide whether to commit or ope
 - No secrets printed; no macOS `security`/Keychain commands run.
 - No commit, PR, merge, rebase, or runtime change performed.
 - `pnpm docs:list`, targeted `oxfmt --check`, path/stale-instruction checks, and `git diff --check` completed successfully for this documentation task.
+
+## Merge Completion - 2026-07-23 14:00 Asia/Taipei
+
+Carlos-authorized preservation PRs are merged with merge commits (repo norm):
+
+- https://github.com/linktrend/openclaw_prime/pull/18 -> `development` (`f544ba7647d`)
+- https://github.com/linktrend/openclaw_prime/pull/19 -> `staging` (`8175f561fab`)
+- https://github.com/linktrend/openclaw_prime/pull/20 -> `main` (`e35f1c0659a`)
+
+CI at merge time was `UNSTABLE` with no required status checks on the protected branches. Failures observed: `auto-response` / `label` (missing GitHub App private-key secrets) and `security-fast` (pre-existing HIGH prod dependency advisories: otel jaeger propagator, axios, fast-uri). Many other CI jobs were still pending. Merges used `gh pr merge --merge` without admin bypass or force push.
 
 ## Final Cursor Local Agent PR Handoff - 2026-07-23 14:12 Asia/Taipei
 
