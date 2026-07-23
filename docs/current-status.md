@@ -121,6 +121,7 @@ Keep Lisa running unchanged. Complete the authorized target-specific PR sequence
 
 ## Recent Relevant Handoffs
 
+- `docs/handoffs/2026-07-23-1818-codex-desktop-development-promotion-ci.md` — PR #24 integration/CI checkpoint, exact remaining green-CI blockers, cleanup audit, and Carlos approval questions.
 - `docs/handoffs/2026-07-23-1728-codex-desktop-cursor-acp-high-fast.md` — completed Cursor ACP high-fast normalization, proof, local commit, and integration boundary.
 - `docs/handoffs/2026-07-23-1728-codex-desktop-lisa-safe-exec.md` — verified Lisa trusted-cron/sandbox architecture and completed safe Google denial guidance.
 - `docs/handoffs/2026-07-23-1621-codex-desktop-remove-copilot-wip.md` — Carlos-authorized removal of the rejected GitHub Copilot WIP.

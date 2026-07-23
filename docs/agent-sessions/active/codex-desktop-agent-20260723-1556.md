@@ -18,13 +18,13 @@
 
 ## Work
 
-| Field           | Value                                                                                                                                                                                            |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Objective       | Own OpenClaw Prime orchestration; integrate completed Cursor/Lisa work through development, staging, and main with green CI; audit stale worktrees/branches/pending work                         |
-| Branch          | `docs/initial-agent-handoff-20260723`                                                                                                                                                            |
-| Starting commit | `497dfd8ff45b6422f4944e53ed171bfda01cd79b`                                                                                                                                                       |
-| Status          | `active`                                                                                                                                                                                         |
-| Handoff         | `docs/handoffs/2026-07-23-1728-codex-desktop-cursor-acp-high-fast.md` and `docs/handoffs/2026-07-23-1728-codex-desktop-lisa-safe-exec.md` (latest task checkpoints; Orchestrator session active) |
+| Field           | Value                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Objective       | Own OpenClaw Prime orchestration; integrate completed Cursor/Lisa work through development, staging, and main with green CI; audit stale worktrees/branches/pending work |
+| Branch          | `docs/initial-agent-handoff-20260723`                                                                                                                                    |
+| Starting commit | `497dfd8ff45b6422f4944e53ed171bfda01cd79b`                                                                                                                               |
+| Status          | `active`                                                                                                                                                                 |
+| Handoff         | `docs/handoffs/2026-07-23-1818-codex-desktop-development-promotion-ci.md` (latest promotion/CI checkpoint; Orchestrator session active)                                  |
 
 ## Ownership Scope
 
