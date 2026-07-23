@@ -979,14 +979,44 @@ describe("AcpxRuntime fresh reset wrapper", () => {
     });
 
     expect(handle).toMatchObject({
-      appliedModel: { kind: "applied", model: "grok-4.5[effort=medium,fast=false]" },
+      appliedModel: { kind: "applied", model: "grok-4.5[effort=high,fast=true]" },
     });
     expect(readFirstEnsureSessionInput(ensure)).toEqual({
       sessionKey: "agent:cursor:acp:test",
       agent: "cursor",
       mode: "persistent",
-      model: "grok-4.5[effort=medium,fast=false]",
-      sessionOptions: { model: "grok-4.5[effort=medium,fast=false]" },
+      model: "grok-4.5[effort=high,fast=true]",
+      sessionOptions: { model: "grok-4.5[effort=high,fast=true]" },
+    });
+  });
+
+  it("canonicalizes a case-varied Cursor ACP Grok id", async () => {
+    const baseStore: TestSessionStore = {
+      load: vi.fn(async () => undefined),
+      save: vi.fn(async () => {}),
+    };
+    const { runtime, delegate } = makeRuntime(baseStore, {
+      agentRegistry: {
+        resolve: (agentName: string) => (agentName === "cursor" ? "cursor-agent acp" : agentName),
+        list: () => ["cursor"],
+      },
+    });
+    const ensure = vi.spyOn(delegate, "ensureSession").mockResolvedValue({
+      sessionKey: "agent:cursor:acp:test",
+      backend: "acpx",
+      runtimeSessionName: "cursor",
+    });
+
+    await runtime.ensureSession({
+      sessionKey: "agent:cursor:acp:test",
+      agent: "cursor",
+      mode: "persistent",
+      model: "GROK-4.5[EFFORT=HIGH,FAST=TRUE]",
+    });
+
+    expect(readFirstEnsureSessionInput(ensure)).toMatchObject({
+      model: "grok-4.5[effort=high,fast=true]",
+      sessionOptions: { model: "grok-4.5[effort=high,fast=true]" },
     });
   });
 

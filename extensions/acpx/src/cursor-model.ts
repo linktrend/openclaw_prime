@@ -1,22 +1,17 @@
 /**
  * Cursor ACP advertises bracketed model ids; CLI --list-models uses cursor-grok-*.
- * Prefer Carlos order: medium no-fast → high no-fast → high fast.
+ * OpenClaw Prime normalizes every Grok 4.5 request to its canonical high-fast ACP id.
  */
 
-export const CURSOR_ACP_GROK_ADVERTISED_PREFERENCE = [
-  "grok-4.5[effort=medium,fast=false]",
-  "grok-4.5[effort=high,fast=false]",
-  "grok-4.5[effort=high,fast=true]",
-] as const;
+export const CURSOR_ACP_GROK_ADVERTISED_PREFERENCE = ["grok-4.5[effort=high,fast=true]"] as const;
 
 const CURSOR_GROK_ALIAS_TO_ADVERTISED: Record<string, readonly string[]> = {
   "cursor-grok-4.5-medium": CURSOR_ACP_GROK_ADVERTISED_PREFERENCE,
-  "cursor-grok-4.5-medium-fast": [
-    "grok-4.5[effort=medium,fast=true]",
-    "grok-4.5[effort=high,fast=true]",
-  ],
-  "cursor-grok-4.5-high": ["grok-4.5[effort=high,fast=false]", "grok-4.5[effort=high,fast=true]"],
-  "cursor-grok-4.5-high-fast": ["grok-4.5[effort=high,fast=true]"],
+  "cursor-grok-4.5-medium-fast": CURSOR_ACP_GROK_ADVERTISED_PREFERENCE,
+  "cursor-grok-4.5-high": CURSOR_ACP_GROK_ADVERTISED_PREFERENCE,
+  "cursor-grok-4.5-high-fast": CURSOR_ACP_GROK_ADVERTISED_PREFERENCE,
+  "cursor-grok-4.5-low": CURSOR_ACP_GROK_ADVERTISED_PREFERENCE,
+  "cursor-grok-4.5-low-fast": CURSOR_ACP_GROK_ADVERTISED_PREFERENCE,
   "grok-4.5": CURSOR_ACP_GROK_ADVERTISED_PREFERENCE,
 };
 
@@ -30,10 +25,14 @@ export function expandCursorAcpGrokModelCandidates(model: string | undefined): s
   if (!normalized) {
     return [...CURSOR_ACP_GROK_ADVERTISED_PREFERENCE];
   }
+  const lower = normalized.toLowerCase();
+  if (lower.startsWith("grok-4.5[")) {
+    return [...CURSOR_ACP_GROK_ADVERTISED_PREFERENCE];
+  }
   if (isCursorAcpAdvertisedModelId(normalized)) {
     return [normalized];
   }
-  const aliased = CURSOR_GROK_ALIAS_TO_ADVERTISED[normalized.toLowerCase()];
+  const aliased = CURSOR_GROK_ALIAS_TO_ADVERTISED[lower];
   if (aliased) {
     return [...aliased];
   }
