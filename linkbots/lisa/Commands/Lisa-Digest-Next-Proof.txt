@@ -1,0 +1,20 @@
+Lisa issues 1–4 proof (2026-07-21)
+==================================
+
+1) Digest delivery (mid-day one-shot following morning-digest.md contract):
+   Telegram messageId=206 @ 2026-07-21T12:39:07+08:00 → chat 1123023078
+   Email Gmail id=19f82f859cdec8cb subject "Lisa digest delivery proof 2026-07-21"
+   Live cron lisa-morning-digest remains: 45 6 * * * Asia/Taipei (status ok)
+
+2) Heartbeat wall-clock (Option B):
+   Native heartbeat.every = 0m
+   Cron lisa-heartbeat-45: 45 0,2,4,8,10,12,14,16,18,20,22 * * * Asia/Taipei
+   First live run: 12:45 delivered Telegram messageId=207 @ 2026-07-21T12:46:50+08:00
+   Next: 14:45 (skips 06:45 digest, 17:45/21:45 selfie)
+
+3) Battery Monitoring: schema v2, no ankle-monitor crons; personality+live docs synced
+
+4) Needs-review UI: openclaw_prime HEAD = PR #16 merge 0269d85; delivery-proof string in dist/control-ui
+   Carlos: hard-refresh https://linktrend-mini.tailf7e13a.ts.net:8443/#token=…
+
+Control UI Serve :8443 + Funnel /googlechat preserved.
