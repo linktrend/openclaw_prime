@@ -4,8 +4,8 @@ import {
   evaluateExecDenylist,
   sanitizeExecDenylistEntries,
   type ExecCommandSegment,
-  type ExecDenylistEntry,
 } from "./exec-approvals.js";
+import type { ExecDenylistEntry } from "./exec-approvals.types.js";
 import { planShellAuthorization } from "./exec-authorization-plan.js";
 
 async function evaluateCommand(command: string, patterns: string[], platform = "linux") {

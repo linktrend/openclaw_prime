@@ -28,7 +28,7 @@ const POSIX_SHELL_WRAPPER_NAMES: ReadonlySet<string> = POSIX_SHELL_WRAPPERS;
 const OPAQUE_INLINE_WRAPPER_TOKENS = new Set(["cmd", "cmd.exe", "powershell", "pwsh"]);
 const OPAQUE_INLINE_FLAG_TOKENS = new Set(["/c", "/k", "-command", "-c", "-encodedcommand"]);
 
-export type ExecDenylistEvaluation = {
+type ExecDenylistEvaluation = {
   matched: boolean;
   entry: ExecDenylistEntry | null;
   matchedText: string | null;

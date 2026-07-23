@@ -118,9 +118,9 @@ Review the completed documentation-only diff and decide whether to commit or ope
 
 Carlos-authorized preservation PRs are merged with merge commits (repo norm):
 
-- https://github.com/linktrend/openclaw_prime/pull/18 -> `development` (`f544ba7647d`)
-- https://github.com/linktrend/openclaw_prime/pull/19 -> `staging` (`8175f561fab`)
-- https://github.com/linktrend/openclaw_prime/pull/20 -> `main` (`e35f1c0659a`)
+- <https://github.com/linktrend/openclaw_prime/pull/18> -> `development` (`f544ba7647d`)
+- <https://github.com/linktrend/openclaw_prime/pull/19> -> `staging` (`8175f561fab`)
+- <https://github.com/linktrend/openclaw_prime/pull/20> -> `main` (`e35f1c0659a`)
 
 CI at merge time was `UNSTABLE` with no required status checks on the protected branches. Failures observed: `auto-response` / `label` (missing GitHub App private-key secrets) and `security-fast` (pre-existing HIGH prod dependency advisories: otel jaeger propagator, axios, fast-uri). Many other CI jobs were still pending. Merges used `gh pr merge --merge` without admin bypass or force push.
 
@@ -128,9 +128,9 @@ CI at merge time was `UNSTABLE` with no required status checks on the protected 
 
 Carlos explicitly requested the Lisa management period work be committed, pushed, and PR'd into `development`, `staging`, and `main` so it is not lost. Cursor Local Agent completed the preservation path with target-specific branches to avoid carrying unrelated main-only history into `development` or `staging`.
 
-- Development PR: https://github.com/linktrend/openclaw_prime/pull/18 (`docs/initial-agent-handoff-20260723-development` -> `development`)
-- Staging PR: https://github.com/linktrend/openclaw_prime/pull/19 (`docs/initial-agent-handoff-20260723-staging` -> `staging`)
-- Main PR: https://github.com/linktrend/openclaw_prime/pull/20 (`docs/initial-agent-handoff-20260723` -> `main`)
+- Development PR: <https://github.com/linktrend/openclaw_prime/pull/18> (`docs/initial-agent-handoff-20260723-development` -> `development`)
+- Staging PR: <https://github.com/linktrend/openclaw_prime/pull/19> (`docs/initial-agent-handoff-20260723-staging` -> `staging`)
+- Main PR: <https://github.com/linktrend/openclaw_prime/pull/20> (`docs/initial-agent-handoff-20260723` -> `main`)
 
 Preserved in git: `AGENTS.md`, `README.md`, `docs/agent-briefing.md`, `docs/agent-coordination.md`, `docs/current-status.md`, `docs/agent-sessions/`, `docs/handoffs/`, and `linkbots/` including Lisa workshop/personality/docs/config snapshots and David placeholder.
 
