@@ -2,62 +2,48 @@
 
 ## Status Metadata
 
-- Last updated: 2026-07-23 18:21 Asia/Taipei
+- Last updated: 2026-07-24 18:59 Asia/Taipei
 - Agent: Codex Desktop Agent (primary OpenClaw Prime Orchestrator)
 - Session ID: codex-desktop-agent-20260723-1556
 - Orchestrator key: codex-mac-mini-desktop-app-orchestrator
 - Coordination home: `/Users/linktrend/Projects/openclaw_prime`
 - Branch (coordination home checkout): `docs/initial-agent-handoff-20260723`
-- Commit (coordination home HEAD): `4a48fc88719834c8664a70df0938f7ba1d6a7780`
-- Scope: Cross-platform coordination, Lisa/profile troubleshooting, and authorized promotion of the completed Cursor/Lisa commits through development, staging, and main with required CI.
-- Provenance: Git/PR facts from the Cursor Orchestrator's 15:39 direct verification; Lisa/runtime facts directly verified by the Codex Orchestrator at 15:56-15:59 unless labeled historical.
+- Commit (coordination home HEAD): `a7e7d0d37d4e2fbada4012d50f142be86a5b6384`
+- Scope: Current cross-platform coordination dashboard after completed Cursor/Lisa integration, branch promotion, CI verification, and task-worktree cleanup.
+- Provenance: Git/PR/CI facts and the final Lisa process/HTTP check were directly verified by the Codex Orchestrator on 2026-07-24 unless labeled historical.
 
 ## Current Stable State
 
-As of 2026-07-23 18:16 Asia/Taipei:
+As of 2026-07-24 18:45 Asia/Taipei:
 
-- Preservation docs and `linkbots/` are committed and present on `origin/development`, `origin/staging`, and `origin/main`.
-- PRs #18, #19, and #20 are **MERGED** (not open).
-- Follow-up merge-record PRs #21, #22, and #23 are also **MERGED**.
-- Coordination home checkout remains on `docs/initial-agent-handoff-20260723` at `4a48fc88719`, three commits ahead of `origin/docs/initial-agent-handoff-20260723`. Its working tree is clean; the local commits contain only authorized coordination records and duplicate cherry-picks of the two already-authorized task changes.
-- Local `development`, `staging`, and `main` refs match their origin counterparts. They were updated without switching the live coordination checkout.
-- `cursor-local-20260723-1105` is **retired / superseded** per Carlos (outgoing Cursor Local Agent retired). Do not resume or reuse that session ID.
-- Carlos-designated primary OpenClaw Prime Orchestrator: `codex-desktop-agent-20260723-1556`.
-- Active Cursor Orchestrator for its platform-machine-surface: `cursor-local-mac-mini-desktop-workspace-orchestrator-20260723-1539`.
-- No Lisa or Feature agent session records are currently active in `docs/agent-sessions/active/`; the two assigned sessions completed at 17:28 and moved to `completed/`.
-- Lisa's LaunchAgent and gateway are running. The gateway is loopback-only on port `18790`, HTTP and gateway RPC respond, and CLI health reports `ok`.
-- Telegram is configured, running, and connected. Google Chat is configured and running. No account identifiers or message content were inspected.
-- Lisa's current config validates and is byte-for-byte identical to `openclaw.json.last-good`. Canonical SQLite stores pass read-only integrity checks.
-- Sanitized task status reports zero active tasks, no stale queued/running tasks, no degraded plugins, and no queued system events. Historical state includes 18 terminal failures and one retained lost task with one `delivery_failed` audit warning; this is not evidence of a current outage.
-- No Lisa restart, reload, repair, config change, or deployment change is currently justified. The Codex Orchestrator owns further Lisa/profile troubleshooting and will request Carlos approval before unsafe or mutating operations.
-- Carlos may assign any Cursor, Codex, or ChatGPT agent directly. The primary Codex Orchestrator coordinates shared state and conflicts; it is not an approval gateway between Carlos and another agent.
-- Carlos authorized pushing and integrating `08d19b39957` and `0a3be6cf905` into `development`, then promoting the resulting change through PRs into `staging` and `main`, with required CI green before each promotion. Development PR #24 is open at head `85498bffe4b`; CI is in progress.
+- The authorized Cursor ACP high-fast behavior, Lisa safe-execution guidance, workflow fixes, and security baseline are fully promoted through `development`, `staging`, and `main`.
+- Final origin tips are `development` `1e34d2c59d8`, `staging` `9985ddf2905`, and `main` `e4c09bf413c`. All three trees are byte-for-byte identical.
+- PR #26 merged the default-branch workflow/security bootstrap into `main`; PR #24 merged the complete integration into `development`; PR #27 synchronized current `main` into `development`; PR #29 promoted the identical tree into `staging`; PR #30 promoted `staging` into `main`.
+- PR #24 completed with 146 successful checks, 34 skipped/neutral, and zero failures. PR #27 completed with 150 successful checks, 31 skipped/neutral, and zero failures. PR #29 completed with 154 successful checks, 30 skipped/neutral, and zero failures. PR #30 completed with 144 successful checks, 36 skipped/neutral, and zero failures.
+- There are no open pull requests in `linktrend/openclaw_prime`.
+- All seven completed task worktrees and their local task branches were removed after clean-state and merge/patch-equivalence verification. Local `development`, `staging`, and `main` refs match origin.
+- Fully merged obsolete remote task branches were removed. After a separate read-only lineage and PR audit, Carlos approved deleting the obsolete `codex-rollout` branch; it was deleted at 18:56. `docs/initial-agent-handoff-20260723` remains because Carlos chose to keep the shared coordination-home branch.
+- The unrelated `stash@{0}: On main: wip-auth-unrelated` remains preserved. It was not applied, inspected for secrets, modified, or discarded.
+- Lisa was not deployed, restarted, reloaded, or reconfigured. Final read-only verification reports LaunchAgent PID `71599` running and loopback HTTP status `200`.
+- The Codex Orchestrator session is complete. The Cursor Orchestrator session remains active/waiting and may receive work directly from Carlos.
 
 Stage 1 coordination remains repository-local. This dashboard is an Orchestrator summary; unique session records are ownership authority. Stage 2 LiNKbrain integration is not live.
 
 ## Most Recently Completed Work
 
-1. Outgoing Cursor Local Agent `cursor-local-20260723-1012` created the initial briefing/handoff system (historical).
-2. Cursor Local Agent `cursor-local-20260723-1105` onboarded, then later completed preservation commit/push/PR work (historical; now retired by Carlos).
-3. Codex Desktop Agent `codex-desktop-agent-20260723-1110` completed the two-stage coordination protocol (completed record retained).
-4. Preservation PRs merged (directly verified via `gh pr view --repo linktrend/openclaw_prime`):
-   - #18 → `development` — MERGED — `f544ba7647d` — https://github.com/linktrend/openclaw_prime/pull/18
-   - #19 → `staging` — MERGED — `8175f561fab` — https://github.com/linktrend/openclaw_prime/pull/19
-   - #20 → `main` — MERGED — `e35f1c0659a` — https://github.com/linktrend/openclaw_prime/pull/20
-5. Merge-completion recording PRs also merged:
-   - #21 → `main` — MERGED — https://github.com/linktrend/openclaw_prime/pull/21
-   - #22 → `development` — MERGED — https://github.com/linktrend/openclaw_prime/pull/22
-   - #23 → `staging` — MERGED — https://github.com/linktrend/openclaw_prime/pull/23
-6. Codex Feature session completed Cursor ACP high-fast normalization as local commit `08d19b39957`; focused tests and autoreview passed. Its reviewed result is included in development PR #24.
-7. Codex Lisa session verified the trusted-cron/sandbox boundary and completed safe Google denial guidance as local commit `0a3be6cf905`; focused tests and autoreview passed. Its reviewed result is included in development PR #24 but is not deployed.
-8. Development integration branch `dev/minicodex/WP-0-openclaw-prime-promotion-20260723` was pushed and PR #24 opened against `development`. Two test/code-quality issues and one documentation-lint issue were fixed; current head is `85498bffe4b` and the replacement matrix is running.
+1. PR #26 → `main` — merged as `6bfc783318d`; established the fork-safe workflow and security baseline on the default branch.
+2. PR #24 → `development` — merged as `6d67477eadf`; integrated the approved Cursor/Lisa work after fully green CI.
+3. PR #27 → `development` — merged as `1e34d2c59d8`; synchronized `main` history while preserving the approved OpenClaw Prime result.
+4. PR #28 was closed as superseded after GitHub reported branch-history conflicts; it was replaced by an evidence-preserving promotion branch.
+5. PR #29 → `staging` — merged as `9985ddf2905`; its tree was verified identical to `development` before and after promotion.
+6. PR #30 → `main` — merged as `e4c09bf413c`; its complete CI pipeline passed with zero failures.
+7. Completed task worktrees and merged obsolete task branches were removed. The coordination home, active Cursor record, unrelated auth stash, and untracked LiNKbrain draft were preserved. The separately audited obsolete `codex-rollout` branch was later deleted with Carlos's approval.
 
 ## Active Work
 
-| Agent               | Session ID                                                         | Branch                                | Scope                                                              | Started                      | Status           | Overlap Risk                                                                                          |
-| ------------------- | ------------------------------------------------------------------ | ------------------------------------- | ------------------------------------------------------------------ | ---------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
-| Codex Desktop Agent | codex-desktop-agent-20260723-1556                                  | `docs/initial-agent-handoff-20260723` | Promotion, CI monitoring, cleanup audit, and primary orchestration | 2026-07-23 15:56 Asia/Taipei | Active           | Medium: shares coordination checkout; preserves Cursor records and unrelated pending work.            |
-| Cursor Local Agent  | cursor-local-mac-mini-desktop-workspace-orchestrator-20260723-1539 | `docs/initial-agent-handoff-20260723` | Cursor orchestration / coordination / assignment                   | 2026-07-23 15:39 Asia/Taipei | Active / waiting | Low while waiting. Carlos may assign it directly; it must record scope and coordinate actual overlap. |
+| Agent              | Session ID                                                         | Branch                                | Scope                                            | Started                      | Status           | Overlap Risk                                                                                          |
+| ------------------ | ------------------------------------------------------------------ | ------------------------------------- | ------------------------------------------------ | ---------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Cursor Local Agent | cursor-local-mac-mini-desktop-workspace-orchestrator-20260723-1539 | `docs/initial-agent-handoff-20260723` | Cursor orchestration / coordination / assignment | 2026-07-23 15:39 Asia/Taipei | Active / waiting | Low while waiting. Carlos may assign it directly; it must record scope and coordinate actual overlap. |
 
 Orchestrator factual correction: the Cursor record was last updated at 16:05 and its references to six dirty application files and five temporary worktrees are a historical snapshot. The 16:14 cleanup evidence and current Git state supersede those state descriptions: the coordination checkout has no application diff, the two completed task worktrees are clean, and the five temporary documentation worktrees were removed. The Cursor session remains active/waiting and only its owner may refresh or close its record.
 
@@ -69,47 +55,23 @@ Orchestrator factual correction: the Cursor record was last updated at 16:05 and
 
 ## Incomplete or Uncommitted Work
 
-The two formerly unowned application scopes are reviewed, tested, and committed independently in clean task worktrees. Their integrated result is pushed in PR #24 but is not merged or deployed:
-
-- Cursor ACP high-fast behavior and tests: branch `wip/cursor-acp-high-fast/codex-desktop-agent-20260723-1556`, commit `08d19b39957`, worktree `../openclaw_prime-wip-cursor-acp-high-fast`.
-- Lisa safe-exec denial guidance: branch `wip/lisa-safe-exec-guidance/codex-desktop-agent-20260723-1556`, commit `0a3be6cf905`, worktree `../openclaw_prime-wip-lisa-safe-exec`.
-
-Carlos explicitly rejected the separate GitHub Copilot dynamic-model change at 16:20; its WIP worktree and local branch were deleted. The coordination checkout has no application-code diff.
-
-Preserved stash: `stash@{0}: On main: wip-auth-unrelated`. It contains a separate gateway-auth/browser-runtime scope and was not applied or changed.
-
-Directly verified resolved relative to older dashboard text:
-
-- Documentation and `linkbots/` are no longer merely untracked local work; they are on `origin/development`, `origin/staging`, and `origin/main`.
-- Preservation PRs are no longer open.
-
-The complete authorized coordination package for commit and promotion with the two completed task commits is:
-
-- Policy/dashboard: `AGENTS.md`, `docs/agent-coordination.md`, and `docs/current-status.md`.
-- Active records: `docs/agent-sessions/active/codex-desktop-agent-20260723-1556.md` and the unchanged Cursor-owned `docs/agent-sessions/active/cursor-local-mac-mini-desktop-workspace-orchestrator-20260723-1539.md`.
-- Completed records: `docs/agent-sessions/completed/codex-desktop-agent-feature-20260723-1718.md` and `docs/agent-sessions/completed/codex-desktop-agent-lisa-20260723-1722.md`.
-- Handoffs: `docs/handoffs/2026-07-23-1602-codex-desktop-lisa-runtime-baseline.md`, `docs/handoffs/2026-07-23-1614-codex-desktop-coordination-cleanup.md`, `docs/handoffs/2026-07-23-1621-codex-desktop-remove-copilot-wip.md`, `docs/handoffs/2026-07-23-1728-codex-desktop-cursor-acp-high-fast.md`, and `docs/handoffs/2026-07-23-1728-codex-desktop-lisa-safe-exec.md`.
+- `stash@{0}: On main: wip-auth-unrelated` is intentionally preserved as separate gateway-auth/browser-runtime work. It is not part of this completed promotion.
+- `linkbots/lisa/docs/PHASE1-LINKBRAIN-LINKSKILLS.md` remains an unrelated untracked file and was not changed.
+- This completed session's latest dashboard/session/handoff records remain local in the shared coordination home until its normal coordination-doc commit cycle. They do not change application behavior.
 
 ## Known Problems and Blockers
 
-| Problem                                                             | Evidence                                                                                                         | Impact                                                                                  | Owner                           | Next Action                                                                          |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------ |
-| Coordination home dashboard/checkout lag behind merged main lineage | This checkout lacks `docs/handoffs/2026-07-23-1400-...`; file exists on `origin/main`                            | Local dashboard can look stale vs remote truth                                          | Orchestrator/Carlos             | Decide whether to ff/switch coordination home after assignment                       |
-| Authorized task promotion is in progress                            | PR #24 contains the approved work and targets `development`; replacement CI is running at `85498bffe4b`          | Requested fixes are not yet merged into integration branches or Lisa's deployed build   | Codex Orchestrator              | Require green CI, merge to development, then create target-specific staging/main PRs |
-| PR #24 has fork-infrastructure and dependency-audit failures        | Labeler/Auto-response have no GitHub App key; security-fast reports Axios, fast-uri, and Jaeger advisories       | PR cannot be literally all-green without an approved auth fallback and security updates | Carlos / Codex Orchestrator     | Carlos decides whether to add fork-safe token fallback and upgrade the three pins    |
-| Separate security-sensitive auth stash remains unresolved           | `stash@{0}: On main: wip-auth-unrelated` changes gateway/Tailscale Control UI authentication and tests           | It is real unfinished security behavior, not safe cleanup debris                        | Carlos / future Feature session | Do not discard or integrate without a separate scoped security review decision       |
-| Two unrelated old PRs remain open and conflicted                    | PR #9 (fleet rollout) and PR #11 (repo lifecycle) target `development` and currently report merge conflicts      | Global repository pending work cannot truthfully be called finished                     | Carlos / original owners        | Decide whether to revive, supersede, or close each PR separately                     |
-| Shallow clone                                                       | `git rev-parse --is-shallow-repository` = `true`                                                                 | Upstream divergence analysis remains unreliable                                         | Future repo agent               | Deepen/unshallow only with Carlos approval                                           |
-| `gh` defaults to upstream without `--repo`                          | Bare `gh pr view 18` hit `openclaw/openclaw`, not the fork                                                       | Easy to misread PR state                                                                | Every agent                     | Always use `--repo linktrend/openclaw_prime` for fork PRs                            |
-| Chronology tension between 14:12 “PRs open” and verified merges     | `2026-07-23-1412` handoff says open; live GitHub shows merged ~14:00; `1400` handoff documents merges            | Historical handoff text must not be treated as current PR state                         | Orchestrator                    | Prefer live `gh` + origin tips; do not rewrite the 14:12 handoff                     |
-| Historical Lisa task failures and audit warning                     | Sanitized status: 18 terminal failures, one retained lost task, one `delivery_failed` warning; zero active tasks | May matter only if Carlos reports a matching delivery symptom                           | Codex Orchestrator              | Investigate read-only from the concrete symptom; do not repair speculative history   |
+| Problem                                                         | Evidence                                                                                                         | Impact                                                           | Owner                           | Next Action                                                                        |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
+| Separate security-sensitive auth stash remains unresolved       | `stash@{0}: On main: wip-auth-unrelated` changes gateway/Tailscale Control UI authentication and tests           | It is real unfinished security behavior, not safe cleanup debris | Carlos / future Feature session | Do not discard or integrate without a separate scoped security review decision     |
+| Shallow clone                                                   | `git rev-parse --is-shallow-repository` = `true`                                                                 | Upstream divergence analysis remains unreliable                  | Future repo agent               | Deepen/unshallow only with Carlos approval                                         |
+| `gh` defaults to upstream without `--repo`                      | Bare `gh pr view 18` hit `openclaw/openclaw`, not the fork                                                       | Easy to misread PR state                                         | Every agent                     | Always use `--repo linktrend/openclaw_prime` for fork PRs                          |
+| Chronology tension between 14:12 “PRs open” and verified merges | `2026-07-23-1412` handoff says open; live GitHub shows merged ~14:00; `1400` handoff documents merges            | Historical handoff text must not be treated as current PR state  | Orchestrator                    | Prefer live `gh` + origin tips; do not rewrite the 14:12 handoff                   |
+| Historical Lisa task failures and audit warning                 | Sanitized status: 18 terminal failures, one retained lost task, one `delivery_failed` warning; zero active tasks | May matter only if Carlos reports a matching delivery symptom    | Codex Orchestrator              | Investigate read-only from the concrete symptom; do not repair speculative history |
 
 ## Pending Decisions
 
-- Whether coordination home should move onto a branch containing the `1400` merge-complete handoff.
-- Whether PR #24 may include patched dependency pins and fork-safe GitHub-token fallback for Labeler/Auto-response so every check can pass.
 - Separate auth stash disposition remains undecided; it is excluded from the authorized Cursor/Lisa promotion.
-- Whether to revive, supersede, or close conflicted PR #9 and PR #11.
 - Whether to deepen/unshallow upstream history.
 - Whether a reported Lisa symptom warrants deeper task/delivery investigation. Current health does not justify speculative repair.
 - What work Carlos assigns directly to the Cursor instance or other agents. Direct assignment is permitted; agents must coordinate overlap through session records.
@@ -117,10 +79,13 @@ The complete authorized coordination package for commit and promotion with the t
 
 ## Next Recommended Action
 
-Keep Lisa running unchanged. Complete the authorized target-specific PR sequence for `08d19b39957`, `0a3be6cf905`, and the coordination records, requiring green CI before each promotion. Preserve the unrelated auth stash and conflicted PRs #9/#11 pending separate Carlos decisions.
+No promotion work remains. Keep Lisa running unchanged. Preserve the unrelated auth stash until it receives its own scoped decision. Keep the coordination branch for now, as Carlos requested.
 
 ## Recent Relevant Handoffs
 
+- `docs/handoffs/2026-07-24-1845-codex-desktop-promotion-complete.md` — final merge, CI, tree-equality, Lisa health, and cleanup proof for PRs #24-#30.
+- `docs/handoffs/2026-07-23-2100-codex-desktop-default-branch-bootstrap.md` — PR #25 merge proof, PR #24 refresh, and the default-branch bootstrap decision.
+- `docs/handoffs/2026-07-23-1911-codex-desktop-workflow-bootstrap.md` — approved security/workflow fixes, closed superseded PRs, PR #24 status, and the exact PR #25 bootstrap decision.
 - `docs/handoffs/2026-07-23-1818-codex-desktop-development-promotion-ci.md` — PR #24 integration/CI checkpoint, exact remaining green-CI blockers, cleanup audit, and Carlos approval questions.
 - `docs/handoffs/2026-07-23-1728-codex-desktop-cursor-acp-high-fast.md` — completed Cursor ACP high-fast normalization, proof, local commit, and integration boundary.
 - `docs/handoffs/2026-07-23-1728-codex-desktop-lisa-safe-exec.md` — verified Lisa trusted-cron/sandbox architecture and completed safe Google denial guidance.

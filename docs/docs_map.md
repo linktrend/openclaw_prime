@@ -9,6 +9,53 @@ title: "Docs map"
 This file is generated from `docs/**/*.md` and `docs/**/*.mdx` headings to help agents navigate the documentation tree.
 Do not edit it by hand; run `pnpm docs:map:gen`.
 
+## agent-briefing.md
+
+- Route: /agent-briefing
+- Headings:
+  - H1: Repository and Agent Handover Briefing
+  - H2: Document Metadata
+  - H2: 1. Executive Summary
+  - H2: 2. Repository Locations and Sources of Truth
+  - H2: 3. Git and Upstream Relationship
+  - H2: 4. Changes from Upstream OpenClaw
+  - H2: 5. System Architecture
+  - H2: 6. Installation and Runtime Environment
+  - H2: 7. Configuration Model
+  - H2: 8. Lisa Profile Configuration
+  - H2: 9. Lisa’s Operating Workflows
+  - H2: 10. Memory, State, Logs, and Data
+  - H2: 11. Security and External-Action Controls
+  - H2: 12. Testing and Verification
+  - H2: 13. Starting, Stopping, Updating, and Recovery
+  - H2: 14. Current Work Status
+  - H2: 15. Planned David Profile
+  - H2: 16. Multi-Agent Development and Handoff Protocol
+  - H2: 17. Known Risks and Failure Modes
+  - H2: 18. Rules for Incoming Agents
+  - H2: 19. Recommended Next Actions
+  - H2: 20. Open Questions and Unknowns
+  - H2: 21. Reference Appendix
+
+## agent-coordination.md
+
+- Route: /agent-coordination
+- Headings:
+  - H1: OpenClaw Prime Agent Coordination
+  - H2: Two-Stage Model
+  - H3: Stage 1: Repository-local coordination now
+  - H3: Stage 2: LiNKbrain integration later
+  - H2: Agent Topology
+  - H3: Carlos assigns agents directly
+  - H2: Required Identity
+  - H2: Start a Session
+  - H2: Update the Orchestrator
+  - H2: Branch Ownership
+  - H2: During Work
+  - H2: End or Hand Off a Session
+  - H2: Orchestrator Duties
+  - H2: LiNKbrain Migration Boundary
+
 ## agent-runtime-architecture.md
 
 - Route: /agent-runtime-architecture
@@ -19,6 +66,106 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H2: Runtime Selection
   - H2: Model Runtime Generations
   - H2: Related
+
+## agent-sessions/TEMPLATE.md
+
+- Route: /agent-sessions/TEMPLATE
+- Headings:
+  - H1: Agent Session Record
+  - H2: Identity
+  - H2: Work
+  - H2: Ownership Scope
+  - H2: Coordination
+  - H2: Progress
+  - H2: Next Action
+
+## agent-sessions/active/README.md
+
+- Route: /agent-sessions/active/README
+- Headings:
+  - H1: Active Agent Sessions
+
+## agent-sessions/active/cursor-local-mac-mini-desktop-workspace-orchestrator-20260723-1539.md
+
+- Route: /agent-sessions/active/cursor-local-mac-mini-desktop-workspace-orchestrator-20260723-1539
+- Headings:
+  - H1: Agent Session Record
+  - H2: Identity
+  - H2: Work
+  - H2: Ownership Scope
+  - H2: Coordination
+  - H2: Progress
+  - H3: 2026-07-23 15:39 Asia/Taipei — Orchestrator onboarding
+  - H3: 2026-07-23 16:05 Asia/Taipei — Re-read Codex primary Orchestrator state
+  - H2: Next Action
+
+## agent-sessions/completed/README.md
+
+- Route: /agent-sessions/completed/README
+- Headings:
+  - H1: Completed Agent Sessions
+
+## agent-sessions/completed/codex-desktop-agent-20260723-1110.md
+
+- Route: /agent-sessions/completed/codex-desktop-agent-20260723-1110
+- Headings:
+  - H1: Agent Session Record
+  - H2: Identity
+  - H2: Work
+  - H2: Ownership Scope
+  - H2: Coordination
+  - H2: Progress
+  - H2: Next Action
+
+## agent-sessions/completed/codex-desktop-agent-20260723-1556.md
+
+- Route: /agent-sessions/completed/codex-desktop-agent-20260723-1556
+- Headings:
+  - H1: Agent Session Record
+  - H2: Identity
+  - H2: Work
+  - H2: Ownership Scope
+  - H2: Coordination
+  - H2: Progress
+  - H3: 2026-07-23 15:56-15:59 Asia/Taipei — Ownership and read-only Lisa verification
+  - H3: 2026-07-23 16:10 Asia/Taipei — Cleanup and direct-assignment correction
+  - H3: 2026-07-23 16:20-16:21 Asia/Taipei — Removed rejected GitHub Copilot WIP
+  - H3: 2026-07-23 17:18-17:28 Asia/Taipei — Completed assigned Feature and Lisa tasks
+  - H3: 2026-07-23 17:40 Asia/Taipei — Promotion and cleanup authorized
+  - H3: 2026-07-23 17:40-18:16 Asia/Taipei — Development PR and CI remediation
+  - H3: 2026-07-23 18:21-19:11 Asia/Taipei — Approved security fixes and workflow bootstrap
+  - H3: 2026-07-23 20:00-21:00 Asia/Taipei — PR #25 merged; default-branch bootstrap identified
+  - H3: 2026-07-23 21:00-21:08 Asia/Taipei — Direct-main bootstrap PR #26
+  - H3: 2026-07-24 14:05-18:45 Asia/Taipei — End-to-end promotion completed
+  - H2: Next Action
+
+## agent-sessions/completed/codex-desktop-agent-feature-20260723-1718.md
+
+- Route: /agent-sessions/completed/codex-desktop-agent-feature-20260723-1718
+- Headings:
+  - H1: Agent Session Record
+  - H2: Identity
+  - H2: Work
+  - H2: Ownership Scope
+  - H2: Coordination
+  - H2: Progress
+  - H3: 2026-07-23 17:18 Asia/Taipei — Contract and live preflight
+  - H3: 2026-07-23 17:28 Asia/Taipei — Completed
+  - H2: Next Action
+
+## agent-sessions/completed/codex-desktop-agent-lisa-20260723-1722.md
+
+- Route: /agent-sessions/completed/codex-desktop-agent-lisa-20260723-1722
+- Headings:
+  - H1: Agent Session Record
+  - H2: Identity
+  - H2: Work
+  - H2: Ownership Scope
+  - H2: Coordination
+  - H2: Progress
+  - H3: 2026-07-23 17:22 Asia/Taipei — Architecture verification
+  - H3: 2026-07-23 17:28 Asia/Taipei — Completed
+  - H2: Next Action
 
 ## announcements/bluebubbles-imessage.md
 
@@ -3087,6 +3234,26 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H2: Providers + credentials
   - H2: Related
 
+## current-status.md
+
+- Route: /current-status
+- Headings:
+  - H1: Current Repository Status
+  - H2: Status Metadata
+  - H2: Current Stable State
+  - H2: Most Recently Completed Work
+  - H2: Active Work
+  - H3: Retired / superseded (do not resume)
+  - H2: Incomplete or Uncommitted Work
+  - H2: Known Problems and Blockers
+  - H2: Pending Decisions
+  - H2: Next Recommended Action
+  - H2: Recent Relevant Handoffs
+  - H2: Historical Verification Notes — 2026-07-23 15:39 Asia/Taipei
+  - H2: Lisa Verification Notes — 2026-07-23 15:56-15:59 Asia/Taipei
+  - H2: Cleanup Verification Notes — 2026-07-23 16:10-16:14 Asia/Taipei
+  - H2: Task Completion Notes — 2026-07-23 17:18-17:28 Asia/Taipei
+
 ## date-time.md
 
 - Route: /date-time
@@ -4133,6 +4300,322 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H2: Troubleshooting
   - H2: Migration from token auth
   - H2: Related
+
+## handoffs/2026-07-23-1012-cursor-local-initial-briefing.md
+
+- Route: /handoffs/2026-07-23-1012-cursor-local-initial-briefing
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Work Completed
+  - H2: Decisions Made
+  - H2: Tests and Verification
+  - H2: Problems Encountered
+  - H2: Uncommitted Changes
+  - H2: Current Risks
+  - H2: Remaining Work
+  - H2: Recommended Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Incoming Agent
+  - H2: Handoff Confidence
+  - H2: Append-Only Correction Rule
+  - H2: Amendment: 2026-07-23 10:19 Asia/Taipei
+  - H3: Amendment Metadata
+  - H3: Factual Corrections
+  - H3: Files Modified by the Follow-Up
+  - H3: Follow-Up Commands and Verification
+  - H3: Revised Confidence
+
+## handoffs/2026-07-23-1243-codex-desktop-agent-coordination.md
+
+- Route: /handoffs/2026-07-23-1243-codex-desktop-agent-coordination
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+
+## handoffs/2026-07-23-1412-cursor-local-final-pr-handoff.md
+
+- Route: /handoffs/2026-07-23-1412-cursor-local-final-pr-handoff
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Pull Requests
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+
+## handoffs/2026-07-23-1602-codex-desktop-lisa-runtime-baseline.md
+
+- Route: /handoffs/2026-07-23-1602-codex-desktop-lisa-runtime-baseline
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+
+## handoffs/2026-07-23-1614-codex-desktop-coordination-cleanup.md
+
+- Route: /handoffs/2026-07-23-1614-codex-desktop-coordination-cleanup
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+
+## handoffs/2026-07-23-1621-codex-desktop-remove-copilot-wip.md
+
+- Route: /handoffs/2026-07-23-1621-codex-desktop-remove-copilot-wip
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+
+## handoffs/2026-07-23-1728-codex-desktop-cursor-acp-high-fast.md
+
+- Route: /handoffs/2026-07-23-1728-codex-desktop-cursor-acp-high-fast
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+
+## handoffs/2026-07-23-1728-codex-desktop-lisa-safe-exec.md
+
+- Route: /handoffs/2026-07-23-1728-codex-desktop-lisa-safe-exec
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+
+## handoffs/2026-07-23-1818-codex-desktop-development-promotion-ci.md
+
+- Route: /handoffs/2026-07-23-1818-codex-desktop-development-promotion-ci
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+  - H3: 2026-07-23 18:21 Asia/Taipei — Documentation CI correction
+
+## handoffs/2026-07-23-1911-codex-desktop-workflow-bootstrap.md
+
+- Route: /handoffs/2026-07-23-1911-codex-desktop-workflow-bootstrap
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+
+## handoffs/2026-07-23-2100-codex-desktop-default-branch-bootstrap.md
+
+- Route: /handoffs/2026-07-23-2100-codex-desktop-default-branch-bootstrap
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created or Modified
+  - H2: Commands Run
+  - H2: Decisions and Evidence
+  - H2: Validation Results
+  - H2: Blocker and Risk
+  - H2: Remaining Work and Exact Next Action
+  - H2: Questions
+  - H2: Confidence
+  - H2: Amendment — 2026-07-23 21:08 Asia/Taipei
+
+## handoffs/2026-07-24-1845-codex-desktop-promotion-complete.md
+
+- Route: /handoffs/2026-07-24-1845-codex-desktop-promotion-complete
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
+  - H3: 2026-07-24 18:59 Asia/Taipei — codex-rollout disposition
+
+## handoffs/TEMPLATE.md
+
+- Route: /handoffs/TEMPLATE
+- Headings:
+  - H1: Agent Session Handoff
+  - H2: Session Metadata
+  - H2: Summary
+  - H2: Files Inspected
+  - H2: Files Created
+  - H2: Files Modified
+  - H2: Files Deleted
+  - H2: Commands Run
+  - H2: Decisions
+  - H2: Tests and Verification
+  - H2: Problems and Blockers
+  - H2: Uncommitted Changes
+  - H2: Risks and Unknowns
+  - H2: Remaining Work
+  - H2: Exact Next Action
+  - H2: Questions for Carlos
+  - H2: Questions for the Orchestrator or Next Agent
+  - H2: Confidence
+  - H2: Amendments
 
 ## help/debugging.md
 
@@ -9923,6 +10406,7 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H3: Session-only shortcut
   - H2: Allowlist (per agent)
   - H3: Restricting arguments with argPattern
+  - H2: Denylist (STOP list, per agent)
   - H2: Auto-allow skill CLIs
   - H2: Safe bins and approval forwarding
   - H2: Control UI editing
