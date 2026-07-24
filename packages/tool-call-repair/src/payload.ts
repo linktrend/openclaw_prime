@@ -14,6 +14,16 @@ import {
   type StructuralLineBreakOptions,
   utf8ByteLengthWithinLimit,
 } from "./grammar.js";
+import { parseOpenAiStyleToolCallBlockAt } from "./openai-style.js";
+import {
+  normalizeStandaloneParseOptions,
+  skipMarkdownFence,
+  skipMarkdownFenceClose,
+  type NormalizedPlainTextToolCallParseOptions,
+  type PlainTextToolCallParseOptions,
+} from "./standalone-helpers.js";
+
+export type { PlainTextToolCallParseOptions } from "./standalone-helpers.js";
 
 /** Parsed standalone plain-text tool call block with source offsets for repair. */
 export type PlainTextToolCallBlock = {
@@ -28,19 +38,6 @@ export type PlainTextToolCallBlock = {
   /** Inclusive start offset of the parsed block. */
   start: number;
 };
-
-/** Parser limits and allowlist options for plain-text tool-call repair. */
-export type PlainTextToolCallParseOptions = {
-  /** Optional allowlist of tool names that may be repaired. */
-  allowedToolNames?: Iterable<string>;
-  /** Maximum serialized payload size accepted for one repaired call. */
-  maxPayloadBytes?: number;
-};
-
-type NormalizedPlainTextToolCallParseOptions = Omit<
-  PlainTextToolCallParseOptions,
-  "allowedToolNames"
-> & { allowedToolNames?: ReadonlySet<string> };
 
 const DEFAULT_MAX_PLAIN_TEXT_TOOL_PAYLOAD_BYTES = 256_000;
 const MAX_PLAIN_TEXT_TOOL_NAME_CHARS = 120;
@@ -641,19 +638,14 @@ function parsePlainTextToolCallBlockAtAnySyntax(
 ): PlainTextToolCallBlock | null {
   return (
     parsePlainTextToolCallBlockAt(text, start, options, structuralLineBreaks) ??
-    parseXmlishPlainTextToolCallBlockAt(text, start, options, structuralLineBreaks)
+    parseXmlishPlainTextToolCallBlockAt(text, start, options, structuralLineBreaks) ??
+    parseOpenAiStyleToolCallBlockAt({
+      text,
+      start,
+      allowedToolNames: options?.allowedToolNames,
+      maxPayloadBytes: options?.maxPayloadBytes ?? DEFAULT_MAX_PLAIN_TEXT_TOOL_PAYLOAD_BYTES,
+    })
   );
-}
-
-function normalizeParseOptions(
-  options?: PlainTextToolCallParseOptions,
-): NormalizedPlainTextToolCallParseOptions | undefined {
-  return options
-    ? {
-        ...options,
-        allowedToolNames: options.allowedToolNames ? new Set(options.allowedToolNames) : undefined,
-      }
-    : undefined;
 }
 
 export function parseStandalonePlainTextToolCallBlocks(
@@ -662,9 +654,14 @@ export function parseStandalonePlainTextToolCallBlocks(
   structuralLineBreaks?: StructuralLineBreakOptions,
 ): PlainTextToolCallBlock[] | null {
   const blocks: PlainTextToolCallBlock[] = [];
-  const normalizedOptions = normalizeParseOptions(options);
+  const normalizedOptions = normalizeStandaloneParseOptions(options);
   let cursor = skipWhitespace(text, 0);
   while (cursor < text.length) {
+    cursor = skipMarkdownFence(text, cursor);
+    cursor = skipWhitespace(text, cursor);
+    if (cursor >= text.length) {
+      break;
+    }
     const block = parsePlainTextToolCallBlockAtAnySyntax(
       text,
       cursor,
@@ -676,6 +673,8 @@ export function parseStandalonePlainTextToolCallBlocks(
     }
     blocks.push(block);
     cursor = skipWhitespace(text, block.end);
+    cursor = skipMarkdownFenceClose(text, cursor);
+    cursor = skipWhitespace(text, cursor);
   }
   return blocks.length > 0 ? blocks : null;
 }
@@ -688,7 +687,8 @@ export function stripPlainTextToolCallBlocks(text: string): string {
       !/(?:^|[\r\n])[^\S\r\n]*(?:<\|channel\|>)?(?:commentary|analysis|final)[ \t]+to=/.test(
         text,
       ) &&
-      !/(?:^|[\r\n])[^\S\r\n]*<function=/i.test(text))
+      !/(?:^|[\r\n])[^\S\r\n]*<function=/i.test(text) &&
+      !/(?:^|[\r\n])[^\S\r\n]*\{\s*"name"\s*:/.test(text))
   ) {
     return text;
   }
