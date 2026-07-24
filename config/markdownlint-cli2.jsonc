@@ -1,6 +1,14 @@
 {
   "globs": ["docs/**/*.md", "docs/**/*.mdx", "README.md"],
-  "ignores": ["docs/zh-CN/**", "docs/.i18n/**", "docs/reference/templates/**", "**/.local/**"],
+  "ignores": [
+    "docs/zh-CN/**",
+    "docs/.i18n/**",
+    "docs/reference/templates/**",
+    "**/.local/**",
+    // Historical handoffs are append-only and predate the MD034 gate.
+    "docs/handoffs/2026-07-23-1400-cursor-local-pr-merges-complete.md",
+    "docs/handoffs/2026-07-23-1412-cursor-local-final-pr-handoff.md",
+  ],
   "config": {
     "default": true,
 

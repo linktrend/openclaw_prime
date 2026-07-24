@@ -152,9 +152,13 @@ export function syncChatQueueFromStoredOutbox(
   const storedIds = new Set(outbox.queue.map((item) => item.id));
   // Storage failures can leave an active or manual-retry row in memory only.
   // Projection must not erase that last copy while another send publishes.
+  // Waiting-idle follow-ups can also exist only in the live pane briefly; never
+  // drop them when syncing a durable head (e.g. dismissing Needs review).
   const localRecovery = current.filter(
     (item) =>
-      !item.pendingRunId && !storedIds.has(item.id) && localRecoveryItemIds.get(host)?.has(item.id),
+      !item.pendingRunId &&
+      !storedIds.has(item.id) &&
+      (localRecoveryItemIds.get(host)?.has(item.id) || item.sendState === "waiting-idle"),
   );
   const projected = outbox.queue.map((item) => {
     const ephemeralItem = ephemeralById.get(item.id);
@@ -570,7 +574,9 @@ export function removeQueuedMessageWithoutReleasing(
   id: string,
   sessionKey = host.sessionKey,
   agentId?: string,
+  options?: { allowIdOnlyFallback?: boolean },
 ): ChatQueueItem | null {
+  const allowIdOnlyFallback = options?.allowIdOnlyFallback !== false;
   const location = locateChatQueueItem(host, id);
   const stored = storedOutboxContainingItem(host, id);
   const scope: StoredChatOutboxScope =
@@ -591,10 +597,32 @@ export function removeQueuedMessageWithoutReleasing(
       stored.agentId ?? item.agentId,
     )
   ) {
-    const persisted = outboxAfterMutation(host, stored);
-    syncChatQueueFromStoredOutbox(host, persisted);
-    publishStoredOutbox(host, persisted);
-    return null;
+    // User dismiss / exact-id removal must not fail closed on a stale version.
+    // Fall back to id-only deletion so a sibling waiting-idle row is never
+    // wiped by a version-mismatch sync of the durable head.
+    // Automatic delivery-proof retirement opts out so a storage blip cannot
+    // drop an in-flight/Needs-review head via the id-only path.
+    if (
+      allowIdOnlyFallback &&
+      !removeStoredChatComposerQueueItem(
+        host,
+        stored.sessionKey,
+        id,
+        undefined,
+        stored.agentId ?? item.agentId,
+      )
+    ) {
+      const persisted = outboxAfterMutation(host, stored);
+      syncChatQueueFromStoredOutbox(host, persisted);
+      publishStoredOutbox(host, persisted);
+      return null;
+    }
+    if (!allowIdOnlyFallback) {
+      const persisted = outboxAfterMutation(host, stored);
+      syncChatQueueFromStoredOutbox(host, persisted);
+      publishStoredOutbox(host, persisted);
+      return null;
+    }
   }
   if (item) {
     transientQueueProjections.delete(transientQueueProjectionKey(host, scope, item.id));
