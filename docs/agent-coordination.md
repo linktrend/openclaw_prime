@@ -41,6 +41,20 @@ Examples of separate instances include Cursor Desktop on MacBook Black over SSH,
 
 There is no automatic hierarchy above these platform-machine Orchestrators. They are peers unless Carlos explicitly designates a wider authority. The Librarian curates knowledge; it is not a repository-work Orchestrator.
 
+### Carlos assigns agents directly
+
+Carlos may give instructions directly to any Orchestrator, Lisa agent, or Feature agent on any platform, machine, or surface. Agents do not need to receive work through the primary Codex Orchestrator or their platform Orchestrator.
+
+Orchestrators coordinate shared state; they are not permission brokers. A direct Carlos assignment takes precedence over an earlier waiting posture or Orchestrator routing note. The assigned agent must still:
+
+1. Record Carlos as the assignment source in its unique session record.
+2. Re-read current coordination records before editing.
+3. Use its own task branch/worktree and declared ownership scope when implementation is involved.
+4. Notify the relevant Orchestrator through the filesystem record or Coordination Relay.
+5. If another active session owns the same files, runtime, or deployment surface, pause only the conflicting action and ask Carlos to resolve ownership. Do not reject or delay unrelated parts of Carlos's assignment.
+
+A wider authority designation, including a primary OpenClaw Prime Orchestrator, provides cross-platform visibility and conflict resolution. It does not prevent Carlos from managing other agents directly.
+
 Each Orchestrator designates one stable local **coordination home** for its instance. This is the checkout containing the dashboard and authoritative local session records. Lisa and Feature agents may do task work in separate worktrees or clones, but they write only their unique session record into the coordination home. They must not switch its branch or modify unrelated files there.
 
 ## Required Identity
@@ -171,6 +185,7 @@ Each platform-machine-surface Orchestrator must:
 - Resolve local overlap or escalate it to Carlos.
 - Review handoffs and validation before recommending merge, deployment, or runtime changes.
 - Avoid claiming cross-machine awareness during Stage 1 unless evidence was explicitly relayed or imported.
+- Treat Carlos's direct assignment to another agent as authorized scope, not as bypassing the Orchestrator. Record and coordinate it without requiring the work to be reissued through the Orchestrator.
 
 ## LiNKbrain Migration Boundary
 

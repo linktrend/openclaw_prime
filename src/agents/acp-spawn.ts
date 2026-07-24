@@ -1394,7 +1394,14 @@ export async function spawnAcpDirect(
         } catch (error) {
           lastModelError = error;
           const hasNext = index < attemptModels.length - 1;
-          if (!hasNext || !candidate || !isAcpModelSelectionError(error)) {
+          // A caller-selected model is a contract, not a preference. Falling back
+          // after an explicit selection would silently change behavior and cost.
+          if (
+            runtimeOptionsResult.modelExplicit ||
+            !hasNext ||
+            !candidate ||
+            !isAcpModelSelectionError(error)
+          ) {
             throw error;
           }
         }
