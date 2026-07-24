@@ -32,6 +32,7 @@ import {
 } from "../channels/thread-bindings-policy.js";
 import { parseDurationMs } from "../cli/parse-duration.js";
 import { getRuntimeConfig } from "../config/config.js";
+import { resolveAgentModelFallbackValues } from "../config/model-input.js";
 import { resolveStorePath } from "../config/sessions/paths.js";
 import {
   listSessionEntries,
@@ -66,6 +67,10 @@ import {
   startAcpSpawnParentStreamRelay,
 } from "./acp-spawn-parent-stream.js";
 import { listAgentIds, resolveAgentConfig, resolveDefaultAgentId } from "./agent-scope.js";
+import {
+  expandCursorAcpGrokModelCandidates,
+  resolveCursorAcpGrokHarnessCandidates,
+} from "./cursor-acp-model.js";
 import {
   findAcpUnsupportedInheritedToolAllow,
   findAcpUnsupportedInheritedToolDeny,
@@ -761,6 +766,58 @@ function resolveAcpRuntimeTimeoutSeconds(runTimeoutSeconds?: number): number | u
   return Math.min(runTimeoutSeconds, ACP_RUNTIME_TIMEOUT_MAX_SECONDS);
 }
 
+function isCursorAcpTarget(agentId: string | undefined): boolean {
+  return normalizeOptionalAgentId(agentId) === "cursor";
+}
+
+function resolveAcpSpawnModelCandidates(params: {
+  cfg: OpenClawConfig;
+  policyAgentId: string;
+  modelOverride?: string;
+  targetAgentId: string;
+}): string[] {
+  const primary = resolveConfiguredSubagentSpawnModelSelection({
+    cfg: params.cfg,
+    agentId: params.policyAgentId,
+    modelOverride: params.modelOverride,
+  });
+  const targetAgentConfig = resolveAgentConfig(params.cfg, params.policyAgentId);
+  const configuredFallbacks = [
+    ...resolveAgentModelFallbackValues(targetAgentConfig?.subagents?.model),
+    ...resolveAgentModelFallbackValues(targetAgentConfig?.model),
+  ];
+  const cursorTarget =
+    isCursorAcpTarget(params.targetAgentId) || isCursorAcpTarget(params.policyAgentId);
+  const harnessDefaults = cursorTarget ? resolveCursorAcpGrokHarnessCandidates() : [];
+  const candidates: string[] = [];
+  for (const candidate of [primary, ...configuredFallbacks, ...harnessDefaults]) {
+    const normalized = normalizeOptionalString(candidate);
+    if (!normalized) {
+      continue;
+    }
+    const expanded = cursorTarget ? expandCursorAcpGrokModelCandidates(normalized) : [normalized];
+    for (const entry of expanded) {
+      if (!candidates.includes(entry)) {
+        candidates.push(entry);
+      }
+    }
+  }
+  return candidates;
+}
+
+function isAcpModelSelectionError(error: unknown): boolean {
+  const message = summarizeError(error).toLowerCase();
+  return (
+    message.includes("did not advertise") ||
+    message.includes("unadvertised-model") ||
+    message.includes("missing-capability") ||
+    message.includes("model-not-found") ||
+    message.includes("unknown model") ||
+    message.includes("unsupported model") ||
+    message.includes("acp_invalid_runtime_option")
+  );
+}
+
 function resolveAcpSpawnRuntimeOptions(params: {
   cfg: OpenClawConfig;
   targetAgentId: string;
@@ -769,15 +826,22 @@ function resolveAcpSpawnRuntimeOptions(params: {
   thinking?: string;
   runTimeoutSeconds?: number;
 }):
-  | { ok: true; runtimeOptions?: AcpSpawnRuntimeOptions; modelExplicit: boolean }
+  | {
+      ok: true;
+      runtimeOptions?: AcpSpawnRuntimeOptions;
+      modelExplicit: boolean;
+      modelCandidates: string[];
+    }
   | { ok: false; error: string } {
   const policyAgentId = params.configAgentId ?? params.targetAgentId;
   const modelExplicit = normalizeOptionalString(params.model) !== undefined;
-  const model = resolveConfiguredSubagentSpawnModelSelection({
+  const modelCandidates = resolveAcpSpawnModelCandidates({
     cfg: params.cfg,
-    agentId: policyAgentId,
+    policyAgentId,
     modelOverride: params.model,
+    targetAgentId: params.targetAgentId,
   });
+  const model = modelCandidates[0];
   const targetAgentConfig = resolveAgentConfig(params.cfg, policyAgentId);
   const thinkingPlan = resolveSubagentThinkingOverride({
     cfg: params.cfg,
@@ -813,7 +877,7 @@ function resolveAcpSpawnRuntimeOptions(params: {
           ...(timeoutSeconds ? { timeoutSeconds } : {}),
         }
       : undefined;
-  return { ok: true, runtimeOptions, modelExplicit };
+  return { ok: true, runtimeOptions, modelExplicit, modelCandidates };
 }
 
 async function initializeAcpSpawnRuntime(params: {
@@ -1297,16 +1361,57 @@ export async function spawnAcpDirect(
         timeoutMs: 10_000,
       });
       sessionCreated = true;
-      const initializedSession = await initializeAcpSpawnRuntime({
-        cfg,
-        sessionKey,
-        targetAgentId,
-        runtimeMode,
-        resumeSessionId: params.resumeSessionId,
-        runtimeOptions: runtimeOptionsResult.runtimeOptions,
-        modelExplicit: runtimeOptionsResult.modelExplicit,
-        cwd: runtimeCwd,
-      });
+      const baseRuntimeOptions = runtimeOptionsResult.runtimeOptions;
+      const modelCandidates = runtimeOptionsResult.modelCandidates;
+      const tryModels =
+        modelCandidates.length > 0
+          ? modelCandidates
+          : [baseRuntimeOptions?.model].filter((value): value is string => Boolean(value));
+      let initializedSession: AcpSpawnInitializedRuntime | undefined;
+      let lastModelError: unknown;
+      const attemptModels = tryModels.length > 0 ? tryModels : [undefined];
+      for (let index = 0; index < attemptModels.length; index += 1) {
+        const candidate = attemptModels[index];
+        const runtimeOptions =
+          candidate || baseRuntimeOptions
+            ? {
+                ...baseRuntimeOptions,
+                ...(candidate ? { model: candidate } : {}),
+              }
+            : undefined;
+        try {
+          initializedSession = await initializeAcpSpawnRuntime({
+            cfg,
+            sessionKey,
+            targetAgentId,
+            runtimeMode,
+            resumeSessionId: params.resumeSessionId,
+            runtimeOptions,
+            modelExplicit: runtimeOptionsResult.modelExplicit || Boolean(candidate),
+            cwd: runtimeCwd,
+          });
+          break;
+        } catch (error) {
+          lastModelError = error;
+          const hasNext = index < attemptModels.length - 1;
+          // A caller-selected model is a contract, not a preference. Falling back
+          // after an explicit selection would silently change behavior and cost.
+          if (
+            runtimeOptionsResult.modelExplicit ||
+            !hasNext ||
+            !candidate ||
+            !isAcpModelSelectionError(error)
+          ) {
+            throw error;
+          }
+        }
+      }
+      if (!initializedSession) {
+        if (lastModelError instanceof Error) {
+          throw lastModelError;
+        }
+        throw new Error("ACP session initialization failed");
+      }
       initializedRuntime = initializedSession.runtimeCloseHandle;
       const binding = preparedBinding
         ? (

@@ -815,6 +815,7 @@ describe("processGatewayAllowlist", () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-auto-review-path-"));
     const shadowGit = path.join(tempDir, "git");
     fs.writeFileSync(shadowGit, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const resolvedShadowGit = fs.realpathSync(shadowGit);
     try {
       const command = "git status";
       await configurePlanBackedCommand({
@@ -830,9 +831,9 @@ describe("processGatewayAllowlist", () => {
       });
 
       expect(defaultExecAutoReviewerMock).toHaveBeenCalledWith(
-        expect.objectContaining({ resolvedPath: shadowGit }),
+        expect.objectContaining({ resolvedPath: resolvedShadowGit }),
       );
-      expect(result).toEqual({ execCommandOverride: `${shadowGit} status` });
+      expect(result).toEqual({ execCommandOverride: `${resolvedShadowGit} status` });
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -1050,9 +1051,18 @@ describe("processGatewayAllowlist", () => {
     });
 
     const result = await runGatewayAllowlist({ command });
+    const enforced = buildAuthorizedShellCommandFromPlan({
+      plan: authorizationPlan,
+      mode: "enforced",
+      segmentSatisfiedBy: ["safeBuiltins"],
+    });
+    expect(enforced.ok).toBe(true);
+    if (!enforced.ok) {
+      throw new Error(enforced.reason);
+    }
 
     expect(createAndRegisterDefaultExecApprovalRequestMock).not.toHaveBeenCalled();
-    expect(result).toEqual({ execCommandOverride: command });
+    expect(result).toEqual({ execCommandOverride: enforced.command });
     expect(commitExecAuthorizationMock).toHaveBeenCalledWith(
       expect.objectContaining({
         authorization: expect.objectContaining({
@@ -1721,7 +1731,7 @@ describe("processGatewayAllowlist", () => {
     expect(createAndRegisterDefaultExecApprovalRequestMock).not.toHaveBeenCalled();
   });
 
-  it("requires approval for unanalyzable commands when a denylist is configured", async () => {
+  it("hard-denies unanalyzable commands in yolo mode when a denylist is configured", async () => {
     mockDenylistContext(["git push*--force*"]);
     evaluateShellAllowlistWithAuthorizationMock.mockReturnValue({
       allowlistMatches: [],
@@ -1736,6 +1746,45 @@ describe("processGatewayAllowlist", () => {
       command: "git push \\\n--force",
       security: "full",
       ask: "off",
+    });
+
+    expect(createAndRegisterDefaultExecApprovalRequestMock).not.toHaveBeenCalled();
+    const deniedDetails = result.deniedResult?.details;
+    expect(deniedDetails?.status).toBe("failed");
+    if (deniedDetails?.status !== "failed") {
+      throw new Error("expected a failed denylist result");
+    }
+    expect(deniedDetails.failureKind).toBe("denylist_unanalyzable");
+    expect(deniedDetails.aggregated ?? "").toContain(
+      "could not be analyzed for denylist screening",
+    );
+  });
+
+  it("still requires approval for unanalyzable commands when ask is on-miss", async () => {
+    mockDenylistContext(["git push*--force*"]);
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: {
+        allowlist: [],
+        denylist: [{ pattern: "git push*--force*" }],
+        file: { version: 1, agents: {} },
+      },
+      hostSecurity: "full",
+      hostAsk: "on-miss",
+      askFallback: "deny",
+    });
+    evaluateShellAllowlistWithAuthorizationMock.mockReturnValue({
+      allowlistMatches: [],
+      analysisOk: false,
+      allowlistSatisfied: false,
+      segments: [],
+      segmentAllowlistEntries: [],
+      segmentSatisfiedBy: [],
+    });
+
+    const result = await runGatewayAllowlist({
+      command: "git push \\\n--force",
+      security: "full",
+      ask: "on-miss",
     });
 
     expect(createAndRegisterDefaultExecApprovalRequestMock).toHaveBeenCalledTimes(1);

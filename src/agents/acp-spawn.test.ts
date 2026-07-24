@@ -1035,6 +1035,45 @@ describe("spawnAcpDirect", () => {
     expect(initInput.sessionKey).toMatch(/^agent:codex:acp:/);
   });
 
+  it("does not fall back when an explicit ACP model is rejected", async () => {
+    replaceSpawnConfig({
+      ...createDefaultSpawnConfig(),
+      acp: {
+        enabled: true,
+        backend: "acpx",
+        allowedAgents: ["cursor"],
+      },
+      agents: {
+        defaults: {
+          subagents: {
+            allowAgents: ["cursor"],
+            maxSpawnDepth: 2,
+          },
+        },
+      },
+    });
+    hoisted.initializeSessionMock.mockRejectedValueOnce(new Error("unknown model"));
+
+    const result = await spawnAcpDirect(
+      {
+        task: "Use the requested model",
+        agentId: "cursor",
+        model: "cursor-unknown-model",
+      },
+      {
+        agentSessionKey: "agent:main:main",
+      },
+    );
+
+    expectFailedSpawn(result);
+    expect(hoisted.initializeSessionMock).toHaveBeenCalledTimes(1);
+    expectInitializeSessionFields({
+      agent: "cursor",
+      runtimeOptions: { model: "cursor-unknown-model" },
+      modelExplicit: true,
+    });
+  });
+
   it("applies existing subagent model and model-profile thinking defaults to ACP runtime options", async () => {
     replaceSpawnConfig({
       ...createDefaultSpawnConfig(),
