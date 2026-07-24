@@ -15,6 +15,15 @@ import {
   utf8ByteLengthWithinLimit,
 } from "./grammar.js";
 import { parseOpenAiStyleToolCallBlockAt } from "./openai-style.js";
+import {
+  normalizeStandaloneParseOptions,
+  skipMarkdownFence,
+  skipMarkdownFenceClose,
+  type NormalizedPlainTextToolCallParseOptions,
+  type PlainTextToolCallParseOptions,
+} from "./standalone-helpers.js";
+
+export type { PlainTextToolCallParseOptions } from "./standalone-helpers.js";
 
 /** Parsed standalone plain-text tool call block with source offsets for repair. */
 export type PlainTextToolCallBlock = {
@@ -29,19 +38,6 @@ export type PlainTextToolCallBlock = {
   /** Inclusive start offset of the parsed block. */
   start: number;
 };
-
-/** Parser limits and allowlist options for plain-text tool-call repair. */
-export type PlainTextToolCallParseOptions = {
-  /** Optional allowlist of tool names that may be repaired. */
-  allowedToolNames?: Iterable<string>;
-  /** Maximum serialized payload size accepted for one repaired call. */
-  maxPayloadBytes?: number;
-};
-
-type NormalizedPlainTextToolCallParseOptions = Omit<
-  PlainTextToolCallParseOptions,
-  "allowedToolNames"
-> & { allowedToolNames?: ReadonlySet<string> };
 
 const DEFAULT_MAX_PLAIN_TEXT_TOOL_PAYLOAD_BYTES = 256_000;
 const MAX_PLAIN_TEXT_TOOL_NAME_CHARS = 120;
@@ -652,34 +648,13 @@ function parsePlainTextToolCallBlockAtAnySyntax(
   );
 }
 
-function normalizeParseOptions(
-  options?: PlainTextToolCallParseOptions,
-): NormalizedPlainTextToolCallParseOptions | undefined {
-  return options
-    ? {
-        ...options,
-        allowedToolNames: options.allowedToolNames ? new Set(options.allowedToolNames) : undefined,
-      }
-    : undefined;
-}
-
-function skipMarkdownFence(text: string, start: number): number {
-  const fence = text.slice(start).match(/^```(?:json)?[ \t]*(?:\r\n|\n|\r)/u);
-  return fence ? start + fence[0].length : start;
-}
-
-function skipMarkdownFenceClose(text: string, start: number): number {
-  const fence = text.slice(start).match(/^```[ \t]*(?:\r\n|\n|\r|$)/u);
-  return fence ? start + fence[0].length : start;
-}
-
 export function parseStandalonePlainTextToolCallBlocks(
   text: string,
   options?: PlainTextToolCallParseOptions,
   structuralLineBreaks?: StructuralLineBreakOptions,
 ): PlainTextToolCallBlock[] | null {
   const blocks: PlainTextToolCallBlock[] = [];
-  const normalizedOptions = normalizeParseOptions(options);
+  const normalizedOptions = normalizeStandaloneParseOptions(options);
   let cursor = skipWhitespace(text, 0);
   while (cursor < text.length) {
     cursor = skipMarkdownFence(text, cursor);

@@ -6,7 +6,7 @@
  */
 
 /** Carlos preference: medium no-fast → high no-fast → high fast. */
-export const CURSOR_ACP_GROK_ADVERTISED_PREFERENCE = [
+const CURSOR_ACP_GROK_ADVERTISED_PREFERENCE = [
   "grok-4.5[effort=medium,fast=false]",
   "grok-4.5[effort=high,fast=false]",
   "grok-4.5[effort=high,fast=true]",
@@ -35,7 +35,7 @@ function normalizeModelId(raw: string): string {
 }
 
 /** True when the id looks like a Cursor ACP advertised bracketed model. */
-export function isCursorAcpAdvertisedModelId(modelId: string): boolean {
+function isCursorAcpAdvertisedModelId(modelId: string): boolean {
   const normalized = normalizeModelId(modelId);
   return /^[a-z0-9][a-z0-9._-]*\[[^\]]+\]$/i.test(normalized);
 }

@@ -3,7 +3,7 @@
  * Prefer Carlos order: medium no-fast → high no-fast → high fast.
  */
 
-export const CURSOR_ACP_GROK_ADVERTISED_PREFERENCE = [
+const CURSOR_ACP_GROK_ADVERTISED_PREFERENCE = [
   "grok-4.5[effort=medium,fast=false]",
   "grok-4.5[effort=high,fast=false]",
   "grok-4.5[effort=high,fast=true]",
@@ -20,12 +20,12 @@ const CURSOR_GROK_ALIAS_TO_ADVERTISED: Record<string, readonly string[]> = {
   "grok-4.5": CURSOR_ACP_GROK_ADVERTISED_PREFERENCE,
 };
 
-export function isCursorAcpAdvertisedModelId(modelId: string): boolean {
+function isCursorAcpAdvertisedModelId(modelId: string): boolean {
   return /^[a-z0-9][a-z0-9._-]*\[[^\]]+\]$/i.test(modelId.trim());
 }
 
 /** Expand CLI/alias ids to ordered ACP-advertised candidates. */
-export function expandCursorAcpGrokModelCandidates(model: string | undefined): string[] {
+function expandCursorAcpGrokModelCandidates(model: string | undefined): string[] {
   const normalized = model?.trim() ?? "";
   if (!normalized) {
     return [...CURSOR_ACP_GROK_ADVERTISED_PREFERENCE];
