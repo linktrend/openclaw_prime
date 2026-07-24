@@ -31,6 +31,7 @@ import { sliceUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { AcpRuntimeError, type AcpRuntime, type AcpRuntimeErrorCode } from "../runtime-api.js";
 import { CODEX_ACP_PACKAGE, OPENCLAW_CODEX_CONFIG_ARG } from "./codex-adapter.js";
 import { splitCommandParts } from "./command-line.js";
+import { mapCursorAcpRequestedModel } from "./cursor-model.js";
 import {
   createAcpxProcessLeaseId,
   hashAcpxProcessCommand,
@@ -487,6 +488,72 @@ function isClaudeAcpCommand(command: string | undefined): boolean {
     packageName: "@agentclientprotocol/claude-agent-acp",
     executableName: "claude-agent-acp",
   });
+}
+
+const CURSOR_ACP_AGENT_ID = "cursor";
+
+function isCursorAcpCommand(command: string | undefined): boolean {
+  if (!command) {
+    return false;
+  }
+  const parts = unwrapEnvCommand(splitCommandParts(command.trim()));
+  if (!parts.length || !parts.includes("acp")) {
+    return false;
+  }
+  const commandName = basename(parts[0] ?? "");
+  return (
+    matchesExecutableName(commandName, "cursor-agent") ||
+    matchesExecutableName(commandName, "agent") ||
+    matchesExecutableName(commandName, "cursor")
+  );
+}
+
+/** Remove `--model <id>` from a Cursor ACP launch command (CLI flag does not set ACP model). */
+function stripCursorAcpModelFlag(command: string): string {
+  const parts = splitCommandParts(command.trim());
+  const cleaned: string[] = [];
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i];
+    if (part === "--model") {
+      i += 1; // skip current model value
+      continue;
+    }
+    if (part?.startsWith("--model=")) {
+      continue;
+    }
+    cleaned.push(part ?? "");
+  }
+  return cleaned.map(quoteShellArg).join(" ");
+}
+
+/** Read a configured Cursor CLI model before removing the ineffective launch flag. */
+function readCursorAcpModelFlag(command: string): string | undefined {
+  const parts = splitCommandParts(command.trim());
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i];
+    if (part === "--model") {
+      const value = parts[i + 1]?.trim();
+      return value || undefined;
+    }
+    if (part?.startsWith("--model=")) {
+      const value = part.slice("--model=".length).trim();
+      return value || undefined;
+    }
+  }
+  return undefined;
+}
+
+/** Inject/replace `--model <id>` before the `acp` subcommand for Cursor CLI ACP. */
+function appendCursorAcpModelFlag(command: string, model: string): string {
+  const trimmedModel = model.trim();
+  if (!trimmedModel) {
+    return stripCursorAcpModelFlag(command);
+  }
+  const cleaned = splitCommandParts(stripCursorAcpModelFlag(command));
+  const acpIndex = cleaned.findIndex((part) => part === "acp");
+  const insertAt = acpIndex >= 0 ? acpIndex : Math.min(1, cleaned.length);
+  cleaned.splice(insertAt, 0, "--model", trimmedModel);
+  return cleaned.map(quoteShellArg).join(" ");
 }
 
 function failUnsupportedCodexAcpModel(rawModel: string, detail?: string): never {
@@ -1108,6 +1175,8 @@ export class AcpxRuntime implements AcpRuntime {
     const delegate = this.resolveDelegateForSession({ command, sessionKey: input.sessionKey });
     const isCodexAcp =
       normalizeAgentName(input.agent) === CODEX_ACP_AGENT_ID && isCodexAcpCommand(command);
+    const isCursorAcp =
+      normalizeAgentName(input.agent) === CURSOR_ACP_AGENT_ID && isCursorAcpCommand(command);
     const claudeModelOverride = isClaudeAcpCommand(command)
       ? normalizeClaudeAcpModelOverride(input.model)
       : undefined;
@@ -1126,49 +1195,71 @@ export class AcpxRuntime implements AcpRuntime {
         ? classifiedCodexOverride
         : undefined;
     const requestedModel = input.model?.trim();
+    const configuredCursorModel =
+      isCursorAcp && command ? readCursorAcpModelFlag(command) : undefined;
+    const cursorRequestedModel = requestedModel ?? configuredCursorModel;
+    // Cursor ACP only accepts advertised bracketed ids (e.g. grok-4.5[effort=high,fast=true]).
+    // CLI catalog ids (cursor-grok-4.5-medium) and bare "grok-4.5" fail set_config_option.
+    const cursorMappedModel =
+      isCursorAcp && cursorRequestedModel
+        ? mapCursorAcpRequestedModel(cursorRequestedModel)
+        : undefined;
+    const cursorModelOverride = cursorMappedModel;
     const appliedModel: OpenClawRuntimeHandle["appliedModel"] =
       isCodexAcp && requestedModel
         ? codexModelOverride?.model
           ? { kind: "applied", model: requestedModel }
           : { kind: "dropped" }
-        : undefined;
+        : isCursorAcp && cursorModelOverride
+          ? { kind: "applied", model: cursorModelOverride }
+          : undefined;
     const ensureInput = isCodexAcp
       ? withCodexSessionModel(input, codexModelOverride)
-      : claudeModelOverride
-        ? { ...input, model: claudeModelOverride }
-        : input;
-    const stableLaunchCommand =
+      : isCursorAcp && cursorMappedModel
+        ? {
+            ...input,
+            model: cursorMappedModel,
+            modelExplicit: input.modelExplicit ?? true,
+          }
+        : claudeModelOverride
+          ? { ...input, model: claudeModelOverride }
+          : input;
+    // Cursor CLI --model does not change ACP currentModelId; strip any preconfigured
+    // catalog alias and apply the advertised id via sessionOptions instead.
+    const launchCommand =
       codexModelOverride && command
         ? appendCodexAcpConfigOverrides(command, codexModelOverride)
-        : command;
+        : isCursorAcp && command
+          ? stripCursorAcpModelFlag(command)
+          : command;
     const shouldStartWithLease = !(await this.canReuseStablePersistentSession({
       sessionKey: input.sessionKey,
       mode: input.mode,
       cwd: input.cwd,
-      command: stableLaunchCommand,
+      command: launchCommand,
       resumeSessionId: input.resumeSessionId,
     }));
 
     const handle = !codexModelOverride
       ? await this.runWithLaunchLease({
           sessionKey: ensureInput.sessionKey,
-          command: stableLaunchCommand,
+          command: launchCommand,
           enabled: shouldStartWithLease,
           run: () =>
             this.withCodexWrapperDiagnostics({
-              command: stableLaunchCommand,
+              command: launchCommand,
               fallbackCode: "ACP_SESSION_INIT_FAILED",
               run: () => ensureDelegateSessionWithModelFallback(delegate, ensureInput),
             }),
         })
       : await this.runWithLaunchLease({
           sessionKey: input.sessionKey,
-          command: stableLaunchCommand,
+          command: launchCommand,
           enabled: shouldStartWithLease,
           run: () =>
             this.codexAcpModelOverrideScope.run(codexModelOverride, () =>
               this.withCodexWrapperDiagnostics({
-                command: stableLaunchCommand,
+                command: launchCommand,
                 fallbackCode: "ACP_SESSION_INIT_FAILED",
                 run: () => delegate.ensureSession(withAcpxSessionOptions(ensureInput)),
               }),
@@ -1451,10 +1542,14 @@ export {
 /** Test-only hooks for ACPX runtime behavior that is otherwise private. */
 export const testing = {
   appendCodexAcpConfigOverrides,
+  appendCursorAcpModelFlag,
+  readCursorAcpModelFlag,
+  stripCursorAcpModelFlag,
   assertSupportedRuntimeSessionMode,
   classifyCodexAcpModelRequest,
   isClaudeAcpCommand,
   isCodexAcpCommand,
+  isCursorAcpCommand,
   normalizeClaudeAcpModelOverride,
 };
 
