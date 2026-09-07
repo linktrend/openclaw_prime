@@ -84,7 +84,13 @@ async function resolveBuzzRelayPublicKey(params: {
       headers: { Accept: "application/nostr+json" },
     },
     signal: params.signal,
-    policy: ssrfPolicyFromHttpBaseUrlAllowedOrigin(url),
+    policy: {
+      ...ssrfPolicyFromHttpBaseUrlAllowedOrigin(url),
+      // Buzz is commonly self-hosted on a LAN or tailnet. Trust only the exact
+      // operator-configured origin above while retaining redirect revalidation.
+      allowPrivateNetwork: true,
+      hostnameAllowlist: [infoUrl.hostname],
+    },
     auditContext: "buzz.relay_info",
   });
   try {
