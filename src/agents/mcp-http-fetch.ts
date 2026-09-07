@@ -27,6 +27,61 @@ const fetchWithUndiciGuard = async (
 
 const MCP_HTTP_MAX_REDIRECTS = 20;
 
+/**
+ * Host ceiling for cumulative MCP HTTP/SSE/Streamable HTTP response bodies.
+ * Matches the repo's common 16 MiB HTTP response bound; independent of
+ * MACHINE_TOKEN_MAX_RESPONSE_BYTES (auth path stays separate).
+ *
+ * This is an enforced maximum, not merely a default: caller
+ * `maxResponseBytes` may only reduce the effective bound.
+ */
+export const MCP_HTTP_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Resolve the effective MCP HTTP response byte bound.
+ *
+ * Contract:
+ * - `undefined` → {@link MCP_HTTP_MAX_RESPONSE_BYTES}
+ * - positive safe integer ≤ host max → that value (caller may only reduce)
+ * - positive safe integer > host max → clamped to {@link MCP_HTTP_MAX_RESPONSE_BYTES}
+ * - zero, negative, fractional, non-finite (`NaN`/`Infinity`), non-integer,
+ *   or unsafe integer → rejected with a clear error (fail closed)
+ *
+ * No env override, plugin bypass, or Brain/Skills special case.
+ */
+export function resolveMcpHttpMaxResponseBytes(maxResponseBytes?: number): number {
+  if (maxResponseBytes === undefined) {
+    return MCP_HTTP_MAX_RESPONSE_BYTES;
+  }
+  if (
+    typeof maxResponseBytes !== "number" ||
+    !Number.isFinite(maxResponseBytes) ||
+    !Number.isInteger(maxResponseBytes) ||
+    !Number.isSafeInteger(maxResponseBytes) ||
+    maxResponseBytes <= 0
+  ) {
+    throw new Error(
+      "MCP HTTP maxResponseBytes must be a positive safe integer " +
+        `(at most ${MCP_HTTP_MAX_RESPONSE_BYTES} bytes)`,
+    );
+  }
+  return Math.min(maxResponseBytes, MCP_HTTP_MAX_RESPONSE_BYTES);
+}
+
+/** True when a declared Content-Length is present and exceeds the byte cap. */
+function isDeclaredMcpContentLengthOverLimit(response: Response, maxBytes: number): boolean {
+  const raw = response.headers.get("content-length");
+  if (raw === null) {
+    return false;
+  }
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return false;
+  }
+  const size = Number(trimmed);
+  return Number.isSafeInteger(size) && size > maxBytes;
+}
+
 function resolveFetchRequest(input: RequestInfo | URL, init?: RequestInit) {
   if (input instanceof Request) {
     const request = new Request(input, init);
@@ -71,8 +126,22 @@ async function ensureGlobalFetchResponse(response: Response): Promise<Response> 
 async function buildManagedMcpResponse(
   response: Response,
   release: () => Promise<void>,
-  refreshTimeout?: () => void,
+  options: {
+    refreshTimeout?: () => void;
+    maxBytes: number;
+  },
 ): Promise<Response> {
+  const maxBytes = options.maxBytes;
+  if (isDeclaredMcpContentLengthOverLimit(response, maxBytes)) {
+    try {
+      await response.body?.cancel().catch(() => undefined);
+    } finally {
+      await release().catch(() => undefined);
+    }
+    // Limit only — never echo body/token bytes or Authorization material.
+    throw new Error(`MCP HTTP response exceeds ${maxBytes} bytes`);
+  }
+
   if (!response.body) {
     void release();
     return await ensureGlobalFetchResponse(response);
@@ -81,7 +150,8 @@ async function buildManagedMcpResponse(
   const wrappedBody = wrapGuardedBodyStream({
     body: response.body,
     cleanup: release,
-    refreshTimeout,
+    refreshTimeout: options.refreshTimeout,
+    maxBytes,
   });
   return await ensureGlobalFetchResponse(
     new Response(wrappedBody, {
@@ -99,6 +169,12 @@ export function buildMcpHttpFetch(params: {
   clientKey?: string;
   resourceUrl?: string;
   timeoutMs?: number;
+  /**
+   * Optional cumulative response body cap. May only reduce the host ceiling
+   * ({@link MCP_HTTP_MAX_RESPONSE_BYTES}); larger values clamp to that max.
+   * Invalid values (zero/negative/fractional/non-finite/unsafe) throw at build time.
+   */
+  maxResponseBytes?: number;
 }): FetchLike {
   const needsCustomDispatcher =
     params.sslVerify === false || Boolean(params.clientCert || params.clientKey);
@@ -106,6 +182,7 @@ export function buildMcpHttpFetch(params: {
   const policy = params.resourceUrl
     ? ssrfPolicyFromHttpBaseUrlAllowedOrigin(params.resourceUrl)
     : undefined;
+  const maxResponseBytes = resolveMcpHttpMaxResponseBytes(params.maxResponseBytes);
 
   let customConnect: Record<string, unknown> | undefined;
   const resolveCustomDispatcherPolicy = (url: URL): PinnedDispatcherPolicy | undefined => {
@@ -136,7 +213,10 @@ export function buildMcpHttpFetch(params: {
       ...(needsCustomDispatcher ? { resolveDispatcherPolicy: resolveCustomDispatcherPolicy } : {}),
     };
     const guarded = await fetchWithSsrFGuard(guardedFetchOptions);
-    return await buildManagedMcpResponse(guarded.response, guarded.release, guarded.refreshTimeout);
+    return await buildManagedMcpResponse(guarded.response, guarded.release, {
+      refreshTimeout: guarded.refreshTimeout,
+      maxBytes: maxResponseBytes,
+    });
   };
 }
 

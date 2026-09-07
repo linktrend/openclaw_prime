@@ -1,5 +1,26 @@
 // Defines MCP server and tool approval configuration types.
+import type { SecretRef } from "./types.secrets.js";
+
 export type McpCodexToolApprovalMode = "auto" | "prompt" | "approve";
+
+/** Machine-token (client_credentials / private_key_jwt) binding for remote MCP HTTP. */
+export type McpServerMachineTokenConfig = {
+  bindingId: string;
+  issuerUrl: string;
+  clientId: string;
+  audience?: string;
+  scope?: string;
+  /**
+   * Explicit HTTPS trusted-private issuer opt-in (Tailscale/CGNAT/private overlay).
+   * Default unset/false. Does not broadly disable SSRF; pins the configured issuer.
+   */
+  allowPrivateNetwork?: boolean;
+  /**
+   * SecretRef for private_key_jwt signing key custody.
+   * Literal PEM/string secrets are rejected by config schema.
+   */
+  clientAssertionKeyRef: SecretRef;
+};
 
 export type McpServerCodexConfig = {
   /** OpenClaw agent ids that should receive this server in Codex app-server threads. */
@@ -42,8 +63,13 @@ export type McpServerConfig = {
   requestTimeoutMs?: number;
   /** Whether this server can safely handle concurrent tool calls. */
   supportsParallelToolCalls?: boolean;
-  /** HTTP OAuth mode. Tokens are stored in OpenClaw state, not in config. */
-  auth?: "oauth";
+  /**
+   * HTTP auth mode.
+   * Selection is explicit: `"oauth"` or `"machine_token"`.
+   * A machineToken block never overrides auth="oauth" and never auto-activates
+   * when auth is absent. auth="machine_token" requires a complete machineToken binding.
+   */
+  auth?: "oauth" | "machine_token";
   /** Optional OAuth client metadata overrides for HTTP MCP servers. */
   oauth?: {
     /** Credential ownership for this server. Defaults to shared operator credentials. */
@@ -54,6 +80,11 @@ export type McpServerConfig = {
     redirectUrl?: string;
     clientMetadataUrl?: string;
   };
+  /**
+   * Machine-token binding for non-interactive client_credentials / private_key_jwt.
+   * Active only when auth is explicitly "machine_token"; ignored otherwise.
+   */
+  machineToken?: McpServerMachineTokenConfig;
   /** HTTP TLS verification, disabled only for explicitly trusted private endpoints. */
   sslVerify?: boolean;
   /** HTTP mutual TLS client certificate path. */

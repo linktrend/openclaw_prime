@@ -4,7 +4,7 @@ import { z } from "zod";
 import { findEdgeAuthIssue } from "../shared/gateway-edge-auth-headers.js";
 import type { GatewayRemoteConfig } from "./types.gateway.js";
 import { MemorySearchSchema } from "./zod-schema.agent-runtime.js";
-import { SecretInputSchema } from "./zod-schema.core.js";
+import { SecretInputSchema, SecretRefSchema } from "./zod-schema.core.js";
 import { NodeHostAgentRunsSchema, NodeHostWorkerRunsSchema } from "./zod-schema.node-host.js";
 import { sensitive } from "./zod-schema.sensitive.js";
 
@@ -280,7 +280,10 @@ const McpServerSchema = z
     connectionTimeoutMs: z.number().finite().positive().optional(),
     requestTimeoutMs: z.number().finite().positive().optional(),
     supportsParallelToolCalls: z.boolean().optional(),
-    auth: z.literal("oauth").optional(),
+    // Auth selection is explicit. A machineToken block never overrides auth="oauth"
+    // and never auto-activates when auth is absent. auth="machine_token" requires
+    // a complete machineToken binding (enforced in superRefine below).
+    auth: z.union([z.literal("oauth"), z.literal("machine_token")]).optional(),
     oauth: z
       .strictObject({
         identity: z.enum(["shared", "per-requester"]).optional(),
@@ -288,6 +291,18 @@ const McpServerSchema = z
         scope: z.string().trim().min(1).optional(),
         redirectUrl: HttpUrlSchema.optional(),
         clientMetadataUrl: McpOAuthClientMetadataUrlSchema.optional(),
+      })
+      .optional(),
+    machineToken: z
+      .strictObject({
+        bindingId: z.string().trim().min(1),
+        issuerUrl: HttpUrlSchema,
+        clientId: z.string().trim().min(1),
+        audience: z.string().trim().min(1).optional(),
+        scope: z.string().trim().min(1).optional(),
+        allowPrivateNetwork: z.boolean().optional(),
+        // SecretRef only — literal PEM/string secrets are rejected at schema time.
+        clientAssertionKeyRef: SecretRefSchema.register(sensitive),
       })
       .optional(),
     sslVerify: z.boolean().optional(),
@@ -396,6 +411,14 @@ const McpServerSchema = z
         code: z.ZodIssueCode.custom,
         message: '"stdio" transport requires a non-empty command',
         path: ["transport"],
+      });
+    }
+    if (data.auth === "machine_token" && data.machineToken === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'auth "machine_token" requires a complete machineToken binding (bindingId, issuerUrl, clientId, clientAssertionKeyRef)',
+        path: ["machineToken"],
       });
     }
   })

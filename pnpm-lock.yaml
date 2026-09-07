@@ -268,6 +268,9 @@ importers:
       jiti:
         specifier: 2.7.0
         version: 2.7.0
+      jose:
+        specifier: 6.2.3
+        version: 6.2.3
       json5:
         specifier: 2.2.3
         version: 2.2.3
@@ -7351,6 +7354,9 @@ packages:
 
   jose@6.2.10:
     resolution: {integrity: sha512-iiW7J9qRFlGxvCOIBDBDxFePQSn7ZMAnrYGhrrOo6siO/MIqwfyilLR27pkfDgUk+raLuzADS8A3S/KLBisc0g==}
+
+  jose@6.2.3:
+    resolution: {integrity: sha512-YYVDInQKFJfR/xa3ojUTl8c2KoTwiL1R5Wg9YCydwH0x0B9grbzlg5HC7mMjCtUJjbQ/YnGEZIhI5tCgfTb4Hw==}
 
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
@@ -14685,6 +14691,8 @@ snapshots:
   jose@4.15.9: {}
 
   jose@6.2.10: {}
+
+  jose@6.2.3: {}
 
   js-tokens@10.0.0: {}
 

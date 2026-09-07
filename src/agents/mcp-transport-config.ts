@@ -52,8 +52,17 @@ type ResolvedHttpMcpTransportConfig = ResolvedBaseMcpTransportConfig & {
   transportType: HttpMcpTransportType;
   url: string;
   headers?: Record<string, string>;
-  auth?: "oauth";
+  auth?: "oauth" | "machine_token";
   oauth?: ResolvedMcpOAuthConfig;
+  machineToken?: {
+    bindingId: string;
+    issuerUrl: string;
+    clientId: string;
+    audience?: string;
+    scope?: string;
+    allowPrivateNetwork?: boolean;
+    clientAssertionKeyRef: unknown;
+  };
   sslVerify?: boolean;
   clientCert?: string;
   clientKey?: string;
@@ -158,6 +167,56 @@ function getRequestedTransportAlias(rawServer: unknown): HttpMcpTransportType | 
   return resolveOpenClawMcpTransportAlias((rawServer as { type?: string }).type) ?? "";
 }
 
+function resolveMachineTokenConfig(
+  rawServer: unknown,
+): ResolvedHttpMcpTransportConfig["machineToken"] | undefined {
+  if (!rawServer || typeof rawServer !== "object") {
+    return undefined;
+  }
+  const machineToken = (rawServer as { machineToken?: unknown }).machineToken;
+  if (!machineToken || typeof machineToken !== "object" || Array.isArray(machineToken)) {
+    return undefined;
+  }
+  const record = machineToken as Record<string, unknown>;
+  const bindingId = typeof record.bindingId === "string" ? record.bindingId.trim() : "";
+  const issuerUrl = typeof record.issuerUrl === "string" ? record.issuerUrl.trim() : "";
+  const clientId = typeof record.clientId === "string" ? record.clientId.trim() : "";
+  if (!bindingId || !issuerUrl || !clientId || record.clientAssertionKeyRef === undefined) {
+    return undefined;
+  }
+  const audience =
+    typeof record.audience === "string" && record.audience.trim().length > 0
+      ? record.audience.trim()
+      : undefined;
+  const scope =
+    typeof record.scope === "string" && record.scope.trim().length > 0
+      ? record.scope.trim()
+      : undefined;
+  const allowPrivateNetwork = record.allowPrivateNetwork === true ? true : undefined;
+  return {
+    bindingId,
+    issuerUrl,
+    clientId,
+    ...(audience ? { audience } : {}),
+    ...(scope ? { scope } : {}),
+    ...(allowPrivateNetwork ? { allowPrivateNetwork } : {}),
+    clientAssertionKeyRef: record.clientAssertionKeyRef,
+  };
+}
+
+function resolveHttpAuthMode(rawServer: unknown): "oauth" | "machine_token" | undefined {
+  // Auth is explicit only. A machineToken block never overrides auth="oauth",
+  // and never auto-activates when auth is absent.
+  if (!rawServer || typeof rawServer !== "object") {
+    return undefined;
+  }
+  const auth = (rawServer as { auth?: unknown }).auth;
+  if (auth === "oauth" || auth === "machine_token") {
+    return auth;
+  }
+  return undefined;
+}
+
 function resolveHttpTransportConfig(
   serverName: string,
   rawServer: unknown,
@@ -185,16 +244,21 @@ function resolveHttpTransportConfig(
   if (!launch.ok) {
     return null;
   }
+  const auth = resolveHttpAuthMode(rawServer);
+  // machineToken is transport-active only when auth is explicitly machine_token.
+  // Incomplete bindings fail closed here — never fall through to oauth/static auth.
+  const machineToken = auth === "machine_token" ? resolveMachineTokenConfig(rawServer) : undefined;
+  if (auth === "machine_token" && !machineToken) {
+    throw new Error(
+      `MCP server "${serverName}" auth is "machine_token" but machineToken binding is missing or incomplete (requires bindingId, issuerUrl, clientId, clientAssertionKeyRef).`,
+    );
+  }
   return {
     kind: "http",
     transportType: launch.config.transportType,
     url: launch.config.url,
     headers: launch.config.headers,
-    ...(rawServer &&
-    typeof rawServer === "object" &&
-    (rawServer as { auth?: unknown }).auth === "oauth"
-      ? { auth: "oauth" as const }
-      : {}),
+    ...(auth ? { auth } : {}),
     ...(rawServer &&
     typeof rawServer === "object" &&
     (rawServer as { oauth?: unknown }).oauth &&
@@ -202,6 +266,7 @@ function resolveHttpTransportConfig(
     !Array.isArray((rawServer as { oauth?: unknown }).oauth)
       ? { oauth: (rawServer as { oauth: ResolvedMcpOAuthConfig }).oauth }
       : {}),
+    ...(machineToken ? { machineToken } : {}),
     ...(getBooleanField(rawServer, ["sslVerify"]) !== undefined
       ? { sslVerify: getBooleanField(rawServer, ["sslVerify"]) }
       : {}),

@@ -8,9 +8,14 @@ import { StringDecoder } from "node:string_decoder";
 import type { SSEClientTransportOptions } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { FetchLike, Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { isSecretRef } from "../config/types.secrets.js";
+import { resolveConfiguredSecretInputString } from "../gateway/resolve-configured-secret-input-string.js";
 import { logDebug } from "../logger.js";
 import { truncateUtf8Suffix } from "../utils/utf8-truncate.js";
 import type { SessionMcpRequesterScope } from "./agent-bundle-mcp-types.js";
+import { withMachineTokenBearer } from "./machine-token-fetch.js";
+import { fingerprintMachineTokenKeyRef } from "./machine-token-fingerprint.js";
+import type { MachineTokenBinding } from "./machine-token.js";
 import { resolveMcpAuthProfileId, withMcpAuthProfileBearer } from "./mcp-auth-profile.js";
 import {
   buildMcpHttpFetch,
@@ -121,6 +126,101 @@ function buildSseEventSourceFetch(
   };
 }
 
+function usesManagedHttpAuth(params: {
+  auth?: "oauth" | "machine_token";
+  authProfileId?: string;
+}): boolean {
+  // Managed auth is driven only by explicit auth mode (or auth-profile oauth).
+  // A stray machineToken block does not activate managed auth.
+  return Boolean(
+    params.auth === "oauth" || params.auth === "machine_token" || params.authProfileId,
+  );
+}
+
+/**
+ * Lazily resolve the machine-token assertion key, then wrap fetch with bearer injection.
+ * resolveMcpTransport stays sync; secret resolution happens on the first same-origin call.
+ */
+function withResolvedMachineTokenBearer(params: {
+  fetchFn: FetchLike;
+  serverName: string;
+  resourceUrl: string;
+  headers?: Record<string, string>;
+  machineToken: {
+    bindingId: string;
+    issuerUrl: string;
+    clientId: string;
+    audience?: string;
+    scope?: string;
+    allowPrivateNetwork?: boolean;
+    clientAssertionKeyRef: unknown;
+  };
+  cfg?: OpenClawConfig;
+}): FetchLike {
+  let bearerFetch: FetchLike | undefined;
+  let resolveKeyPromise: Promise<string> | undefined;
+
+  const resolveAssertionKeyPem = async (): Promise<string> => {
+    if (!params.cfg) {
+      throw new Error(
+        `MCP server "${params.serverName}" uses machine-token auth, but no OpenClaw config was provided to resolve clientAssertionKeyRef.`,
+      );
+    }
+    resolveKeyPromise ??= (async () => {
+      const resolved = await resolveConfiguredSecretInputString({
+        config: params.cfg!,
+        env: process.env,
+        value: params.machineToken.clientAssertionKeyRef,
+        path: `mcp.servers.${params.serverName}.machineToken.clientAssertionKeyRef`,
+      });
+      if (!resolved.value) {
+        throw new Error(
+          resolved.unresolvedRefReason ??
+            `MCP server "${params.serverName}" could not resolve machineToken.clientAssertionKeyRef.`,
+        );
+      }
+      return resolved.value;
+    })();
+    return await resolveKeyPromise;
+  };
+
+  return async (url, init) => {
+    if (!bearerFetch) {
+      const clientAssertionKeyPem = await resolveAssertionKeyPem();
+      const keyRef = params.machineToken.clientAssertionKeyRef;
+      const binding: MachineTokenBinding = {
+        bindingId: params.machineToken.bindingId,
+        issuerUrl: params.machineToken.issuerUrl,
+        clientId: params.machineToken.clientId,
+        ...(params.machineToken.audience ? { audience: params.machineToken.audience } : {}),
+        ...(params.machineToken.scope ? { scope: params.machineToken.scope } : {}),
+        ...(params.machineToken.allowPrivateNetwork === true ? { allowPrivateNetwork: true } : {}),
+        clientAssertionKeyPem,
+        ...(isSecretRef(keyRef)
+          ? {
+              keyRefFingerprint: fingerprintMachineTokenKeyRef({
+                source: keyRef.source,
+                provider: keyRef.provider,
+                id: keyRef.id,
+              }),
+            }
+          : {}),
+      };
+      bearerFetch = withMachineTokenBearer({
+        // Resource path may use the MCP HTTP fetch. Mint/discovery omits
+        // authFetchFn so resolveMachineTokenAccess uses the hardened auth
+        // network — never the injected general MCP resource fetchFn.
+        fetchFn: params.fetchFn,
+        serverName: params.serverName,
+        resourceUrl: params.resourceUrl,
+        headers: params.headers,
+        binding,
+      });
+    }
+    return bearerFetch(url, init);
+  };
+}
+
 /** Resolves a configured MCP server into a live SDK transport instance. */
 export function resolveMcpTransport(
   serverName: string,
@@ -166,6 +266,8 @@ export function resolveMcpTransport(
   } else {
     oauthIdentity = operatorMcpOAuthIdentity(serverName, resolved.url);
   }
+  // Auth selection is explicit: machine_token only when auth === "machine_token".
+  // A machineToken block never overrides auth="oauth" and never auto-activates.
   // The SDK reuses one fetch for OAuth and long-lived SSE/streamable bodies.
   // Per-RPC deadlines belong to client calls, not this transport fetch.
   const baseFetch = buildMcpHttpFetch({
@@ -174,39 +276,58 @@ export function resolveMcpTransport(
     clientKey: resolved.clientKey,
     resourceUrl: resolved.url,
   });
-  const headers =
-    resolved.auth === "oauth" || authProfileId
-      ? withoutMcpAuthorizationHeader(resolved.headers)
-      : resolved.headers;
+  const managedAuth = usesManagedHttpAuth({
+    auth: resolved.auth,
+    authProfileId,
+  });
+  const headers = managedAuth ? withoutMcpAuthorizationHeader(resolved.headers) : resolved.headers;
   const resourceFetch = withSameOriginMcpHttpHeaders({
     fetchFn: baseFetch,
     headers,
     resourceUrl: resolved.url,
   });
-  const httpFetch = authProfileId
-    ? withMcpAuthProfileBearer({
-        fetchFn: baseFetch,
-        serverName,
-        resourceUrl: resolved.url,
-        headers,
-        authProfileId,
-        cfg: options?.cfg,
-        agentDir: options?.agentDir,
-      })
-    : resolved.auth === "oauth"
-      ? withMcpOAuthBearer({
-          fetchFn: resourceFetch,
-          // Protected-resource discovery lives at the resource origin and may
-          // require the same routing headers. Cross-origin auth calls stay scrubbed.
-          authFetchFn: resourceFetch,
-          identity: oauthIdentity,
-          config: resolved.oauth,
-        })
-      : baseFetch;
+  let httpFetch: FetchLike;
+  if (resolved.auth === "machine_token") {
+    if (!resolved.machineToken) {
+      throw new Error(
+        `MCP server "${serverName}" auth is "machine_token" but machineToken binding is missing or incomplete.`,
+      );
+    }
+    httpFetch = withResolvedMachineTokenBearer({
+      fetchFn: baseFetch,
+      serverName,
+      resourceUrl: resolved.url,
+      headers,
+      machineToken: resolved.machineToken,
+      cfg: options?.cfg,
+    });
+  } else if (authProfileId) {
+    httpFetch = withMcpAuthProfileBearer({
+      fetchFn: baseFetch,
+      serverName,
+      resourceUrl: resolved.url,
+      headers,
+      authProfileId,
+      cfg: options?.cfg,
+      agentDir: options?.agentDir,
+    });
+  } else if (resolved.auth === "oauth") {
+    httpFetch = withMcpOAuthBearer({
+      fetchFn: resourceFetch,
+      // Protected-resource discovery lives at the resource origin and may
+      // require the same routing headers. Cross-origin auth calls stay scrubbed.
+      authFetchFn: resourceFetch,
+      identity: oauthIdentity,
+      config: resolved.oauth,
+    });
+  } else {
+    httpFetch = baseFetch;
+  }
+  const omitStaticAuthHeaders = resolved.auth === "oauth" || resolved.auth === "machine_token";
   if (resolved.transportType === "streamable-http") {
     return {
       transport: new OpenClawStreamableHTTPClientTransport(new URL(resolved.url), {
-        requestInit: resolved.auth === "oauth" || !headers ? undefined : { headers },
+        requestInit: omitStaticAuthHeaders || !headers ? undefined : { headers },
         fetch: httpFetch,
       }),
       description: resolved.description,
@@ -220,10 +341,10 @@ export function resolveMcpTransport(
   const hasHeaders = Object.keys(sseHeaders).length > 0;
   return {
     transport: new OpenClawSSEClientTransport(new URL(resolved.url), {
-      requestInit: resolved.auth === "oauth" || !hasHeaders ? undefined : { headers: sseHeaders },
+      requestInit: omitStaticAuthHeaders || !hasHeaders ? undefined : { headers: sseHeaders },
       fetch: httpFetch,
       eventSourceInit: {
-        fetch: buildSseEventSourceFetch(resolved.auth === "oauth" ? {} : sseHeaders, httpFetch),
+        fetch: buildSseEventSourceFetch(omitStaticAuthHeaders ? {} : sseHeaders, httpFetch),
       },
     }),
     description: resolved.description,
