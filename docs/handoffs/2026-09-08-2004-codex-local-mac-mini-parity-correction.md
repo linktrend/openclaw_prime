@@ -14,7 +14,7 @@
 | Starting branch  | dev/minicodex/WP-0-agent-parity-20260908                                              |
 | Ending branch    | dev/minicodex/WP-0-agent-parity-20260908                                              |
 | Starting commit  | fb2369a560dea9b892be1950069d546d84556e24                                              |
-| Ending commit    | 251d08ed2ee (final commit after handoff metadata amendment)                           |
+| Ending commit    | final commit recorded in completion report                                            |
 | Starting status  | clean                                                                                 |
 | Ending status    | complete                                                                              |
 
