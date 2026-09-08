@@ -50,6 +50,13 @@
     "stateDatabaseRelative": ".openclaw-{agent}/state/openclaw.sqlite",
     "identityFiles": ["IDENTITY.md", "SOUL.md", "AGENTS.md"],
     "nonLisaToolsFile": "TOOLS.md",
+    "baselineFacts": {
+      "authorizationDatabase": ["path", "identity"],
+      "revocation": ["boundaryIdentity"],
+      "identityFiles": ["name", "path", "exists"],
+      "workspace": ["path", "entries"],
+      "nonLisaToolsFile": ["path", "exists"]
+    },
     "googleChat": "disabled-until-all-per-agent-gates-pass"
   },
   "codingRouting": {

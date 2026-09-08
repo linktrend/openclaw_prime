@@ -6,9 +6,48 @@ import {
   parseOverlay,
   protectedFieldsEqual,
   validateTechnicalOverlay,
+  validateStructuralBaseline,
 } from "./overlay.mjs";
 
 const overlay = loadOverlay();
+
+function structuralBaseline(agent, overrides = {}) {
+  return {
+    agent,
+    runtimeRoot: `/srv/${agent}`,
+    workspacePath: `/srv/${agent}/workspace`,
+    stateDbPath: `/srv/${agent}/state/openclaw.sqlite`,
+    configuredAgentIds: ["main"],
+    topLevelKeys: [],
+    agentsKeys: [],
+    pluginIds: [],
+    channelIds: [],
+    model: {},
+    presence: {
+      identity: true,
+      soul: true,
+      tools: true,
+      agents: true,
+      jobs: false,
+      schedules: false,
+      memory: true,
+      recipients: false,
+    },
+    authorizationDatabase: { path: `/srv/${agent}/state/auth.sqlite`, identity: `auth-${agent}` },
+    revocation: { boundaryIdentity: `revocation-${agent}` },
+    identityFiles: ["IDENTITY.md", "SOUL.md", "AGENTS.md"].map((name) => ({
+      name,
+      path: `/srv/${agent}/workspace/${name}`,
+      exists: true,
+    })),
+    workspace: {
+      path: `/srv/${agent}/workspace`,
+      entries: ["AGENTS.md", "IDENTITY.md", "SOUL.md"],
+    },
+    nonLisaToolsFile: { path: `/srv/${agent}/workspace/TOOLS.md`, exists: agent !== "lisa" },
+    ...overrides,
+  };
+}
 
 test("technical overlay is allowlisted and preserves protected config fields", () => {
   assert.deepEqual(validateTechnicalOverlay(overlay), []);
@@ -67,28 +106,7 @@ test("deployment guard captures all baselines and backups before first write", a
     agents,
     captureStructuralBaseline: async (agent) => {
       events.push(`baseline:${agent}`);
-      return {
-        agent,
-        runtimeRoot: `/srv/${agent}`,
-        workspacePath: `/srv/${agent}/workspace`,
-        stateDbPath: `/srv/${agent}/state/openclaw.sqlite`,
-        configuredAgentIds: ["main"],
-        topLevelKeys: [],
-        agentsKeys: [],
-        pluginIds: [],
-        channelIds: [],
-        model: {},
-        presence: {
-          identity: true,
-          soul: true,
-          tools: true,
-          agents: true,
-          jobs: false,
-          schedules: false,
-          memory: true,
-          recipients: false,
-        },
-      };
+      return structuralBaseline(agent);
     },
     backupRuntimeRoot: async (agent) => {
       events.push(`backup:${agent}`);
@@ -103,6 +121,7 @@ test("deployment guard captures all baselines and backups before first write", a
     restoreRuntimeRoot: async (agent, backup) => events.push(`restore:${agent}:${backup}`),
   });
   assert.equal(result.status, "complete");
+  assert.ok(result.agents.every((entry) => entry.postWriteBaseline));
   assert.deepEqual(events.slice(0, 6), [
     "baseline:lisa",
     "baseline:david",
@@ -135,28 +154,7 @@ test("deployment guard rolls back already-written agents on protected mismatch",
     () =>
       executeParityDeployment({
         agents: ["lisa", "david"],
-        captureStructuralBaseline: async (agent) => ({
-          agent,
-          runtimeRoot: `/srv/${agent}`,
-          workspacePath: `/srv/${agent}/workspace`,
-          stateDbPath: `/srv/${agent}/state/openclaw.sqlite`,
-          configuredAgentIds: ["main"],
-          topLevelKeys: [],
-          agentsKeys: [],
-          pluginIds: [],
-          channelIds: [],
-          model: {},
-          presence: {
-            identity: true,
-            soul: true,
-            tools: true,
-            agents: true,
-            jobs: false,
-            schedules: false,
-            memory: true,
-            recipients: false,
-          },
-        }),
+        captureStructuralBaseline: async (agent) => structuralBaseline(agent),
         backupRuntimeRoot: async (agent) => `backup-${agent}`,
         readConfig: async (agent) => {
           const count = (reads.get(agent) ?? 0) + 1;
@@ -188,4 +186,65 @@ test("deployment guard rolls back already-written agents on protected mismatch",
 test("overlay parser rejects protected domains", () => {
   const invalid = parseOverlay("{ identity: { name: 'Lisa' } }");
   assert.match(validateTechnicalOverlay(invalid).join("\n"), /not allowlisted|protected domain/u);
+});
+
+for (const category of [
+  "authorizationDatabase",
+  "revocation",
+  "identityFiles",
+  "workspace",
+  "nonLisaToolsFile",
+]) {
+  test(`deployment guard rejects a baseline missing ${category} and rolls back`, async () => {
+    const baseline = structuralBaseline("david");
+    delete baseline[category];
+    const events = [];
+    await assert.rejects(
+      () =>
+        executeParityDeployment({
+          agents: ["david"],
+          captureStructuralBaseline: async () => baseline,
+          backupRuntimeRoot: async () => events.push("backup"),
+          readConfig: async () => ({}),
+          writeConfig: async () => events.push("write"),
+          writeEphemeralReceipt: async (receipt) => events.push(`receipt:${receipt.status}`),
+          restoreRuntimeRoot: async () => events.push("restore"),
+        }),
+      /rollback=complete/,
+    );
+    assert.deepEqual(events, ["receipt:rolled-back"]);
+    assert.match(validateStructuralBaseline(baseline).join("\n"), /required|object|record/u);
+  });
+}
+
+test("deployment guard rolls back when a protected structure changes after write", async () => {
+  const baseline = structuralBaseline("david");
+  let captures = 0;
+  const events = [];
+  await assert.rejects(
+    () =>
+      executeParityDeployment({
+        agents: ["david"],
+        captureStructuralBaseline: async () => {
+          captures += 1;
+          return captures === 1
+            ? baseline
+            : { ...baseline, workspace: { ...baseline.workspace, entries: ["changed"] } };
+        },
+        backupRuntimeRoot: async () => "backup-david",
+        readConfig: async () => ({}),
+        writeConfig: async () => events.push("write"),
+        validateConfig: () => [],
+        writeEphemeralReceipt: async (receipt) => events.push(`receipt:${receipt.status}`),
+        restoreRuntimeRoot: async (agent, backup) => events.push(`restore:${agent}:${backup}`),
+      }),
+    /rollback=complete/,
+  );
+  assert.deepEqual(events, [
+    "receipt:baseline-captured",
+    "receipt:backups-captured",
+    "write",
+    "restore:david:backup-david",
+    "receipt:rolled-back",
+  ]);
 });

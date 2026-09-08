@@ -11,8 +11,11 @@ deployment layout.
 - One immutable image for all five agents.
 - Separate state, workspace, auth, environment, port, and service per agent.
 - Primary: `openai/gpt-5.6-sol`, low thinking.
-- Sole ordered fallback after a qualifying provider or model failure:
+- Sole ordered fallback after the primary attempt fails:
   `openrouter/openai/gpt-5.6-luna`, high thinking; no routine load balancing.
+  Known provider/model failures and an unclassified thrown error qualify when a
+  later candidate exists; abort, context-overflow, local runtime-coordination,
+  and missing-harness errors stop the chain. Candidates are tried sequentially.
 - Shared plugin/model substrate; role-specific policy remains in each existing
   workspace. Lisa's coding-task policy is an explicit HOLD because no supported
   generic field exists for an equivalent cross-agent rule.
@@ -72,12 +75,16 @@ OPENCLAW_PARITY_IMAGE=local/openclaw-prime@sha256:$(printf '0%.0s' {1..64}) \
 
 1. Capture a redacted structural baseline for every agent into an ephemeral
    Server01 receipt before any live mutation.
+   The baseline must include authorization-database path/identity, revocation
+   boundary identity, identity-file names/paths/existence, workspace path and
+   relative entry structure, and the non-Lisa `TOOLS.md` path/existence. These
+   are metadata-only facts; contents are never read or emitted.
 2. Back up each complete runtime root independently and recoverably.
 3. Apply the allowlisted technical overlay to each existing config without
    changing identity, role, memory, jobs, recipients, channel account IDs, or
    private state.
-4. Validate each candidate, compare protected fields after write, and stop plus
-   restore the affected backups on any mismatch.
+4. Validate each candidate, recapture and compare every protected structural
+   fact after write, and stop plus restore the affected backups on any mismatch.
 5. Create five separately permissioned `env/<agent>.env` files from the checked-in
    placeholders; inject only that agent's SecretRefs/credentials.
 6. Validate config and plugin availability for each agent before restart.

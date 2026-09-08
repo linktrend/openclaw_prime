@@ -21,7 +21,7 @@
     "fallbacks": ["openrouter/openai/gpt-5.6-luna"],
     "fallbackProvider": "openrouter",
     "fallbackThinking": "high",
-    "fallbackTrigger": "qualifying-provider-or-model-failure-only",
+    "fallbackTrigger": "sequential-after-primary-attempt-failure; known-failover-or-unclassified-error-with-remaining-candidate; abort-context-overflow-runtime-coordination-and-missing-harness-errors-stop",
     "loadBalancing": false
   },
   "topology": {

@@ -158,7 +158,7 @@ if (contract) {
   assertEqual(contract.model?.fallbackThinking, "high", "fallback thinking changed");
   assertEqual(
     contract.model?.fallbackTrigger,
-    "qualifying-provider-or-model-failure-only",
+    "sequential-after-primary-attempt-failure; known-failover-or-unclassified-error-with-remaining-candidate; abort-context-overflow-runtime-coordination-and-missing-harness-errors-stop",
     "fallback trigger changed",
   );
   assertEqual(contract.model?.loadBalancing, false, "routine load balancing must remain disabled");
@@ -227,6 +227,17 @@ if (preservationContract) {
     preservationContract.structuralExpectations?.independentRevocation,
     true,
     "revocation boundaries must remain independent",
+  );
+  assertEqual(
+    preservationContract.structuralExpectations?.baselineFacts,
+    {
+      authorizationDatabase: ["path", "identity"],
+      revocation: ["boundaryIdentity"],
+      identityFiles: ["name", "path", "exists"],
+      workspace: ["path", "entries"],
+      nonLisaToolsFile: ["path", "exists"],
+    },
+    "structural baseline facts changed",
   );
 }
 

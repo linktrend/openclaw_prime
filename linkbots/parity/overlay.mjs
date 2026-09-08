@@ -32,6 +32,11 @@ const BASELINE_KEYS = new Set([
   "channelIds",
   "model",
   "presence",
+  "authorizationDatabase",
+  "revocation",
+  "identityFiles",
+  "workspace",
+  "nonLisaToolsFile",
 ]);
 const BASELINE_MODEL_KEYS = new Set([
   "primary",
@@ -220,7 +225,7 @@ export function validateTechnicalConfig(config) {
   return errors;
 }
 
-export function validateStructuralBaseline(baseline) {
+export function validateStructuralBaseline(baseline, expectedAgent) {
   const errors = [];
   if (!isObject(baseline) || Array.isArray(baseline))
     return ["structural baseline must be an object"];
@@ -230,6 +235,8 @@ export function validateStructuralBaseline(baseline) {
   for (const key of ["agent", "runtimeRoot", "workspacePath", "stateDbPath"])
     if (typeof baseline[key] !== "string")
       errors.push(`structural baseline field must be a string: ${key}`);
+  if (expectedAgent !== undefined && baseline.agent !== expectedAgent)
+    errors.push(`structural baseline is not bound to agent: ${expectedAgent}`);
   for (const key of [
     "configuredAgentIds",
     "topLevelKeys",
@@ -251,7 +258,82 @@ export function validateStructuralBaseline(baseline) {
     Object.values(baseline.presence).some((value) => typeof value !== "boolean")
   )
     errors.push("structural baseline presence contains non-structural fields");
+  const exactObject = (value, keys, label) => {
+    if (!isObject(value) || Array.isArray(value)) {
+      errors.push(`structural baseline field must be an object: ${label}`);
+      return false;
+    }
+    for (const key of Object.keys(value))
+      if (!keys.includes(key))
+        errors.push(`structural baseline ${label} contains non-structural field: ${key}`);
+    for (const key of keys)
+      if (!(key in value)) errors.push(`structural baseline field is required: ${label}.${key}`);
+    return true;
+  };
+  if (exactObject(baseline.authorizationDatabase, ["path", "identity"], "authorizationDatabase")) {
+    for (const key of ["path", "identity"])
+      if (typeof baseline.authorizationDatabase[key] !== "string")
+        errors.push(`structural baseline field must be a string: authorizationDatabase.${key}`);
+  }
+  if (exactObject(baseline.revocation, ["boundaryIdentity"], "revocation")) {
+    if (typeof baseline.revocation.boundaryIdentity !== "string")
+      errors.push("structural baseline field must be a string: revocation.boundaryIdentity");
+  }
+  if (!Array.isArray(baseline.identityFiles) || baseline.identityFiles.length === 0) {
+    errors.push("structural baseline field must be a non-empty record array: identityFiles");
+  } else {
+    const expectedNames = [...(contract.structuralExpectations?.identityFiles ?? [])].sort();
+    const actualNames = baseline.identityFiles.map((file) => file?.name).sort();
+    if (JSON.stringify(actualNames) !== JSON.stringify(expectedNames))
+      errors.push(
+        `structural baseline identityFiles must cover exactly: ${expectedNames.join(", ")}`,
+      );
+    for (const file of baseline.identityFiles) {
+      if (!exactObject(file, ["name", "path", "exists"], "identityFiles")) continue;
+      if (
+        typeof file.name !== "string" ||
+        typeof file.path !== "string" ||
+        typeof file.exists !== "boolean"
+      )
+        errors.push(
+          "structural baseline identityFiles records must contain name/path strings and exists boolean",
+        );
+    }
+  }
+  if (exactObject(baseline.workspace, ["path", "entries"], "workspace")) {
+    if (typeof baseline.workspace.path !== "string")
+      errors.push("structural baseline field must be a string: workspace.path");
+    if (
+      !Array.isArray(baseline.workspace.entries) ||
+      baseline.workspace.entries.some((entry) => typeof entry !== "string")
+    )
+      errors.push("structural baseline field must be a string array: workspace.entries");
+    if (baseline.workspace.path !== baseline.workspacePath)
+      errors.push("structural baseline workspace.path must equal workspacePath");
+  }
+  if (exactObject(baseline.nonLisaToolsFile, ["path", "exists"], "nonLisaToolsFile")) {
+    if (
+      typeof baseline.nonLisaToolsFile.path !== "string" ||
+      typeof baseline.nonLisaToolsFile.exists !== "boolean"
+    )
+      errors.push(
+        "structural baseline nonLisaToolsFile must contain path string and exists boolean",
+      );
+    const toolsName = contract.structuralExpectations?.nonLisaToolsFile;
+    if (toolsName && !baseline.nonLisaToolsFile.path.endsWith(`/${toolsName}`))
+      errors.push(`structural baseline nonLisaToolsFile.path must end with ${toolsName}`);
+  }
   return errors;
+}
+
+export function structuralBaselineEqual(before, after) {
+  return JSON.stringify(before) === JSON.stringify(after);
+}
+
+export function structuralBaselineDiff(before, after) {
+  return structuralBaselineEqual(before, after)
+    ? []
+    : ["protected runtime structure changed outside the technical overlay allowlist"];
 }
 
 export async function executeParityDeployment({
@@ -271,7 +353,7 @@ export async function executeParityDeployment({
   try {
     for (const agent of agents) {
       const baseline = await captureStructuralBaseline(agent);
-      const baselineErrors = validateStructuralBaseline(baseline);
+      const baselineErrors = validateStructuralBaseline(baseline, agent);
       if (baselineErrors.length)
         throw new Error(`${agent}: unsafe structural baseline: ${baselineErrors.join("; ")}`);
       prepared.push({ agent, baseline });
@@ -298,7 +380,17 @@ export async function executeParityDeployment({
       const after = await readConfig(item.agent);
       const protectedErrors = protectedFieldDiff(before, after);
       if (protectedErrors.length) throw new Error(`${item.agent}: ${protectedErrors.join("; ")}`);
-      receipt.agents.find((entry) => entry.agent === item.agent).status = "validated";
+      const afterBaseline = await captureStructuralBaseline(item.agent);
+      const afterBaselineErrors = validateStructuralBaseline(afterBaseline, item.agent);
+      if (afterBaselineErrors.length)
+        throw new Error(
+          `${item.agent}: unsafe post-write structural baseline: ${afterBaselineErrors.join("; ")}`,
+        );
+      const structuralErrors = structuralBaselineDiff(item.baseline, afterBaseline);
+      if (structuralErrors.length) throw new Error(`${item.agent}: ${structuralErrors.join("; ")}`);
+      const receiptAgent = receipt.agents.find((entry) => entry.agent === item.agent);
+      receiptAgent.postWriteBaseline = afterBaseline;
+      receiptAgent.status = "validated";
     }
     receipt.status = "complete";
     await writeEphemeralReceipt(receipt);
