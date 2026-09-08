@@ -7,19 +7,39 @@ import {
   ensureAuthProfileStoreWithoutExternalProfiles,
 } from "../../model-auth.js";
 import { OPENAI_PROVIDER_ID } from "../../openai-routing.js";
+import type { PreparedModelRuntimeSnapshot } from "../../prepared-model-runtime.js";
+import { buildAgentRuntimeAuthPlan } from "../../runtime-plan/auth.js";
 import {
   createPreparedRuntimeModelMaterializer,
   providerUsesCredentialScopedModelMetadata,
 } from "../../runtime-plan/credential-scoped-model.js";
 import {
   prepareAgentRuntimeAuth,
+  type PreparedAgentRuntimeAuth,
   type PreparedAgentRuntimeAuthAttempt,
 } from "../../runtime-plan/prepare-auth.js";
 import { resolveModelAsync } from "../model.js";
+import type { PreparedNativeSessionRuntime } from "./model-setup.js";
 import type { RunEmbeddedAgentParams } from "./params.js";
 
 type ModelResolution = Awaited<ReturnType<typeof resolveModelAsync>>;
 type RuntimeModel = NonNullable<ModelResolution["model"]>;
+
+function loadEmbeddedRunAuthProfileStore(params: {
+  agentDir: string;
+  profileId?: string;
+  config: RunEmbeddedAgentParams["config"];
+  externalCliProviderIds: Iterable<string>;
+}): AuthProfileStore {
+  // Provider pins own ambient overlays at this loader seam. Genuinely stored profiles and
+  // explicit bindings remain available for the cross-class contracts in prepare-auth.test.ts.
+  return ensureAuthProfileStore(params.agentDir, {
+    profileId: params.profileId,
+    config: params.config,
+    externalCliProviderIds: params.externalCliProviderIds,
+    allowKeychainPrompt: false,
+  });
+}
 
 export async function prepareEmbeddedRunAuthPlan(params: {
   runParams: RunEmbeddedAgentParams;
@@ -30,8 +50,10 @@ export async function prepareEmbeddedRunAuthPlan(params: {
   workspaceDir: string;
   requestStreamTransportOverrides?: "present";
   nativeModelOwned: boolean;
+  nativeSessionRuntime?: PreparedNativeSessionRuntime;
   authStorage: ModelResolution["authStorage"];
   modelRegistry: ModelResolution["modelRegistry"];
+  preparedModelRuntime?: PreparedModelRuntimeSnapshot;
   getAgentHarness: () => AgentHarness;
   setAgentHarness: (harness: AgentHarness) => void;
   getRuntimeModel: () => RuntimeModel;
@@ -64,12 +86,13 @@ export async function prepareEmbeddedRunAuthPlan(params: {
           agentId: runParams.agentId,
           modelId: params.modelId,
           workspaceDir: params.workspaceDir,
-          userLockedAuthProfileId:
+          userPinnedAuthProfileId:
             runParams.authProfileIdSource === "user" ? runParams.authProfileId : undefined,
         });
   let noExternalAuthStore: AuthProfileStore | undefined;
   if (!initialPluginHarnessOwnsTransport && !externalCliAuthScope.providerIds) {
     noExternalAuthStore = ensureAuthProfileStoreWithoutExternalProfiles(params.agentDir, {
+      profileId: runParams.authProfileId,
       allowKeychainPrompt: false,
     });
     externalCliAuthScope = resolveExternalCliAuthOverlayScopeFromSelection({
@@ -79,28 +102,34 @@ export async function prepareEmbeddedRunAuthPlan(params: {
       modelId: params.modelId,
       workspaceDir: params.workspaceDir,
       store: noExternalAuthStore,
-      userLockedAuthProfileId:
+      userPinnedAuthProfileId:
         runParams.authProfileIdSource === "user" ? runParams.authProfileId : undefined,
     });
   }
   params.markStage?.("scope");
 
   const attemptAuthProfileStore = usesOpenAIAuthRouting
-    ? ensureAuthProfileStore(params.agentDir, {
+    ? loadEmbeddedRunAuthProfileStore({
+        agentDir: params.agentDir,
+        profileId: runParams.authProfileId,
+        config: runParams.config,
         externalCliProviderIds: [OPENAI_PROVIDER_ID],
-        allowKeychainPrompt: false,
       })
     : initialPluginHarnessOwnsTransport
       ? ensureAuthProfileStoreWithoutExternalProfiles(params.agentDir, {
+          profileId: runParams.authProfileId,
           allowKeychainPrompt: false,
         })
       : externalCliAuthScope.providerIds
-        ? ensureAuthProfileStore(params.agentDir, {
+        ? loadEmbeddedRunAuthProfileStore({
+            agentDir: params.agentDir,
+            profileId: runParams.authProfileId,
+            config: runParams.config,
             externalCliProviderIds: externalCliAuthScope.providerIds,
-            allowKeychainPrompt: false,
           })
         : (noExternalAuthStore ??
           ensureAuthProfileStoreWithoutExternalProfiles(params.agentDir, {
+            profileId: runParams.authProfileId,
             allowKeychainPrompt: false,
           }));
   params.markStage?.("store");
@@ -111,8 +140,22 @@ export async function prepareEmbeddedRunAuthPlan(params: {
     externalCliAuthScope.ignoreAutoPreferredProfile && !lockedProfileId
       ? undefined
       : requestedProfileId;
-  const createAuthPreparation = () => {
+  const createAuthPreparation = (): PreparedAgentRuntimeAuth => {
     const harness = params.getAgentHarness();
+    if (params.nativeSessionRuntime?.auth === "native") {
+      // Only the binding-owned connection bypasses host credentials and routes;
+      // preserving a native model alone still uses the normal auth planner below.
+      const plan = buildAgentRuntimeAuthPlan({
+        provider: params.provider,
+        modelId: params.modelId,
+        harnessId: harness.id,
+        allowHarnessAuthProfileForwarding: false,
+        metadataSnapshot: params.preparedModelRuntime?.metadataSnapshot,
+        config: runParams.config,
+        workspaceDir: params.workspaceDir,
+      });
+      return { plan, attempts: [{ kind: "implicit", plan }] };
+    }
     return prepareAgentRuntimeAuth({
       provider: params.provider,
       modelId: params.modelId,
@@ -123,6 +166,7 @@ export async function prepareEmbeddedRunAuthPlan(params: {
       env: process.env,
       agentDir: params.agentDir,
       workspaceDir: params.workspaceDir,
+      metadataSnapshot: params.preparedModelRuntime?.metadataSnapshot,
       authProfileStore: attemptAuthProfileStore,
       sessionAuthProfileId: preferredProfileId,
       sessionAuthProfileSource: runParams.authProfileIdSource,
@@ -164,6 +208,7 @@ export async function prepareEmbeddedRunAuthPlan(params: {
           skipAgentDiscovery: true,
           allowBundledStaticCatalogFallback: true,
           preferBundledStaticCatalogTransport: true,
+          preparedModelRuntime: params.preparedModelRuntime,
           workspaceDir: params.workspaceDir,
           authProfileId,
           authProfileMode,

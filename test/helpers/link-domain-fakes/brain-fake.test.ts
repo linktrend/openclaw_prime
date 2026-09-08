@@ -145,7 +145,7 @@ describe("linkbrain Phase 1 fixtures", () => {
 describe("linkbrain Phase 1 fake runtime", () => {
   it("rejects prohibited reasoning/secrets/unbounded fields", async () => {
     const reasoning = readFixture("capture", "prohibited-reasoning.json");
-    const secrets = readFixture("capture", "prohibited-secrets.json");
+    const secrets = readFixture("capture", "prohibited-fields.json");
     const unbounded = readFixture("capture", "prohibited-unbounded-tool-output.json");
 
     expect(await validateBrainPayload({ batch: reasoning.batch })).toMatchObject({

@@ -38,9 +38,6 @@ const { mockExecApprovals, supervisorSpawnMock } = vi.hoisted(() => {
       askFallback: "defaults.askFallback",
     },
     allowlist: [],
-    denylist: [],
-    secureRouting: false,
-    hostAdapters: [],
     file: {
       version: 1,
       socket: { path: "/tmp/exec-approvals.sock", token: "token" },
@@ -144,9 +141,7 @@ vi.mock("./bash-tools.exec-host-shared.js", async () => {
 });
 
 vi.mock("../plugins/tools.js", () => ({
-  copyPluginToolMeta: vi.fn((_from, to) => to),
   resolvePluginTools: () => [],
-  getPluginToolMeta: () => undefined,
 }));
 
 vi.mock("openclaw/plugin-sdk/agent-sessions", () => ({
@@ -207,8 +202,7 @@ async function createSafeBinsExecTool(params: {
     tools: {
       exec: {
         host: "gateway",
-        security: "allowlist",
-        ask: "off",
+        mode: "allowlist",
         safeBins: params.safeBins,
         safeBinProfiles: params.safeBinProfiles,
       },

@@ -24,7 +24,7 @@ OpenClaw-derived draft fixtures for Lisa ↔ LiNKbrain integration tests.
 | `contracts/brain-capture-batch.contract.json`             | `33432cefcb939537e87dc3a53ae92967eb4254a1e67947e6c2d2191d87913ace` |
 | `capture/lifecycle-event.json`                            | `5972529e8d0a99f80d6fa14ecb2c69d6584b7c14013ea912ca4e3fff42a5c4e1` |
 | `capture/prohibited-reasoning.json`                       | `cbf3fc552d65dda9c54b2a1c6c97ca9b458bde9471b2fb5ddd7ee6d3eba82672` |
-| `capture/prohibited-secrets.json`                         | `ef80ff50bc4a9b0081bf00c9a83d8a145d719c7abf4d38da2c394d1733b3ff9b` |
+| `capture/prohibited-fields.json`                          | `ef80ff50bc4a9b0081bf00c9a83d8a145d719c7abf4d38da2c394d1733b3ff9b` |
 | `capture/prohibited-unbounded-tool-output.json`           | `7484026ed4d8e12115155bcb405061164876c232bc24ce2abc971e5688569b50` |
 | `capture/sample-batch.json`                               | `77e0998298c0c09d8a5d509abf239f1f5e4e5b652c6171747237ec2ec062504a` |
 | `cross-domain-skills-shaped.json`                         | `965ac881040c8185e37b12e8fb15ba6b41f14fda9bbe25164159dcafe2a1997d` |

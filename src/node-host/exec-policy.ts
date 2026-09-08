@@ -1,5 +1,31 @@
 /** Evaluates node-host exec policy from security, approval, and allowlist context. */
-import { requiresExecApproval, type ExecAsk, type ExecSecurity } from "../infra/exec-approvals.js";
+import { resolveAgentConfig } from "../agents/agent-scope-config.js";
+import type { OpenClawConfig } from "../config/types.openclaw.js";
+import {
+  requiresExecApproval,
+  resolveExecModePolicy,
+  type ExecAsk,
+  type ExecSecurity,
+} from "../infra/exec-approvals.js";
+import { applyExecPolicyLayer } from "../infra/exec-policy.js";
+
+/** One config owner for system.run and plugin-hosted execution. */
+export function resolveNodeExecConfigPolicy(params: {
+  cfg: OpenClawConfig;
+  agentId: string | undefined;
+  defaultSecurity: ExecSecurity;
+  defaultAsk: ExecAsk;
+}) {
+  const agentExec = params.agentId
+    ? resolveAgentConfig(params.cfg, params.agentId)?.tools?.exec
+    : undefined;
+  const globalExec = params.cfg.tools?.exec;
+  const layered = applyExecPolicyLayer(
+    applyExecPolicyLayer({ security: params.defaultSecurity, ask: params.defaultAsk }, globalExec),
+    agentExec,
+  );
+  return { agentExec, globalExec, ...resolveExecModePolicy(layered) };
+}
 
 type ExecApprovalDecision = "allow-once" | "allow-always" | null;
 
@@ -17,7 +43,7 @@ type SystemRunPolicyDecision = {
     }
   | {
       allowed: false;
-      eventReason: "security=deny" | "denylist-hit" | "approval-required" | "allowlist-miss";
+      eventReason: "security=deny" | "approval-required" | "allowlist-miss";
       errorMessage: string;
     }
 );
@@ -50,9 +76,6 @@ export function evaluateSystemRunPolicy(params: {
   analysisOk: boolean;
   allowlistSatisfied: boolean;
   durableApprovalSatisfied?: boolean;
-  denylisted?: boolean;
-  /** When true with denylisted, yolo mode hard-denies instead of prompting. */
-  denylistUnanalyzable?: boolean;
   approvalDecision: ExecApprovalDecision;
   approved?: boolean;
   isWindows: boolean;
@@ -83,29 +106,6 @@ export function evaluateSystemRunPolicy(params: {
       shellWrapperBlocked,
       windowsShellWrapperBlocked,
       requiresAsk: false,
-      approvalDecision: params.approvalDecision,
-      approvedByAsk,
-    };
-  }
-
-  // Denylist (STOP-list) hits require a fresh explicit approval regardless of
-  // security mode; durable allow-always trust intentionally does not clear them.
-  // Exception: unanalyzable hits under yolo mode hard-deny without prompting so
-  // opaque shell improvisation cannot spam one-shot Allow-once cards.
-  if (params.denylisted === true && !approvedByAsk) {
-    const hardDenyUnanalyzable =
-      params.denylistUnanalyzable === true && params.security === "full" && params.ask === "off";
-    return {
-      allowed: false,
-      eventReason: "denylist-hit",
-      errorMessage: hardDenyUnanalyzable
-        ? "SYSTEM_RUN_DENIED: denylist screening could not analyze command"
-        : "SYSTEM_RUN_DENIED: denylist match; approval required",
-      analysisOk,
-      allowlistSatisfied,
-      shellWrapperBlocked,
-      windowsShellWrapperBlocked,
-      requiresAsk: !hardDenyUnanalyzable,
       approvalDecision: params.approvalDecision,
       approvedByAsk,
     };

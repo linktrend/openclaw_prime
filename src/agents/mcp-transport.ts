@@ -4,17 +4,15 @@
  * This module turns normalized MCP server config into stdio, SSE, or
  * streamable-HTTP SDK transports with OpenClaw auth, redirect, and logging rules.
  */
-import {
-  SSEClientTransport,
-  type SSEClientTransportOptions,
-} from "@modelcontextprotocol/sdk/client/sse.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StringDecoder } from "node:string_decoder";
+import type { SSEClientTransportOptions } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { FetchLike, Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { isSecretRef } from "../config/types.secrets.js";
 import { resolveConfiguredSecretInputString } from "../gateway/resolve-configured-secret-input-string.js";
 import { logDebug } from "../logger.js";
+import { truncateUtf8Suffix } from "../utils/utf8-truncate.js";
+import type { SessionMcpRequesterScope } from "./agent-bundle-mcp-types.js";
 import { withMachineTokenBearer } from "./machine-token-fetch.js";
 import { fingerprintMachineTokenKeyRef } from "./machine-token-fingerprint.js";
 import type { MachineTokenBinding } from "./machine-token.js";
@@ -24,7 +22,12 @@ import {
   withoutMcpAuthorizationHeader,
   withSameOriginMcpHttpHeaders,
 } from "./mcp-http-fetch.js";
+import {
+  OpenClawSSEClientTransport,
+  OpenClawStreamableHTTPClientTransport,
+} from "./mcp-http-transport.js";
 import { withMcpOAuthBearer } from "./mcp-oauth-fetch.js";
+import { operatorMcpOAuthIdentity, requesterMcpOAuthIdentity } from "./mcp-oauth-identity.js";
 import { OpenClawStdioClientTransport } from "./mcp-stdio-transport.js";
 import { resolveMcpTransportConfig } from "./mcp-transport-config.js";
 
@@ -38,32 +41,63 @@ type ResolvedMcpTransport = {
   detachStderr?: () => void;
 };
 
+const MAX_MCP_STDERR_LINE_BYTES = 8 * 1024;
+
 function attachStderrLogging(serverName: string, transport: OpenClawStdioClientTransport) {
   const stderr = transport.stderr;
-  if (!stderr || typeof stderr.on !== "function") {
+  if (!stderr) {
     return undefined;
   }
+  const decoder = new StringDecoder("utf8");
+  let pending = "";
+  let truncated = false;
+  let progressTimer: ReturnType<typeof setTimeout> | undefined;
+  const emit = (text: string) => {
+    const tail = truncateUtf8Suffix(text, MAX_MCP_STDERR_LINE_BYTES);
+    const message = `${truncated || tail !== text ? "[stderr line truncated] " : ""}${tail}`.trim();
+    truncated = false;
+    if (message) {
+      logDebug(`bundle-mcp:${serverName}: ${message}`);
+    }
+  };
+  const flushProgress = () => {
+    progressTimer = undefined;
+    const text = pending;
+    pending = "";
+    emit(text);
+  };
   const onData = (chunk: Buffer | string) => {
-    const message =
-      normalizeOptionalString(typeof chunk === "string" ? chunk : String(chunk)) ?? "";
-    if (!message) {
-      return;
+    const decoded = decoder.write(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    const lines = (pending + decoded).split(/[\r\n]/);
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      emit(line);
     }
-    for (const line of message.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (trimmed) {
-        logDebug(`bundle-mcp:${serverName}: ${trimmed}`);
-      }
+    const tail = truncateUtf8Suffix(pending, MAX_MCP_STDERR_LINE_BYTES);
+    truncated ||= tail !== pending;
+    pending = tail;
+    // No-newline progress must stay visible even under continuous writes. Flush
+    // complete characters within 250ms; only finalization ends the UTF-8 decoder.
+    if (pending && !progressTimer) {
+      progressTimer = setTimeout(flushProgress, 250);
+      progressTimer.unref();
+    } else if (!pending) {
+      clearTimeout(progressTimer);
+      progressTimer = undefined;
     }
+  };
+  const finalize = () => {
+    stderr.off("data", onData);
+    stderr.off("end", finalize);
+    stderr.off("close", finalize);
+    clearTimeout(progressTimer);
+    pending += decoder.end();
+    flushProgress();
   };
   stderr.on("data", onData);
-  return () => {
-    if (typeof stderr.off === "function") {
-      stderr.off("data", onData);
-    } else if (typeof stderr.removeListener === "function") {
-      stderr.removeListener("data", onData);
-    }
-  };
+  stderr.on("end", finalize);
+  stderr.on("close", finalize);
+  return finalize;
 }
 
 type SseEventSourceFetch = NonNullable<
@@ -191,7 +225,12 @@ function withResolvedMachineTokenBearer(params: {
 export function resolveMcpTransport(
   serverName: string,
   rawServer: unknown,
-  options?: { cfg?: OpenClawConfig; agentDir?: string },
+  options?: {
+    cfg?: OpenClawConfig;
+    agentDir?: string;
+    prepareDataDir?: string;
+    requesterScope?: SessionMcpRequesterScope;
+  },
 ): ResolvedMcpTransport | null {
   const resolved = resolveMcpTransportConfig(serverName, rawServer);
   if (!resolved) {
@@ -203,6 +242,7 @@ export function resolveMcpTransport(
       args: resolved.args,
       env: resolved.env,
       cwd: resolved.cwd,
+      prepareDataDir: options?.prepareDataDir,
       stderr: "pipe",
     });
     return {
@@ -216,6 +256,16 @@ export function resolveMcpTransport(
     };
   }
   const authProfileId = resolveMcpAuthProfileId(rawServer);
+  const requesterScope = options?.requesterScope;
+  let oauthIdentity;
+  if (resolved.oauth?.identity === "per-requester") {
+    if (!requesterScope) {
+      return null;
+    }
+    oauthIdentity = requesterMcpOAuthIdentity(serverName, resolved.url, requesterScope);
+  } else {
+    oauthIdentity = operatorMcpOAuthIdentity(serverName, resolved.url);
+  }
   // Auth selection is explicit: machine_token only when auth === "machine_token".
   // A machineToken block never overrides auth="oauth" and never auto-activates.
   // The SDK reuses one fetch for OAuth and long-lived SSE/streamable bodies.
@@ -267,8 +317,7 @@ export function resolveMcpTransport(
       // Protected-resource discovery lives at the resource origin and may
       // require the same routing headers. Cross-origin auth calls stay scrubbed.
       authFetchFn: resourceFetch,
-      serverName,
-      resourceUrl: resolved.url,
+      identity: oauthIdentity,
       config: resolved.oauth,
     });
   } else {
@@ -277,7 +326,7 @@ export function resolveMcpTransport(
   const omitStaticAuthHeaders = resolved.auth === "oauth" || resolved.auth === "machine_token";
   if (resolved.transportType === "streamable-http") {
     return {
-      transport: new StreamableHTTPClientTransport(new URL(resolved.url), {
+      transport: new OpenClawStreamableHTTPClientTransport(new URL(resolved.url), {
         requestInit: omitStaticAuthHeaders || !headers ? undefined : { headers },
         fetch: httpFetch,
       }),
@@ -291,7 +340,7 @@ export function resolveMcpTransport(
   const sseHeaders: Record<string, string> = { ...headers };
   const hasHeaders = Object.keys(sseHeaders).length > 0;
   return {
-    transport: new SSEClientTransport(new URL(resolved.url), {
+    transport: new OpenClawSSEClientTransport(new URL(resolved.url), {
       requestInit: omitStaticAuthHeaders || !hasHeaders ? undefined : { headers: sseHeaders },
       fetch: httpFetch,
       eventSourceInit: {

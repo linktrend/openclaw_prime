@@ -352,8 +352,8 @@ function defaultScopesForDomain(domain: PaciFakeDomain): string[] {
     case "linkplatform":
       return ["linkplatform"];
     default: {
-      const _exhaustive: never = domain;
-      return _exhaustive;
+      const exhaustive: never = domain;
+      return exhaustive;
     }
   }
 }
@@ -420,7 +420,9 @@ function callerMayIntrospectToken(caller: RegisteredClient, token: IssuedToken):
 }
 
 async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+  await new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 /**
@@ -906,7 +908,7 @@ export async function createPaciFakeServer(
       };
       publishedSigning.set(activeSigning.kid, activeSigning);
       if (rotateOptions.dropPrevious) {
-        for (const kid of [...publishedSigning.keys()]) {
+        for (const kid of publishedSigning.keys()) {
           if (kid !== activeSigning.kid) {
             publishedSigning.delete(kid);
           }

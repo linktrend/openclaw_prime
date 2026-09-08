@@ -1,6 +1,6 @@
 // Model Catalog Core module implements provider model id normalization behavior.
+import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/string-coerce";
 import { parseModelCatalogRef } from "./model-catalog-refs.js";
-import { normalizeLowercaseStringOrEmpty } from "./provider-id.js";
 import {
   normalizeGooglePreviewModelId,
   normalizeTogetherModelId,
@@ -44,19 +44,10 @@ export function collectManifestModelIdNormalizationPolicies(
 }
 
 /** Replace the process-local manifest normalization policy snapshot. */
-export function setCurrentManifestModelIdNormalizationRecords(
-  plugins: readonly ManifestModelIdNormalizationRecord[] | undefined,
+export function setCurrentManifestModelIdNormalizationPolicies(
+  policies: ReadonlyMap<string, ManifestModelIdNormalizationProvider> | undefined,
 ): void {
-  currentManifestModelIdNormalizationPolicies = plugins
-    ? collectManifestModelIdNormalizationPolicies(plugins)
-    : undefined;
-}
-
-/** Return the current process-local manifest normalization policy snapshot. */
-function getCurrentManifestModelIdNormalizationPolicies():
-  | ReadonlyMap<string, ManifestModelIdNormalizationProvider>
-  | undefined {
-  return currentManifestModelIdNormalizationPolicies;
+  currentManifestModelIdNormalizationPolicies = policies;
 }
 
 /** Return true when a model id already includes a provider namespace. */
@@ -136,8 +127,9 @@ export function normalizeBuiltInProviderModelId(provider: string, model: string)
   }
   if (normalizedProvider === "anthropic") {
     const anthropicAliases: Record<string, string> = {
+      "opus-5": "claude-opus-5",
+      opus: "claude-opus-5",
       "opus-4.8": "claude-opus-4-8",
-      opus: "claude-opus-4-8",
       "opus-4.6": "claude-opus-4-6",
       "sonnet-5": "claude-sonnet-5",
       sonnet: "claude-sonnet-5",
@@ -214,7 +206,7 @@ export function normalizeStaticProviderModelIdWithPolicies(
 export function normalizeConfiguredProviderCatalogModelId(
   provider: string,
   model: string,
-  policies = getCurrentManifestModelIdNormalizationPolicies(),
+  policies = currentManifestModelIdNormalizationPolicies,
 ): string {
   const providerModel = normalizeStaticProviderModelIdWithPolicies(provider, model, policies);
   return normalizeConfiguredProviderCatalogModelRef(providerModel);

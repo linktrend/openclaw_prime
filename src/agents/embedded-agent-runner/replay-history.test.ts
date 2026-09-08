@@ -1,20 +1,26 @@
 // Coverage for normalizing assistant replay content before provider requests.
 import type { AgentMessage } from "openclaw/plugin-sdk/agent-core";
 import { describe, expect, it } from "vitest";
+import { markInboundContextLabel } from "../../auto-reply/reply/inbound-context-marker.js";
 import { OPENCLAW_TRANSCRIPT_ARTIFACT_API } from "../../shared/transcript-only-openclaw-assistant.js";
 import {
   INTERNAL_RUNTIME_CONTEXT_BEGIN,
   INTERNAL_RUNTIME_CONTEXT_END,
-  OPENCLAW_NEXT_TURN_RUNTIME_CONTEXT_HEADER,
   OPENCLAW_RUNTIME_CONTEXT_NOTICE,
 } from "../internal-runtime-context.js";
 import { normalizeAssistantReplayContent } from "./replay-history.js";
 
+// Preface of carriers persisted before the stable system prompt explained the markers.
+const LEGACY_NEXT_TURN_RUNTIME_CONTEXT_HEADER =
+  "OpenClaw runtime context for the active user request in this turn. Do not reply to or describe this context. Use it to continue answering the active user request now. Do not wait for another message.";
+
 const FALLBACK_TEXT = "[assistant turn failed before producing content]";
-const COPIED_INBOUND_METADATA_ONLY_TEXT = `Conversation info (untrusted metadata):
-\`\`\`json
-{"message_id":"msg-abc","sender":"+1555000"}
-\`\`\``;
+const COPIED_INBOUND_METADATA_ONLY_TEXT = [
+  markInboundContextLabel("Conversation info:"),
+  "```json",
+  '{"message_id":"msg-abc","sender":"+1555000"}',
+  "```",
+].join("\n");
 
 function bedrockAssistant(
   content: unknown,
@@ -68,29 +74,58 @@ function openclawTranscriptAssistant(model: "delivery-mirror" | "gateway-injecte
 }
 
 describe("normalizeAssistantReplayContent", () => {
+  it("removes persisted attachment display blocks before model replay", () => {
+    const damaged = bedrockAssistant(
+      [
+        { type: "text", text: "Slides ready" },
+        { type: "attachment", attachment: { label: "slides.pptx" } },
+        { type: "attachment_error", attachment: { label: "missing.txt" } },
+      ],
+      "stop",
+      { output: 1, totalTokens: 1 },
+    );
+
+    expect(normalizeAssistantReplayContent([damaged, userMessage("continue")])).toEqual([
+      { ...damaged, content: [{ type: "text", text: "Slides ready" }] },
+      userMessage("continue"),
+    ]);
+  });
+
+  it("preserves unknown assistant blocks outside the managed display contract", () => {
+    const unknown = { customType: "legacy_data", data: "preserve me" };
+    const message = bedrockAssistant([unknown], "stop", { output: 1, totalTokens: 1 });
+
+    expect(normalizeAssistantReplayContent([message])).toEqual([message]);
+  });
+
   it("keeps bare marked late-media turns alive while rejecting whitespace-only media fields", () => {
     const blankString = {
       role: "user",
       content: "",
-      MediaPath: "/tmp/late.png",
-      __openclaw: { lateMedia: true },
+      __openclaw: { lateMedia: true, media: [{ path: "/tmp/late.png" }] },
     } as unknown as AgentMessage;
     const blankArray = {
       role: "user",
       content: [{ type: "text", text: "  " }],
-      MediaPaths: ["/tmp/late-array.png"],
-      __openclaw: { lateMedia: true },
+      __openclaw: { lateMedia: true, media: [{}, { path: "/tmp/late-array.png" }] },
     } as unknown as AgentMessage;
     const whitespaceOnlyPath = {
       role: "user",
       content: "",
-      MediaPath: "   ",
-      __openclaw: { lateMedia: true },
+      __openclaw: { lateMedia: true, media: [{ path: "   " }] },
     } as unknown as AgentMessage;
     const urlOnly = {
       role: "user",
       content: "",
-      MediaUrl: "https://example.test/late.png",
+      __openclaw: {
+        lateMedia: true,
+        media: [{ url: "https://example.test/late.png", kind: "image" }],
+      },
+    } as unknown as AgentMessage;
+    const legacyOnly = {
+      role: "user",
+      content: "",
+      MediaPath: "/tmp/legacy-late.png",
       __openclaw: { lateMedia: true },
     } as unknown as AgentMessage;
 
@@ -99,6 +134,7 @@ describe("normalizeAssistantReplayContent", () => {
       blankArray,
       whitespaceOnlyPath,
       urlOnly,
+      legacyOnly,
     ]);
 
     expect(out).toEqual([blankString, { ...blankArray, content: "" }, urlOnly]);
@@ -156,7 +192,7 @@ describe("normalizeAssistantReplayContent", () => {
   });
 
   it("preserves nonzero-usage silent-reply turns (stopReason=stop, content=[]) untouched", () => {
-    // run.empty-error-retry.test.ts treats `stopReason:"stop"` + `content:[]`
+    // run.shared-integration.test.ts treats `stopReason:"stop"` + `content:[]`
     // as a legitimate NO_REPLY / silent-reply, NOT a crash. Substituting the
     // failure sentinel here would inject a fabricated "[assistant turn failed
     // before producing content]" into the next provider request and change
@@ -312,6 +348,76 @@ describe("normalizeAssistantReplayContent", () => {
     expect(out).toEqual([messages[0], messages[2]]);
   });
 
+  it.each([
+    [
+      "directly",
+      "NO_REPLY",
+      { type: "thinking", thinking: "yield reasoning", thinkingSignature: "sig_yield" },
+    ],
+    [
+      "after metadata removal",
+      `${COPIED_INBOUND_METADATA_ONLY_TEXT}\n\nNO_REPLY`,
+      { type: "redacted_thinking", data: "redacted-yield" },
+    ],
+  ])("drops thinking-only silent replies %s (#99620)", (_label, text, reasoning) => {
+    const messages = [
+      userMessage("hi"),
+      bedrockAssistant([reasoning, { type: "text", text }], "stop"),
+    ];
+
+    expect(normalizeAssistantReplayContent(messages)).toStrictEqual([messages[0]]);
+  });
+
+  it("drops silent thinking residue before a follow-up tool turn (#99620)", () => {
+    const nextToolTurn = bedrockAssistant(
+      [
+        { type: "thinking", thinking: "next reasoning", thinkingSignature: "sig_next" },
+        { type: "toolCall", id: "call_1", name: "exec", arguments: {} },
+      ],
+      "toolUse",
+    );
+    const messages = [
+      userMessage("hi"),
+      bedrockAssistant(
+        [
+          { type: "thinking", thinking: "yield reasoning", thinkingSignature: "sig_yield" },
+          { type: "text", text: "NO_REPLY" },
+        ],
+        "stop",
+      ),
+      nextToolTurn,
+      userMessage("tool result"),
+    ];
+
+    expect(normalizeAssistantReplayContent(messages)).toEqual([
+      messages[0],
+      nextToolTurn,
+      messages[3],
+    ]);
+  });
+
+  it("preserves silent-reply turns with tool calls", () => {
+    const companion = { type: "toolCall", id: "call_1", name: "exec", arguments: {} };
+    const messages = [
+      userMessage("hi"),
+      bedrockAssistant(
+        [
+          { type: "thinking", thinking: "useful reasoning", thinkingSignature: "sig" },
+          companion,
+          { type: "text", text: "NO_REPLY" },
+        ],
+        "stop",
+      ),
+    ];
+
+    const out = normalizeAssistantReplayContent(messages);
+    expect(out).toHaveLength(2);
+    expect((out[1] as { content: unknown[] }).content).toEqual([
+      { type: "thinking", thinking: "useful reasoning", thinkingSignature: "sig" },
+      companion,
+    ]);
+  });
+
   it("strips copied runtime context from assistant replay text", () => {
     const messages = [
       userMessage("first"),
@@ -323,7 +429,7 @@ describe("normalizeAssistantReplayContent", () => {
             INTERNAL_RUNTIME_CONTEXT_BEGIN,
             "keep this internal",
             INTERNAL_RUNTIME_CONTEXT_END,
-            OPENCLAW_NEXT_TURN_RUNTIME_CONTEXT_HEADER,
+            LEGACY_NEXT_TURN_RUNTIME_CONTEXT_HEADER,
             OPENCLAW_RUNTIME_CONTEXT_NOTICE,
             "",
             "Visible after",
@@ -464,8 +570,7 @@ describe("normalizeAssistantReplayContent", () => {
   });
 
   it("drops a trailing assistant turn that already carries the persisted sentinel content (#77228)", () => {
-    // Covers the case where session-file-repair persisted the sentinel to
-    // disk; on the next turn the loaded transcript ends with a non-empty
+    // Covers a doctor-imported legacy sentinel; on the next turn the loaded transcript ends with a non-empty
     // assistant turn whose only content is the sentinel text. Provider
     // request must still end with user.
     const persistedSentinel = bedrockAssistant([{ type: "text", text: FALLBACK_TEXT }], "error");

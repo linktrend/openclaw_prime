@@ -1,0 +1,45 @@
+// Source template only. Replace each placeholder through the deployment SecretRef system.
+{
+  agents: {
+    lisa: {
+      platform: { actorRef: "__SECRET_REF_PLATFORM_ACTOR_LISA__", runtimeBindingRef: "__SECRET_REF_PLATFORM_RUNTIME_LISA__" },
+      brain: { credentialRef: "__SECRET_REF_BRAIN_CREDENTIAL_LISA__", clientRef: "__SECRET_REF_BRAIN_CLIENT_LISA__", keyRef: "__SECRET_REF_BRAIN_KEY_LISA__" },
+      skills: { credentialRef: "__SECRET_REF_SKILLS_CREDENTIAL_LISA__", clientRef: "__SECRET_REF_SKILLS_CLIENT_LISA__", keyRef: "__SECRET_REF_SKILLS_KEY_LISA__" },
+      openai: { credentialRef: "__SECRET_REF_OPENAI_CREDENTIAL_LISA__", revocationRef: "__SECRET_REF_OPENAI_REVOCATION_LISA__" },
+      openrouter: { credentialRef: "__SECRET_REF_OPENROUTER_CREDENTIAL_LISA__", revocationRef: "__SECRET_REF_OPENROUTER_REVOCATION_LISA__" },
+      googlechat: { activation: "disabled-until-secretref", serviceAccountRef: "__SECRET_REF_GOOGLECHAT_SERVICE_ACCOUNT_LISA__" },
+    },
+    david: {
+      platform: { actorRef: "__SECRET_REF_PLATFORM_ACTOR_DAVID__", runtimeBindingRef: "__SECRET_REF_PLATFORM_RUNTIME_DAVID__" },
+      brain: { credentialRef: "__SECRET_REF_BRAIN_CREDENTIAL_DAVID__", clientRef: "__SECRET_REF_BRAIN_CLIENT_DAVID__", keyRef: "__SECRET_REF_BRAIN_KEY_DAVID__" },
+      skills: { credentialRef: "__SECRET_REF_SKILLS_CREDENTIAL_DAVID__", clientRef: "__SECRET_REF_SKILLS_CLIENT_DAVID__", keyRef: "__SECRET_REF_SKILLS_KEY_DAVID__" },
+      openai: { credentialRef: "__SECRET_REF_OPENAI_CREDENTIAL_DAVID__", revocationRef: "__SECRET_REF_OPENAI_REVOCATION_DAVID__" },
+      openrouter: { credentialRef: "__SECRET_REF_OPENROUTER_CREDENTIAL_DAVID__", revocationRef: "__SECRET_REF_OPENROUTER_REVOCATION_DAVID__" },
+      googlechat: { activation: "disabled-until-secretref", serviceAccountRef: "__SECRET_REF_GOOGLECHAT_SERVICE_ACCOUNT_DAVID__" },
+    },
+    eric: {
+      platform: { actorRef: "__SECRET_REF_PLATFORM_ACTOR_ERIC__", runtimeBindingRef: "__SECRET_REF_PLATFORM_RUNTIME_ERIC__" },
+      brain: { credentialRef: "__SECRET_REF_BRAIN_CREDENTIAL_ERIC__", clientRef: "__SECRET_REF_BRAIN_CLIENT_ERIC__", keyRef: "__SECRET_REF_BRAIN_KEY_ERIC__" },
+      skills: { credentialRef: "__SECRET_REF_SKILLS_CREDENTIAL_ERIC__", clientRef: "__SECRET_REF_SKILLS_CLIENT_ERIC__", keyRef: "__SECRET_REF_SKILLS_KEY_ERIC__" },
+      openai: { credentialRef: "__SECRET_REF_OPENAI_CREDENTIAL_ERIC__", revocationRef: "__SECRET_REF_OPENAI_REVOCATION_ERIC__" },
+      openrouter: { credentialRef: "__SECRET_REF_OPENROUTER_CREDENTIAL_ERIC__", revocationRef: "__SECRET_REF_OPENROUTER_REVOCATION_ERIC__" },
+      googlechat: { activation: "disabled-until-secretref", serviceAccountRef: "__SECRET_REF_GOOGLECHAT_SERVICE_ACCOUNT_ERIC__" },
+    },
+    sara: {
+      platform: { actorRef: "__SECRET_REF_PLATFORM_ACTOR_SARA__", runtimeBindingRef: "__SECRET_REF_PLATFORM_RUNTIME_SARA__" },
+      brain: { credentialRef: "__SECRET_REF_BRAIN_CREDENTIAL_SARA__", clientRef: "__SECRET_REF_BRAIN_CLIENT_SARA__", keyRef: "__SECRET_REF_BRAIN_KEY_SARA__" },
+      skills: { credentialRef: "__SECRET_REF_SKILLS_CREDENTIAL_SARA__", clientRef: "__SECRET_REF_SKILLS_CLIENT_SARA__", keyRef: "__SECRET_REF_SKILLS_KEY_SARA__" },
+      openai: { credentialRef: "__SECRET_REF_OPENAI_CREDENTIAL_SARA__", revocationRef: "__SECRET_REF_OPENAI_REVOCATION_SARA__" },
+      openrouter: { credentialRef: "__SECRET_REF_OPENROUTER_CREDENTIAL_SARA__", revocationRef: "__SECRET_REF_OPENROUTER_REVOCATION_SARA__" },
+      googlechat: { activation: "disabled-until-secretref", serviceAccountRef: "__SECRET_REF_GOOGLECHAT_SERVICE_ACCOUNT_SARA__" },
+    },
+    jane: {
+      platform: { actorRef: "__SECRET_REF_PLATFORM_ACTOR_JANE__", runtimeBindingRef: "__SECRET_REF_PLATFORM_RUNTIME_JANE__" },
+      brain: { credentialRef: "__SECRET_REF_BRAIN_CREDENTIAL_JANE__", clientRef: "__SECRET_REF_BRAIN_CLIENT_JANE__", keyRef: "__SECRET_REF_BRAIN_KEY_JANE__" },
+      skills: { credentialRef: "__SECRET_REF_SKILLS_CREDENTIAL_JANE__", clientRef: "__SECRET_REF_SKILLS_CLIENT_JANE__", keyRef: "__SECRET_REF_SKILLS_KEY_JANE__" },
+      openai: { credentialRef: "__SECRET_REF_OPENAI_CREDENTIAL_JANE__", revocationRef: "__SECRET_REF_OPENAI_REVOCATION_JANE__" },
+      openrouter: { credentialRef: "__SECRET_REF_OPENROUTER_CREDENTIAL_JANE__", revocationRef: "__SECRET_REF_OPENROUTER_REVOCATION_JANE__" },
+      googlechat: { activation: "disabled-until-secretref", serviceAccountRef: "__SECRET_REF_GOOGLECHAT_SERVICE_ACCOUNT_JANE__" },
+    },
+  },
+}

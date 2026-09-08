@@ -3,10 +3,8 @@ import { resolve } from "node:path";
 import type * as Lark from "@larksuiteoapi/node-sdk";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { normalizeOptionalString, uniqueStrings } from "openclaw/plugin-sdk/string-coerce-runtime";
-import { jsonResult as json } from "openclaw/plugin-sdk/tool-results";
 import { Type } from "typebox";
 import type { OpenClawPluginApi } from "../runtime-api.js";
-import { listEnabledFeishuAccounts } from "./accounts.js";
 import { resolveConfiguredHttpTimeoutMs } from "./client-timeout.js";
 import { FeishuDocSchema, type FeishuDocParams } from "./doc-schema.js";
 import { BATCH_SIZE, insertBlocksInBatches } from "./docx-batch-insert.js";
@@ -18,14 +16,7 @@ import {
   type DocxMarkdownChunk,
   type DocxMarkdownImage,
 } from "./docx-markdown.js";
-import {
-  cleanBlocksForDescendant,
-  insertTableRow,
-  insertTableColumn,
-  deleteTableRows,
-  deleteTableColumns,
-  mergeTableCells,
-} from "./docx-table-ops.js";
+import { cleanBlocksForDescendant, patchTable } from "./docx-table-ops.js";
 import type { FeishuDocxBlock, FeishuDocxBlockChild } from "./docx-types.js";
 import { resolveDocxUploadInput } from "./docx-upload-input.js";
 import {
@@ -33,6 +24,7 @@ import {
   resolveAnyEnabledFeishuToolsConfig,
   resolveFeishuToolAccount,
 } from "./tool-account.js";
+import { feishuExternalToolResult as json } from "./tool-result.js";
 
 function resolveDocToolLocalRoots(ctx: {
   workspaceDir?: string;
@@ -76,28 +68,20 @@ const BLOCK_TYPE_NAMES: Record<number, string> = {
 // Block types that cannot be created via documentBlockChildren.create API
 const UNSUPPORTED_CREATE_TYPES = new Set([31, 32]);
 
-/** Clean blocks for insertion (remove unsupported types and read-only fields) */
+/** Remove block types unsupported by the children insertion API. */
 function cleanBlocksForInsert(blocks: FeishuDocxBlock[]): {
   cleaned: FeishuDocxBlock[];
   skipped: string[];
 } {
   const skipped: string[] = [];
-  const cleaned = blocks
-    .filter((block) => {
-      if (UNSUPPORTED_CREATE_TYPES.has(block.block_type)) {
-        const typeName = BLOCK_TYPE_NAMES[block.block_type] || `type_${block.block_type}`;
-        skipped.push(typeName);
-        return false;
-      }
-      return true;
-    })
-    .map((block) => {
-      if (block.block_type === 31 && block.table?.merge_info) {
-        const { merge_info: _merge_info, ...tableRest } = block.table;
-        return Object.assign({}, block, { table: tableRest });
-      }
-      return block;
-    });
+  const cleaned = blocks.filter((block) => {
+    if (UNSUPPORTED_CREATE_TYPES.has(block.block_type)) {
+      const typeName = BLOCK_TYPE_NAMES[block.block_type] || `type_${block.block_type}`;
+      skipped.push(typeName);
+      return false;
+    }
+    return true;
+  });
   return { cleaned, skipped };
 }
 
@@ -106,13 +90,17 @@ function cleanBlocksForInsert(blocks: FeishuDocxBlock[]): {
 /** Max blocks per documentBlockChildren.create request */
 const MAX_CONVERT_RETRY_DEPTH = 8;
 
+function assertFeishuDocApiSuccess(response: { code?: number; msg?: string }) {
+  if (response.code !== 0) {
+    throw new Error(response.msg);
+  }
+}
+
 async function convertMarkdown(client: Lark.Client, markdown: string) {
   const res = await client.docx.document.convert({
     data: { content_type: "markdown", content: markdown },
   });
-  if (res.code !== 0) {
-    throw new Error(res.msg);
-  }
+  assertFeishuDocApiSuccess(res);
   return {
     blocks: res.data?.blocks ?? [],
     firstLevelBlockIds: res.data?.first_level_block_ids ?? [],
@@ -282,9 +270,7 @@ async function insertBlocks(
         ...(index !== undefined ? { index: index + offset } : {}),
       },
     });
-    if (res.code !== 0) {
-      throw new Error(res.msg);
-    }
+    assertFeishuDocApiSuccess(res);
     allInserted.push(...(res.data?.children ?? []));
   }
   return { children: allInserted, skipped };
@@ -381,9 +367,7 @@ async function clearDocumentContent(client: Lark.Client, docToken: string) {
   const existing = await client.docx.documentBlock.list({
     path: { document_id: docToken },
   });
-  if (existing.code !== 0) {
-    throw new Error(existing.msg);
-  }
+  assertFeishuDocApiSuccess(existing);
 
   const childIds =
     existing.data?.items
@@ -395,9 +379,7 @@ async function clearDocumentContent(client: Lark.Client, docToken: string) {
       path: { document_id: docToken, block_id: docToken },
       data: { start_index: 0, end_index: childIds.length },
     });
-    if (res.code !== 0) {
-      throw new Error(res.msg);
-    }
+    assertFeishuDocApiSuccess(res);
   }
 
   return childIds.length;
@@ -470,12 +452,13 @@ async function processImages(
         docToken,
       );
 
-      await client.docx.documentBlock.patch({
+      const patchRes = await client.docx.documentBlock.patch({
         path: { document_id: docToken, block_id: blockId },
         data: {
           replace_image: { token: fileToken },
         },
       });
+      assertFeishuDocApiSuccess(patchRes);
 
       processed++;
     } catch (err) {
@@ -484,6 +467,56 @@ async function processImages(
   }
 
   return processed;
+}
+
+async function convertInsertAndProcessDocx(params: {
+  client: Lark.Client;
+  docToken: string;
+  markdown: string;
+  maxBytes: number;
+  imageReadTimeoutMs: number;
+  logger?: Logger;
+  target?: { parentBlockId: string; index: number };
+  onConverted: (blockCount: number) => Promise<void> | void;
+}) {
+  const { client, docToken, logger, target } = params;
+  logger?.info?.("feishu_doc: Converting markdown...");
+  const { blocks, firstLevelBlockIds, images } = await chunkedConvertMarkdown(
+    client,
+    createDocxMarkdownPlan(params.markdown).chunks,
+  );
+  await params.onConverted(blocks.length);
+  if (blocks.length === 0) {
+    return { blocks, inserted: [], imagesProcessed: 0 };
+  }
+
+  const { orderedBlocks, rootIds } = normalizeConvertedBlockTree(blocks, firstLevelBlockIds);
+  logger?.info?.(
+    `feishu_doc: Converted to ${blocks.length} blocks, inserting${target ? ` at index ${target.index}` : ""}...`,
+  );
+  const { children: inserted } =
+    blocks.length > BATCH_SIZE
+      ? await insertBlocksInBatches(
+          client,
+          docToken,
+          orderedBlocks,
+          rootIds,
+          logger,
+          target?.parentBlockId,
+          target?.index,
+        )
+      : await insertBlocksWithDescendant(client, docToken, orderedBlocks, rootIds, target);
+  const imagesProcessed = await processImages(
+    client,
+    docToken,
+    images,
+    inserted,
+    params.maxBytes,
+    params.imageReadTimeoutMs,
+  );
+  logger?.info?.(`feishu_doc: Done (${blocks.length} blocks, ${imagesProcessed} images)`);
+
+  return { blocks, inserted, imagesProcessed };
 }
 
 async function uploadImageBlock(
@@ -538,9 +571,7 @@ async function uploadImageBlock(
     path: { document_id: docToken, block_id: imageBlockId },
     data: { replace_image: { token: fileToken } },
   });
-  if (patchRes.code !== 0) {
-    throw new Error(patchRes.msg);
-  }
+  assertFeishuDocApiSuccess(patchRes);
 
   return {
     success: true,
@@ -594,9 +625,7 @@ async function uploadFileBlock(
   const childrenRes = await client.docx.documentBlockChildren.get({
     path: { document_id: docToken, block_id: parentId },
   });
-  if (childrenRes.code !== 0) {
-    throw new Error(childrenRes.msg);
-  }
+  assertFeishuDocApiSuccess(childrenRes);
   const items = childrenRes.data?.items ?? [];
   const placeholderIdx = items.findIndex((item) => item.block_id === placeholderBlock.block_id);
   if (placeholderIdx >= 0) {
@@ -604,9 +633,7 @@ async function uploadFileBlock(
       path: { document_id: docToken, block_id: parentId },
       data: { start_index: placeholderIdx, end_index: placeholderIdx + 1 },
     });
-    if (deleteRes.code !== 0) {
-      throw new Error(deleteRes.msg);
-    }
+    assertFeishuDocApiSuccess(deleteRes);
   }
 
   // Upload file to Feishu drive
@@ -645,9 +672,7 @@ async function readDoc(client: Lark.Client, docToken: string) {
     client.docx.documentBlock.list({ path: { document_id: docToken } }),
   ]);
 
-  if (contentRes.code !== 0) {
-    throw new Error(contentRes.msg);
-  }
+  assertFeishuDocApiSuccess(contentRes);
 
   const blocks = blocksRes.data?.items ?? [];
   const blockCounts: Record<string, number> = {};
@@ -687,9 +712,7 @@ async function createDoc(
   const res = await client.docx.document.create({
     data: { title, folder_token: folderToken },
   });
-  if (res.code !== 0) {
-    throw new Error(res.msg);
-  }
+  assertFeishuDocApiSuccess(res);
   const doc = res.data?.document;
   const docToken = doc?.document_id;
   if (!docToken) {
@@ -708,7 +731,7 @@ async function createDoc(
       requesterPermissionSkippedReason = "trusted requester identity unavailable";
     } else {
       try {
-        await client.drive.permissionMember.create({
+        const permissionRes = await client.drive.permissionMember.create({
           path: { token: docToken },
           params: { type: "docx", need_notification: false },
           data: {
@@ -717,6 +740,7 @@ async function createDoc(
             perm: requesterPermType,
           },
         });
+        assertFeishuDocApiSuccess(permissionRes);
         requesterPermissionAdded = true;
       } catch (err) {
         requesterPermissionError = formatErrorMessage(err);
@@ -748,34 +772,20 @@ async function writeDoc(
   imageReadTimeoutMs: number,
   logger?: Logger,
 ) {
-  const markdownPlan = createDocxMarkdownPlan(markdown);
-  logger?.info?.("feishu_doc: Converting markdown...");
-  const { blocks, firstLevelBlockIds, images } = await chunkedConvertMarkdown(
-    client,
-    markdownPlan.chunks,
-  );
-  // Complete fallible conversion before deleting existing content so an
-  // unsupported oversized construct cannot leave the document empty.
-  const deleted = await clearDocumentContent(client, docToken);
-  if (blocks.length === 0) {
-    return { success: true, blocks_deleted: deleted, blocks_added: 0, images_processed: 0 };
-  }
-
-  logger?.info?.(`feishu_doc: Converted to ${blocks.length} blocks, inserting...`);
-  const { orderedBlocks, rootIds } = normalizeConvertedBlockTree(blocks, firstLevelBlockIds);
-  const { children: inserted } =
-    blocks.length > BATCH_SIZE
-      ? await insertBlocksInBatches(client, docToken, orderedBlocks, rootIds, logger)
-      : await insertBlocksWithDescendant(client, docToken, orderedBlocks, rootIds);
-  const imagesProcessed = await processImages(
+  let deleted = 0;
+  const { blocks, imagesProcessed } = await convertInsertAndProcessDocx({
     client,
     docToken,
-    images,
-    inserted,
+    markdown,
     maxBytes,
     imageReadTimeoutMs,
-  );
-  logger?.info?.(`feishu_doc: Done (${blocks.length} blocks, ${imagesProcessed} images)`);
+    logger,
+    // Complete fallible conversion before deleting existing content so an
+    // unsupported oversized construct cannot leave the document empty.
+    onConverted: async () => {
+      deleted = await clearDocumentContent(client, docToken);
+    },
+  });
 
   return {
     success: true,
@@ -793,31 +803,19 @@ async function appendDoc(
   imageReadTimeoutMs: number,
   logger?: Logger,
 ) {
-  const markdownPlan = createDocxMarkdownPlan(markdown);
-  logger?.info?.("feishu_doc: Converting markdown...");
-  const { blocks, firstLevelBlockIds, images } = await chunkedConvertMarkdown(
-    client,
-    markdownPlan.chunks,
-  );
-  if (blocks.length === 0) {
-    throw new Error("Content is empty");
-  }
-
-  logger?.info?.(`feishu_doc: Converted to ${blocks.length} blocks, inserting...`);
-  const { orderedBlocks, rootIds } = normalizeConvertedBlockTree(blocks, firstLevelBlockIds);
-  const { children: inserted } =
-    blocks.length > BATCH_SIZE
-      ? await insertBlocksInBatches(client, docToken, orderedBlocks, rootIds, logger)
-      : await insertBlocksWithDescendant(client, docToken, orderedBlocks, rootIds);
-  const imagesProcessed = await processImages(
+  const { blocks, inserted, imagesProcessed } = await convertInsertAndProcessDocx({
     client,
     docToken,
-    images,
-    inserted,
+    markdown,
     maxBytes,
     imageReadTimeoutMs,
-  );
-  logger?.info?.(`feishu_doc: Done (${blocks.length} blocks, ${imagesProcessed} images)`);
+    logger,
+    onConverted: (blockCount) => {
+      if (blockCount === 0) {
+        throw new Error("Content is empty");
+      }
+    },
+  });
 
   return {
     success: true,
@@ -836,13 +834,10 @@ async function insertDoc(
   imageReadTimeoutMs: number,
   logger?: Logger,
 ) {
-  const markdownPlan = createDocxMarkdownPlan(markdown);
   const blockInfo = await client.docx.documentBlock.get({
     path: { document_id: docToken, block_id: afterBlockId },
   });
-  if (blockInfo.code !== 0) {
-    throw new Error(blockInfo.msg);
-  }
+  assertFeishuDocApiSuccess(blockInfo);
 
   const parentId = blockInfo.data?.block?.parent_id ?? docToken;
 
@@ -851,17 +846,31 @@ async function insertDoc(
   // parents require multiple requests.
   const items: FeishuDocxBlock[] = [];
   let pageToken: string | undefined;
-  do {
+  const seenPageTokens = new Set<string>();
+  while (true) {
     const childrenRes = await client.docx.documentBlockChildren.get({
       path: { document_id: docToken, block_id: parentId },
       params: pageToken ? { page_token: pageToken } : {},
     });
-    if (childrenRes.code !== 0) {
-      throw new Error(childrenRes.msg);
-    }
+    assertFeishuDocApiSuccess(childrenRes);
     items.push(...(childrenRes.data?.items ?? []));
-    pageToken = childrenRes.data?.page_token ?? undefined;
-  } while (pageToken);
+    if (childrenRes.data?.has_more !== true) {
+      break;
+    }
+    const nextPageToken = childrenRes.data.page_token?.trim();
+    if (!nextPageToken) {
+      throw new Error(
+        `Feishu document children pagination is missing its next page token for parent block "${parentId}"`,
+      );
+    }
+    if (seenPageTokens.has(nextPageToken)) {
+      throw new Error(
+        `Feishu document children pagination repeated token for parent block "${parentId}"`,
+      );
+    }
+    seenPageTokens.add(nextPageToken);
+    pageToken = nextPageToken;
+  }
 
   const blockIndex = items.findIndex((item) => item.block_id === afterBlockId);
   if (blockIndex === -1) {
@@ -872,44 +881,20 @@ async function insertDoc(
   }
   const insertIndex = blockIndex + 1;
 
-  logger?.info?.("feishu_doc: Converting markdown...");
-  const { blocks, firstLevelBlockIds, images } = await chunkedConvertMarkdown(
-    client,
-    markdownPlan.chunks,
-  );
-  if (blocks.length === 0) {
-    throw new Error("Content is empty");
-  }
-  const { orderedBlocks, rootIds } = normalizeConvertedBlockTree(blocks, firstLevelBlockIds);
-
-  logger?.info?.(
-    `feishu_doc: Converted to ${blocks.length} blocks, inserting at index ${insertIndex}...`,
-  );
-  const { children: inserted } =
-    blocks.length > BATCH_SIZE
-      ? await insertBlocksInBatches(
-          client,
-          docToken,
-          orderedBlocks,
-          rootIds,
-          logger,
-          parentId,
-          insertIndex,
-        )
-      : await insertBlocksWithDescendant(client, docToken, orderedBlocks, rootIds, {
-          parentBlockId: parentId,
-          index: insertIndex,
-        });
-
-  const imagesProcessed = await processImages(
+  const { blocks, inserted, imagesProcessed } = await convertInsertAndProcessDocx({
     client,
     docToken,
-    images,
-    inserted,
+    markdown,
     maxBytes,
     imageReadTimeoutMs,
-  );
-  logger?.info?.(`feishu_doc: Done (${blocks.length} blocks, ${imagesProcessed} images)`);
+    logger,
+    target: { parentBlockId: parentId, index: insertIndex },
+    onConverted: (blockCount) => {
+      if (blockCount === 0) {
+        throw new Error("Content is empty");
+      }
+    },
+  });
 
   return {
     success: true,
@@ -950,9 +935,7 @@ async function createTable(
     },
   });
 
-  if (res.code !== 0) {
-    throw new Error(res.msg);
-  }
+  assertFeishuDocApiSuccess(res);
 
   const tableBlock = res.data?.children?.find((b) => b.block_type === 31);
   const cells = normalizeInsertedChildBlocks(tableBlock?.children);
@@ -981,9 +964,7 @@ async function writeTableCells(
   const tableRes = await client.docx.documentBlock.get({
     path: { document_id: docToken, block_id: tableBlockId },
   });
-  if (tableRes.code !== 0) {
-    throw new Error(tableRes.msg);
-  }
+  assertFeishuDocApiSuccess(tableRes);
 
   const tableBlock = tableRes.data?.block;
   if (tableBlock?.block_type !== 31) {
@@ -1018,9 +999,7 @@ async function writeTableCells(
       const childrenRes = await client.docx.documentBlockChildren.get({
         path: { document_id: docToken, block_id: cellId },
       });
-      if (childrenRes.code !== 0) {
-        throw new Error(childrenRes.msg);
-      }
+      assertFeishuDocApiSuccess(childrenRes);
 
       const existingChildren = childrenRes.data?.items ?? [];
       if (existingChildren.length > 0) {
@@ -1028,9 +1007,7 @@ async function writeTableCells(
           path: { document_id: docToken, block_id: cellId },
           data: { start_index: 0, end_index: existingChildren.length },
         });
-        if (delRes.code !== 0) {
-          throw new Error(delRes.msg);
-        }
+        assertFeishuDocApiSuccess(delRes);
       }
 
       const text = rowValues[c] ?? "";
@@ -1098,9 +1075,7 @@ async function updateBlock(
   const blockInfo = await client.docx.documentBlock.get({
     path: { document_id: docToken, block_id: blockId },
   });
-  if (blockInfo.code !== 0) {
-    throw new Error(blockInfo.msg);
-  }
+  assertFeishuDocApiSuccess(blockInfo);
 
   const res = await client.docx.documentBlock.patch({
     path: { document_id: docToken, block_id: blockId },
@@ -1110,9 +1085,7 @@ async function updateBlock(
       },
     },
   });
-  if (res.code !== 0) {
-    throw new Error(res.msg);
-  }
+  assertFeishuDocApiSuccess(res);
 
   return { success: true, block_id: blockId };
 }
@@ -1121,18 +1094,14 @@ async function deleteBlock(client: Lark.Client, docToken: string, blockId: strin
   const blockInfo = await client.docx.documentBlock.get({
     path: { document_id: docToken, block_id: blockId },
   });
-  if (blockInfo.code !== 0) {
-    throw new Error(blockInfo.msg);
-  }
+  assertFeishuDocApiSuccess(blockInfo);
 
   const parentId = blockInfo.data?.block?.parent_id ?? docToken;
 
   const children = await client.docx.documentBlockChildren.get({
     path: { document_id: docToken, block_id: parentId },
   });
-  if (children.code !== 0) {
-    throw new Error(children.msg);
-  }
+  assertFeishuDocApiSuccess(children);
 
   const items = children.data?.items ?? [];
   const index = items.findIndex((item) => item.block_id === blockId);
@@ -1144,9 +1113,7 @@ async function deleteBlock(client: Lark.Client, docToken: string, blockId: strin
     path: { document_id: docToken, block_id: parentId },
     data: { start_index: index, end_index: index + 1 },
   });
-  if (res.code !== 0) {
-    throw new Error(res.msg);
-  }
+  assertFeishuDocApiSuccess(res);
 
   return { success: true, deleted_block_id: blockId };
 }
@@ -1155,9 +1122,7 @@ async function listBlocks(client: Lark.Client, docToken: string) {
   const res = await client.docx.documentBlock.list({
     path: { document_id: docToken },
   });
-  if (res.code !== 0) {
-    throw new Error(res.msg);
-  }
+  assertFeishuDocApiSuccess(res);
 
   return {
     blocks: res.data?.items ?? [],
@@ -1168,9 +1133,7 @@ async function getBlock(client: Lark.Client, docToken: string, blockId: string) 
   const res = await client.docx.documentBlock.get({
     path: { document_id: docToken, block_id: blockId },
   });
-  if (res.code !== 0) {
-    throw new Error(res.msg);
-  }
+  assertFeishuDocApiSuccess(res);
 
   return {
     block: res.data?.block,
@@ -1179,9 +1142,7 @@ async function getBlock(client: Lark.Client, docToken: string, blockId: string) 
 
 async function listAppScopes(client: Lark.Client) {
   const res = await client.application.scope.list({});
-  if (res.code !== 0) {
-    throw new Error(res.msg);
-  }
+  assertFeishuDocApiSuccess(res);
 
   const scopes = res.data?.scopes ?? [];
   const granted = scopes.filter((s) => s.grant_status === 1);
@@ -1201,16 +1162,9 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
     return;
   }
 
-  // Check if any account is configured
-  const accounts = listEnabledFeishuAccounts(api.config);
-  if (accounts.length === 0) {
-    return;
-  }
-
   // Register if enabled on any account; account routing is resolved per execution.
-  const toolsCfg = resolveAnyEnabledFeishuToolsConfig(accounts);
+  const toolsCfg = resolveAnyEnabledFeishuToolsConfig(api.config);
 
-  const registered: string[] = [];
   type FeishuDocExecuteParams = FeishuDocParams & { accountId?: string };
 
   const getClient = (params: { accountId?: string } | undefined, defaultAccountId?: string) =>
@@ -1259,6 +1213,7 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
             : undefined;
         return {
           name: "feishu_doc",
+          resultContentSource: "network",
           label: "Feishu Doc",
           description:
             "Feishu document operations. Actions: read, write, append, insert, create, list_blocks, get_block, update_block, delete_block, create_table, write_table_cells, create_table_with_values, insert_table_row, insert_table_column, delete_table_rows, delete_table_columns, merge_table_cells, upload_image, upload_file, color_text",
@@ -1266,6 +1221,14 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
           async execute(_toolCallId, params) {
             const p = params as FeishuDocExecuteParams;
             try {
+              // Feishu creates title-only docs; flattened tool schemas can still expose
+              // sibling `content`, so reject it before creating an empty document.
+              if (p.action === "create" && Object.hasOwn(p, "content")) {
+                return json({
+                  error:
+                    'Feishu document creation does not support content. Call action "create" first, then call action "write" with the returned document_id as doc_token.',
+                });
+              }
               const client = getClient(p, defaultAccountId);
               switch (p.action) {
                 case "read":
@@ -1378,43 +1341,11 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
                 case "color_text":
                   return json(await updateColorText(client, p.doc_token, p.block_id, p.content));
                 case "insert_table_row":
-                  return json(await insertTableRow(client, p.doc_token, p.block_id, p.row_index));
                 case "insert_table_column":
-                  return json(
-                    await insertTableColumn(client, p.doc_token, p.block_id, p.column_index),
-                  );
                 case "delete_table_rows":
-                  return json(
-                    await deleteTableRows(
-                      client,
-                      p.doc_token,
-                      p.block_id,
-                      p.row_start,
-                      p.row_count,
-                    ),
-                  );
                 case "delete_table_columns":
-                  return json(
-                    await deleteTableColumns(
-                      client,
-                      p.doc_token,
-                      p.block_id,
-                      p.column_start,
-                      p.column_count,
-                    ),
-                  );
                 case "merge_table_cells":
-                  return json(
-                    await mergeTableCells(
-                      client,
-                      p.doc_token,
-                      p.block_id,
-                      p.row_start,
-                      p.row_end,
-                      p.column_start,
-                      p.column_end,
-                    ),
-                  );
+                  return json(await patchTable(client, p));
                 default:
                   return json({ error: "Unknown action" });
               }
@@ -1426,7 +1357,6 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
       },
       { name: "feishu_doc" },
     );
-    registered.push("feishu_doc");
   }
 
   // Keep feishu_app_scopes as independent tool
@@ -1434,6 +1364,7 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
     api.registerTool(
       (ctx) => ({
         name: "feishu_app_scopes",
+        resultContentSource: "network",
         label: "Feishu App Scopes",
         description:
           "List current app permissions (scopes). Use to debug permission issues or check available capabilities.",
@@ -1455,7 +1386,6 @@ export function registerFeishuDocTools(api: OpenClawPluginApi) {
       }),
       { name: "feishu_app_scopes" },
     );
-    registered.push("feishu_app_scopes");
   }
 }
 /* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */

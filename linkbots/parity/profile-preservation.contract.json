@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "sourceAuthority": {
+    "lisa": "protected-source-bundle-plus-live-private-runtime",
+    "david": "protected-manifest-plus-live-private-runtime",
+    "eric": "protected-manifest-plus-live-private-runtime",
+    "sara": "protected-manifest-plus-live-private-runtime",
+    "jane": "protected-manifest-plus-live-private-runtime",
+    "nonLisaCompleteProfileSource": "live-deployed-workspaces-only"
+  },
+  "protectedDomains": [
+    "personality",
+    "identity",
+    "role",
+    "responsibilities",
+    "workspace",
+    "memory",
+    "state",
+    "sqlite",
+    "jobs",
+    "schedules",
+    "recipients",
+    "conversations",
+    "channelBindings",
+    "credentials",
+    "secrets",
+    "actorIdentity",
+    "runtimeIdentity",
+    "authorization",
+    "authorizationDatabase",
+    "privateContent"
+  ],
+  "overlayOnly": true,
+  "allowedOverlayPaths": [
+    "agents.defaults.model.primary",
+    "agents.defaults.model.fallbacks",
+    "agents.defaults.thinkingDefault",
+    "agents.defaults.models.openai/gpt-5.6-sol.params.thinking",
+    "agents.defaults.models.openrouter/openai/gpt-5.6-luna.params.thinking",
+    "agents.defaults.models.openai/gpt-5.6-sol.agentRuntime.id",
+    "plugins.entries.<required-plugin>.enabled"
+  ],
+  "structuralExpectations": {
+    "separateRuntimeRoot": true,
+    "separateWorkspace": true,
+    "separateStateDatabase": true,
+    "separateAuthorizationDatabase": true,
+    "independentRevocation": true,
+    "workspaceRelative": ".openclaw-{agent}/workspace",
+    "stateDatabaseRelative": ".openclaw-{agent}/state/openclaw.sqlite",
+    "identityFiles": ["IDENTITY.md", "SOUL.md", "AGENTS.md"],
+    "nonLisaToolsFile": "TOOLS.md",
+    "baselineFacts": {
+      "authorizationDatabase": ["path", "identity"],
+      "revocation": ["boundaryIdentity"],
+      "identityFiles": ["name", "path", "exists"],
+      "workspace": ["path", "entries"],
+      "nonLisaToolsFile": ["path", "exists"]
+    },
+    "googleChat": "disabled-until-all-per-agent-gates-pass"
+  },
+  "codingRouting": {
+    "status": "HOLD",
+    "reason": "Lisa's coding-specific routing is workspace-owned; no supported generic technical field exists for an equivalent cross-agent rule in this candidate."
+  },
+  "deploymentGuard": {
+    "captureBaselineBeforeMutation": true,
+    "backupCompleteRuntimeRootBeforeMutation": true,
+    "validateCandidateBeforeWrite": true,
+    "compareProtectedFieldsAfterWrite": true,
+    "rollbackOnProtectedMismatch": true,
+    "receiptStorage": "ephemeral-server01-only"
+  }
+}

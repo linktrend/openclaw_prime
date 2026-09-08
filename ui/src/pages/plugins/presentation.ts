@@ -3,6 +3,7 @@
 import { expectDefined } from "@openclaw/normalization-core";
 import { inferControlUiPublicAssetPath } from "../../app/public-assets.ts";
 import { t } from "../../i18n/index.ts";
+import { takeGraphemes } from "../../lib/graphemes.ts";
 
 /**
  * Cover art bundled at ui/public/plugin-art/<slug>.webp. The gateway CSP is
@@ -113,7 +114,6 @@ const PLUGIN_ART_SLUGS: ReadonlySet<string> = new Set([
   "nvidia",
   "oc-path",
   "ollama",
-  "open-prose",
   "openai",
   "opencode",
   "opencode-go",
@@ -123,7 +123,6 @@ const PLUGIN_ART_SLUGS: ReadonlySet<string> = new Set([
   "pdf-tools",
   "perplexity",
   "philips-hue",
-  "phone-control",
   "pixverse",
   "policy",
   "portfolio-pulse",
@@ -153,7 +152,6 @@ const PLUGIN_ART_SLUGS: ReadonlySet<string> = new Set([
   "tavily",
   "telegram",
   "tencent",
-  "thread-ownership",
   "tlon",
   "todoist",
   "together",
@@ -183,8 +181,14 @@ const PLUGIN_ART_SLUGS: ReadonlySet<string> = new Set([
   "zalouser",
 ]);
 
-export function pluginArtPath(slug: string): string | null {
-  return PLUGIN_ART_SLUGS.has(slug)
+// Only the trusted first-party scope may drop package role suffixes. Broader
+// unscoping would let third-party catalog ids claim bundled OpenClaw art.
+const OPENCLAW_PLUGIN_ART_ID = /^@openclaw\/(.+?)(?:-(?:plugin|provider))?$/u;
+
+export function pluginArtPath(id: string): string | null {
+  const scopedSlug = OPENCLAW_PLUGIN_ART_ID.exec(id)?.[1];
+  const slug = PLUGIN_ART_SLUGS.has(id) ? id : scopedSlug;
+  return slug && PLUGIN_ART_SLUGS.has(slug)
     ? inferControlUiPublicAssetPath(`plugin-art/${slug}.webp`)
     : null;
 }
@@ -205,27 +209,6 @@ const FALLBACK_GRADIENTS: ReadonlyArray<readonly [string, string]> = [
   ["#4ade80", "#166534"],
   ["#fb7185", "#9f1239"],
 ];
-
-const graphemeSegmenter =
-  typeof Intl.Segmenter === "function"
-    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
-    : null;
-
-function takeGraphemes(input: string, limit: number): string {
-  if (!graphemeSegmenter) {
-    return Array.from(input).slice(0, limit).join("");
-  }
-  let result = "";
-  let count = 0;
-  for (const { segment } of graphemeSegmenter.segment(input)) {
-    result += segment;
-    count += 1;
-    if (count >= limit) {
-      break;
-    }
-  }
-  return result;
-}
 
 export function pluginFallbackGradient(id: string): readonly [string, string] {
   let hash = 0;

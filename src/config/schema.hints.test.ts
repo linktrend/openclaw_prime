@@ -1,14 +1,25 @@
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 // Verifies schema hint metadata and sensitive path handling.
 import { isSensitiveUrlConfigPath } from "@openclaw/net-policy/redact-sensitive-url";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { buildSecretInputSchema } from "../plugin-sdk/secret-input-schema.js";
-import { buildBaseHints, testApi } from "./schema.hints.js";
+import {
+  buildBaseHints,
+  collectMatchingSchemaPaths,
+  mapSensitivePaths,
+  testApi,
+} from "./schema.hints.js";
 import { isSensitiveConfigPath } from "./sensitive-paths.js";
 import { OpenClawSchema } from "./zod-schema.js";
+import { OpenClawSchemaShape } from "./zod-schema.root-shape.js";
 import { sensitive } from "./zod-schema.sensitive.js";
 
-const { collectMatchingSchemaPaths, mapSensitivePaths } = testApi;
+const { SECTION_DOCS_URLS } = testApi;
+// Root sections without beginner-worthy pages stay explicit. Adding a root config key
+// requires choosing a docsUrl or listing it here.
+const SECTIONS_WITHOUT_DOCS = ["$schema", "meta", "attachments"] as const;
 const BUNDLED_CHANNEL_HINT_PREFIXES = [
   "channels.discord",
   "channels.imessage",
@@ -19,6 +30,42 @@ const BUNDLED_CHANNEL_HINT_PREFIXES = [
   "channels.telegram",
   "channels.whatsapp",
 ] as const;
+
+describe("section docs URLs", () => {
+  it("accounts for every root config section", () => {
+    const sectionsWithDocsDecisions = new Set([
+      ...Object.keys(SECTION_DOCS_URLS),
+      ...SECTIONS_WITHOUT_DOCS,
+    ]);
+    const undecidedSections = Object.keys(OpenClawSchemaShape).filter(
+      (section) => !sectionsWithDocsDecisions.has(section),
+    );
+
+    expect(undecidedSections).toEqual([]);
+  });
+
+  it("maps every URL to an existing task-oriented docs page", () => {
+    const hints = buildBaseHints();
+    const docsOrigin = "https://docs.openclaw.ai";
+
+    for (const [path, docsUrl] of Object.entries(SECTION_DOCS_URLS)) {
+      const docsPath = docsUrl.slice(docsOrigin.length).replace(/^\//u, "");
+      const candidates = [
+        resolve(process.cwd(), "docs", `${docsPath}.md`),
+        resolve(process.cwd(), "docs", docsPath, "index.md"),
+      ];
+
+      expect(docsUrl.startsWith(`${docsOrigin}/`), docsUrl).toBe(true);
+      expect(
+        candidates.some((candidate) => existsSync(candidate)),
+        docsUrl,
+      ).toBe(true);
+      expect(hints[path]?.docsUrl, path).toBe(docsUrl);
+    }
+
+    expect(hints.meta?.docsUrl).toBeUndefined();
+  });
+});
 
 describe("isSensitiveConfigPath", () => {
   it("matches whitelist suffixes case-insensitively", () => {
@@ -179,8 +226,8 @@ describe("mapSensitivePaths", () => {
     schema.title = "OpenClawConfig";
     const hints = mapSensitivePaths(OpenClawSchema, "", {});
 
-    expect(hints["agents.defaults.memorySearch.remote.apiKey"]?.sensitive).toBe(true);
-    expect(hints["agents.list[].memorySearch.remote.apiKey"]?.sensitive).toBe(true);
+    expect(hints["memory.search.remote.apiKey"]?.sensitive).toBe(true);
+    expect(hints["agents.entries.*.memory.search.remote.apiKey"]?.sensitive).toBe(true);
     expect(hints["gateway.auth.token"]?.sensitive).toBe(true);
     expect(hints["models.providers.*.headers.*"]?.sensitive).toBe(true);
     expect(hints["models.providers.*.localService.env.*"]?.sensitive).toBe(true);

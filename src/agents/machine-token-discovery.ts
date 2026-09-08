@@ -121,8 +121,8 @@ function assertExactStringArray(params: {
   if (!Array.isArray(params.value)) {
     throw discoveryError(`Machine-token discovery metadata ${params.field} must be an array`);
   }
-  for (let index = 0; index < params.value.length; index += 1) {
-    if (typeof params.value[index] !== "string") {
+  for (const value of params.value) {
+    if (typeof value !== "string") {
       throw discoveryError(
         `Machine-token discovery metadata ${params.field} elements must be strings`,
       );

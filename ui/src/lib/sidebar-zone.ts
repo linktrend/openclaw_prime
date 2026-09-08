@@ -20,6 +20,7 @@ export function reconcileSidebarZone(
   pinnedSessions: readonly SidebarPinnedSession[],
   validRoutes: readonly SidebarNavRoute[],
   knownUnpinnedKeys: ReadonlySet<string> = new Set(),
+  pluginNavigationKeys: ReadonlySet<string> = new Set(),
 ): { entries: SidebarZoneEntry[]; sidebarEntries: string[] } {
   const pinnedKeys = new Set(pinnedSessions.map((session) => session.key));
   const validRouteSet = new Set(validRoutes);
@@ -43,6 +44,16 @@ export function reconcileSidebarZone(
       seen.add(canonicalKey);
       entries.push(entry);
       canonical.push(canonicalKey);
+      continue;
+    }
+    if (entry.type === "plugin") {
+      seen.add(canonicalKey);
+      canonical.push(canonicalKey);
+      // Registration can disappear on reload, disconnect, or permission loss;
+      // an unavailable plugin must not erase the operator's saved placement.
+      if (pluginNavigationKeys.has(entry.key)) {
+        entries.push(entry);
+      }
       continue;
     }
     if (pinnedKeys.has(entry.key)) {

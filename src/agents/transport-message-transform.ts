@@ -18,18 +18,20 @@ const SYNTHETIC_TOOL_RESULT_APIS = new Set<string>([
   "openai-chatgpt-responses",
   "azure-openai-responses",
   "openclaw-openai-responses-transport",
+  "openclaw-openai-chatgpt-responses-transport",
   "openclaw-azure-openai-responses-transport",
 ]);
 
-// "aborted" is an OpenAI Responses-family convention from upstream Codex
-// history normalization. Gemini/Anthropic transports use their own text while
-// still needing synthetic results to satisfy provider turn-shape contracts;
-// tool-replay-repair.live.test.ts exercises both paths against real models.
-const CODEX_STYLE_ABORTED_OUTPUT_APIS = new Set<string>([
+// "aborted" is the OpenAI Responses-family synthetic result convention,
+// inherited from upstream Codex history normalization. It applies to public,
+// Codex, Azure, and their OpenClaw transport aliases; Gemini/Anthropic use their
+// own text. tool-replay-repair.live.test.ts exercises both paths against real models.
+const OPENAI_RESPONSES_ABORTED_OUTPUT_APIS = new Set<string>([
   "openai-responses",
   "openai-chatgpt-responses",
   "azure-openai-responses",
   "openclaw-openai-responses-transport",
+  "openclaw-openai-chatgpt-responses-transport",
   "openclaw-azure-openai-responses-transport",
 ]);
 
@@ -69,13 +71,15 @@ export function transformTransportMessages(
   options?: {
     normalizeSameModelToolCallIds?: boolean;
     preserveCrossModelToolCallThoughtSignature?: boolean;
+    preserveUnframedToolResults?: boolean;
   },
 ): Context["messages"] {
   const allowSyntheticToolResults = defaultAllowSyntheticToolResults(model.api);
-  const syntheticToolResultText = CODEX_STYLE_ABORTED_OUTPUT_APIS.has(model.api)
+  const syntheticToolResultText = OPENAI_RESPONSES_ABORTED_OUTPUT_APIS.has(model.api)
     ? "aborted"
     : "No result provided";
   const toolCallIdMap = new Map<string, string>();
+  let hasCrossModelAsyncCalls = false;
   const transformed = messages.map((msg) => {
     if (msg.role === "user") {
       return msg;
@@ -142,6 +146,11 @@ export function transformTransportMessages(
         continue;
       }
       let normalizedToolCall = block;
+      if (!isSameModel && block.async) {
+        hasCrossModelAsyncCalls = true;
+        normalizedToolCall = { ...normalizedToolCall };
+        delete normalizedToolCall.async;
+      }
       if (
         !isSameModel &&
         block.thoughtSignature &&
@@ -167,17 +176,18 @@ export function transformTransportMessages(
   // Pairing-aware transports must let shared repair see errored tool-call frames and
   // their adjacent results together; pre-filtering the call can misattribute its result
   // to an older turn that reused the same provider id.
+  const requiresPairing = allowSyntheticToolResults || hasCrossModelAsyncCalls;
   const replayable = transformed.filter((_, index) => {
     const original = messages[index];
     if (!original) {
       return true;
     }
-    return allowSyntheticToolResults
+    return requiresPairing
       ? !isFailedAssistantTurn(original) || failedAssistantHasToolCalls(original)
       : !isFailedAssistantTurn(original);
   });
 
-  if (!allowSyntheticToolResults) {
+  if (!requiresPairing) {
     return replayable;
   }
 
@@ -187,5 +197,6 @@ export function transformTransportMessages(
   return repairToolUseResultPairing(replayable, {
     erroredAssistantResultPolicy: "drop",
     missingToolResultText: syntheticToolResultText,
+    preserveUnframedToolResults: options?.preserveUnframedToolResults,
   }).messages as Context["messages"];
 }

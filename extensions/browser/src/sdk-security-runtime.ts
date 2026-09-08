@@ -24,7 +24,7 @@ export {
   writeExternalFileWithinRoot,
   wrapExternalContent,
 } from "openclaw/plugin-sdk/security-runtime";
-export type { LookupFn, PinnedHostname, SsrFPolicy } from "openclaw/plugin-sdk/security-runtime";
+export type { LookupFn, SsrFPolicy } from "openclaw/plugin-sdk/security-runtime";
 export { sdkPathScope as pathScope };
 
 /** Ensures an absolute directory exists without escaping its nearest existing ancestor. */
