@@ -1,0 +1,8 @@
+{
+  "params": {
+    "skill_id": "skill.fixture.echo",
+    "release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "fragment_id": "overview"
+  },
+  "request_id": "req:fragment-01"
+}

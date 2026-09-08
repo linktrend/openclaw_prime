@@ -1,0 +1,13 @@
+{
+  "description": "Skills-shaped fields must be rejected by Brain fake",
+  "payload": {
+    "skillId": "skill_test_should_reject",
+    "skillsReleaseHash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "skillsRunId": "skills_run_test_001",
+    "telemetry": {
+      "event": "skills_run_start"
+    }
+  },
+  "expectedRejection": "validation_error",
+  "expectedRejectionDetail": "cross_domain_field"
+}

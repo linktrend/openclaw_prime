@@ -1,0 +1,156 @@
+name: linktrend-openclaw-leadership
+
+services:
+  eric:
+    image: ${OPENCLAW_PARITY_IMAGE:?set an immutable candidate image digest}
+    container_name: linktrend-openclaw-eric
+    user: "1000:1000"
+    command: ["node", "/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs", "--profile", "eric", "gateway", "run", "--bind", "lan", "--port", "18792"]
+    env_file: [env/eric.env]
+    environment:
+      HOME: /var/lib/openclaw/eric
+      OPENCLAW_CONFIG_PATH: /var/lib/openclaw/eric/.openclaw-eric/openclaw.json
+      OPENCLAW_GATEWAY_PORT: "18792"
+      OPENCLAW_NO_RESPAWN: "1"
+      OPENCLAW_PROFILE: eric
+      OPENCLAW_STATE_DIR: /var/lib/openclaw/eric/.openclaw-eric
+    volumes:
+      - /srv/linktrend/runtime/openclaw/eric:/var/lib/openclaw/eric:rw
+      - /srv/linktrend/deploy/helpers/openclaw-gateway-with-buzz-proxy.mjs:/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs:ro
+      - /etc/linktrend/runtime-secrets/buzz/tls:/run/linktrend/buzz-tls:ro
+      - /srv/linktrend/deploy/helpers/buzz-room-membership-tailnet.js:/var/lib/openclaw/eric/.openclaw-eric/npm/projects/openclaw-buzz-8413d3ef60/node_modules/@openclaw/buzz/dist/room-membership-a8IHfdgL.js:ro
+    extra_hosts: ["linkserver-01.tailf7e13a.ts.net:172.19.0.250"]
+    networks:
+      eric: {ipv4_address: 172.19.0.250}
+    ports: ["127.0.0.1:18792:18792"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:18792/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
+    mem_limit: 8g
+    cpus: 4.0
+    restart: unless-stopped
+
+  david:
+    image: ${OPENCLAW_PARITY_IMAGE:?set an immutable candidate image digest}
+    container_name: linktrend-openclaw-david
+    user: "1000:1000"
+    command: ["node", "/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs", "--profile", "david", "gateway", "run", "--bind", "lan", "--port", "18793"]
+    env_file: [env/david.env]
+    environment:
+      HOME: /var/lib/openclaw/david
+      OPENCLAW_CONFIG_PATH: /var/lib/openclaw/david/.openclaw-david/openclaw.json
+      OPENCLAW_GATEWAY_PORT: "18793"
+      OPENCLAW_NO_RESPAWN: "1"
+      OPENCLAW_PROFILE: david
+      OPENCLAW_STATE_DIR: /var/lib/openclaw/david/.openclaw-david
+    volumes:
+      - /srv/linktrend/runtime/openclaw/david:/var/lib/openclaw/david:rw
+      - /srv/linktrend/deploy/helpers/openclaw-gateway-with-buzz-proxy.mjs:/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs:ro
+      - /etc/linktrend/runtime-secrets/buzz/tls:/run/linktrend/buzz-tls:ro
+      - /srv/linktrend/deploy/helpers/buzz-room-membership-tailnet.js:/var/lib/openclaw/david/.openclaw-david/npm/projects/openclaw-buzz-8413d3ef60/node_modules/@openclaw/buzz/dist/room-membership-a8IHfdgL.js:ro
+    extra_hosts: ["linkserver-01.tailf7e13a.ts.net:172.22.0.250"]
+    networks:
+      david: {ipv4_address: 172.22.0.250}
+    ports: ["127.0.0.1:18793:18793"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:18793/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
+    mem_limit: 8g
+    cpus: 4.0
+    restart: unless-stopped
+
+  sara:
+    image: ${OPENCLAW_PARITY_IMAGE:?set an immutable candidate image digest}
+    container_name: linktrend-openclaw-sara
+    user: "1000:1000"
+    command: ["node", "/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs", "--profile", "sara", "gateway", "run", "--bind", "lan", "--port", "18794"]
+    env_file: [env/sara.env]
+    environment:
+      HOME: /var/lib/openclaw/sara
+      OPENCLAW_CONFIG_PATH: /var/lib/openclaw/sara/.openclaw-sara/openclaw.json
+      OPENCLAW_GATEWAY_PORT: "18794"
+      OPENCLAW_NO_RESPAWN: "1"
+      OPENCLAW_PROFILE: sara
+      OPENCLAW_STATE_DIR: /var/lib/openclaw/sara/.openclaw-sara
+    volumes:
+      - /srv/linktrend/runtime/openclaw/sara:/var/lib/openclaw/sara:rw
+      - /srv/linktrend/deploy/helpers/openclaw-gateway-with-buzz-proxy.mjs:/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs:ro
+      - /etc/linktrend/runtime-secrets/buzz/tls:/run/linktrend/buzz-tls:ro
+      - /srv/linktrend/deploy/helpers/buzz-room-membership-tailnet.js:/var/lib/openclaw/sara/.openclaw-sara/npm/projects/openclaw-buzz-8413d3ef60/node_modules/@openclaw/buzz/dist/room-membership-a8IHfdgL.js:ro
+    extra_hosts: ["linkserver-01.tailf7e13a.ts.net:172.21.0.250"]
+    networks:
+      sara: {ipv4_address: 172.21.0.250}
+    ports: ["127.0.0.1:18794:18794"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:18794/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
+    mem_limit: 8g
+    cpus: 4.0
+    restart: unless-stopped
+
+  jane:
+    image: ${OPENCLAW_PARITY_IMAGE:?set an immutable candidate image digest}
+    container_name: linktrend-openclaw-jane
+    user: "1000:1000"
+    command: ["node", "/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs", "--profile", "jane", "gateway", "run", "--bind", "lan", "--port", "18795"]
+    env_file: [env/jane.env]
+    environment:
+      HOME: /var/lib/openclaw/jane
+      OPENCLAW_CONFIG_PATH: /var/lib/openclaw/jane/.openclaw-jane/openclaw.json
+      OPENCLAW_GATEWAY_PORT: "18795"
+      OPENCLAW_NO_RESPAWN: "1"
+      OPENCLAW_PROFILE: jane
+      OPENCLAW_STATE_DIR: /var/lib/openclaw/jane/.openclaw-jane
+    volumes:
+      - /srv/linktrend/runtime/openclaw/jane:/var/lib/openclaw/jane:rw
+      - /srv/linktrend/deploy/helpers/openclaw-gateway-with-buzz-proxy.mjs:/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs:ro
+      - /etc/linktrend/runtime-secrets/buzz/tls:/run/linktrend/buzz-tls:ro
+      - /srv/linktrend/deploy/helpers/buzz-room-membership-tailnet.js:/var/lib/openclaw/jane/.openclaw-jane/npm/projects/openclaw-buzz-8413d3ef60/node_modules/@openclaw/buzz/dist/room-membership-a8IHfdgL.js:ro
+    extra_hosts: ["linkserver-01.tailf7e13a.ts.net:172.20.0.250"]
+    networks:
+      jane: {ipv4_address: 172.20.0.250}
+    ports: ["127.0.0.1:18795:18795"]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:18795/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    read_only: true
+    tmpfs: ["/tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
+    mem_limit: 8g
+    cpus: 4.0
+    restart: unless-stopped
+
+networks:
+  eric: {name: linktrend-openclaw-eric}
+  david: {name: linktrend-openclaw-david}
+  sara: {name: linktrend-openclaw-sara}
+  jane: {name: linktrend-openclaw-jane}

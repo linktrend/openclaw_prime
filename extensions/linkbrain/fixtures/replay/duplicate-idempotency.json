@@ -1,0 +1,25 @@
+{
+  "description": "Duplicate write with same idempotency key returns replay-safe ack",
+  "tool": "brain_checkpoint_write",
+  "firstRequest": {
+    "authToken": "fake-valid-token",
+    "arguments": {
+      "idempotencyKey": "chk:replay:001",
+      "taskId": "task_test_001",
+      "summary": "First write."
+    }
+  },
+  "secondRequest": {
+    "authToken": "fake-valid-token",
+    "arguments": {
+      "idempotencyKey": "chk:replay:001",
+      "taskId": "task_test_001",
+      "summary": "First write."
+    }
+  },
+  "expected": {
+    "firstReplayed": false,
+    "secondReplayed": true,
+    "sameResultIdField": "checkpointId"
+  }
+}

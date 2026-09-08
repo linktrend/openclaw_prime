@@ -1,0 +1,10 @@
+{
+  "params": {
+    "run_id": "run:fixture-skills-01",
+    "failure_class": "validation",
+    "error_code": "validation_failed",
+    "safe_message": "Structured input failed schema checks"
+  },
+  "idempotency_key": "idem:run-fail-01",
+  "request_id": "req:run-fail-01"
+}

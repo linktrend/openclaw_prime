@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.1",
+  "event_id": "evt:fixture-validate-fail",
+  "event_type": "verification.failed",
+  "occurred_at": "2026-07-27T10:00:00Z",
+  "sequence": 3,
+  "actor_id": "actor:fixture-lisa-01",
+  "run_id": "run:fixture-skills-01",
+  "skill_id": "skill.fixture.echo",
+  "skill_release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "execution_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "outcome": "failure",
+  "failure_class": "validation",
+  "sensitivity": "public_internal",
+  "payload": {
+    "valid": false,
+    "violations": [
+      {
+        "path": "tokens",
+        "code": "minimum"
+      }
+    ],
+    "validator": "skills_input_validate"
+  }
+}

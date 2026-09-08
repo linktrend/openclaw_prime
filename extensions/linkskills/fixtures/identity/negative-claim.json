@@ -1,0 +1,112 @@
+{
+  "description": "Negative identity claim cases that must fail AuthClaims verification (platform.auth-claims/1.1.0).",
+  "platformContract": "platform.auth-claims/1.1.0",
+  "cases": [
+    {
+      "name": "missing_actor_id",
+      "expect": "reject",
+      "reasons": [
+        "shape_invalid"
+      ],
+      "claims": {
+        "claimContractVersion": "platform.auth-claims/1.1.0",
+        "actorId": "",
+        "actorKind": "persona",
+        "runtimeBindingId": "bind-lisa-openclaw-1",
+        "credentialId": "cred-skills-1",
+        "orgId": "org-internal",
+        "internal": true,
+        "serviceScopes": [
+          "lskills"
+        ],
+        "permittedOperations": [
+          "read",
+          "execute"
+        ],
+        "issuedAt": "2026-07-27T00:00:00.000Z",
+        "expiresAt": "2026-07-27T12:00:00.000Z",
+        "issuer": "linkplatform-issuer",
+        "audience": [
+          "lskills-api"
+        ],
+        "correlationId": "corr-missing-actor"
+      }
+    },
+    {
+      "name": "missing_org_id_for_persona",
+      "expect": "reject",
+      "reasons": [
+        "wrong_org",
+        "shape_invalid"
+      ],
+      "claims": {
+        "claimContractVersion": "platform.auth-claims/1.1.0",
+        "actorId": "actor-lisa",
+        "actorKind": "persona",
+        "runtimeBindingId": "bind-lisa-openclaw-1",
+        "credentialId": "cred-skills-1",
+        "orgId": null,
+        "internal": true,
+        "serviceScopes": [
+          "lskills"
+        ],
+        "permittedOperations": [
+          "read",
+          "execute"
+        ],
+        "issuedAt": "2026-07-27T00:00:00.000Z",
+        "expiresAt": "2026-07-27T12:00:00.000Z",
+        "issuer": "linkplatform-issuer",
+        "audience": [
+          "lskills-api"
+        ],
+        "correlationId": "corr-missing-org"
+      },
+      "context": {
+        "expectedOrgId": "org-internal",
+        "expectedAudience": "lskills-api",
+        "requiredService": "lskills",
+        "now": "2026-07-27T06:00:00.000Z",
+        "credentialStatus": "active",
+        "actorLifecycleState": "active",
+        "bindingState": "active"
+      }
+    },
+    {
+      "name": "spoofed_actor_in_body",
+      "expect": "reject",
+      "reasons": [
+        "spoof_rejected"
+      ],
+      "claims": {
+        "claimContractVersion": "platform.auth-claims/1.1.0",
+        "actorId": "actor-lisa",
+        "actorKind": "persona",
+        "runtimeBindingId": "bind-lisa-openclaw-1",
+        "credentialId": "cred-skills-1",
+        "orgId": "org-internal",
+        "internal": true,
+        "serviceScopes": [
+          "lskills",
+          "linkplatform"
+        ],
+        "permittedOperations": [
+          "read",
+          "execute",
+          "skills:read",
+          "skills:write"
+        ],
+        "issuedAt": "2026-07-27T00:00:00.000Z",
+        "expiresAt": "2026-07-27T12:00:00.000Z",
+        "issuer": "linkplatform-issuer",
+        "audience": [
+          "lskills-api"
+        ],
+        "correlationId": "corr-spoof"
+      },
+      "request_body": {
+        "actorId": "actor-attacker"
+      }
+    }
+  ]
+}

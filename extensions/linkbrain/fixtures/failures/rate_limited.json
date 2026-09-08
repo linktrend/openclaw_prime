@@ -1,0 +1,7 @@
+{
+  "code": "rate_limited",
+  "message": "Brain Gateway rate limited; respect retryAfterMs.",
+  "safeMessage": "Brain Gateway rate limited; respect retryAfterMs.",
+  "retryable": true,
+  "retryAfterMs": 1000
+}

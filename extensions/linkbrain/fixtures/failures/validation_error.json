@@ -1,0 +1,6 @@
+{
+  "code": "validation_error",
+  "message": "Request rejected by Brain Gateway validation.",
+  "safeMessage": "Request rejected by Brain Gateway.",
+  "retryable": false
+}

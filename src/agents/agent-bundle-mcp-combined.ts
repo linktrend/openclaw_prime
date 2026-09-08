@@ -9,6 +9,7 @@ import type {
   McpToolCatalogDiagnostic,
   SessionMcpRuntime,
 } from "./agent-bundle-mcp-types.js";
+import { observeMcpToolFilterRegistrationGeneration } from "./mcp-tool-filter-resolver.js";
 
 function compareCatalogTools(left: McpCatalogTool, right: McpCatalogTool): number {
   return (
@@ -95,6 +96,7 @@ export function createCombinedSessionMcpRuntime(params: {
   let cachedCatalog: McpToolCatalog | null = null;
   let mergedSourceCatalogs: ReadonlyArray<McpToolCatalog> | null = null;
   let catalogInFlight: Promise<McpToolCatalog> | undefined;
+  let observedToolFilterGeneration = observeMcpToolFilterRegistrationGeneration();
   const serverOwner = params.serverOwners ?? new Map<string, SessionMcpRuntime>();
   const requesterConnect = parts.find((part) => part.requesterConnect)?.requesterConnect;
 
@@ -116,6 +118,13 @@ export function createCombinedSessionMcpRuntime(params: {
     );
 
   const loadCatalog = async (): Promise<McpToolCatalog> => {
+    const toolFilterGeneration = observeMcpToolFilterRegistrationGeneration();
+    if (toolFilterGeneration !== observedToolFilterGeneration) {
+      observedToolFilterGeneration = toolFilterGeneration;
+      cachedCatalog = null;
+      mergedSourceCatalogs = null;
+      catalogInFlight = undefined;
+    }
     if (cachedCatalog && !cachedCatalog.diagnostics?.length && cachedCatalogIsCurrent()) {
       return cachedCatalog;
     }

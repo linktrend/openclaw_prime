@@ -1,0 +1,17 @@
+{
+  "params": {
+    "run_id": "run:fixture-skills-01",
+    "outcome": "success",
+    "metrics": {
+      "duration_ms": 120,
+      "tool_calls": 1
+    },
+    "artifact_refs": [
+      {
+        "ref": "artifact:fixture-output-01"
+      }
+    ]
+  },
+  "idempotency_key": "idem:run-complete-01",
+  "request_id": "req:run-complete-01"
+}

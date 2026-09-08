@@ -16,14 +16,21 @@ const guardedBodyCleanupRegistry = new FinalizationRegistry<{ finalize: () => Pr
  * stream completes, errors, is cancelled, or is garbage-collected unconsumed.
  * Cleanup failures are swallowed: releasing guard resources must never break
  * response consumption.
+ * When maxBytes is set, cumulative enqueued bytes are capped.
  */
 export function wrapGuardedBodyStream(params: {
   body: ReadableStream<Uint8Array>;
   cleanup: () => Promise<void> | void;
   refreshTimeout?: () => void;
+  maxBytes?: number;
 }): ReadableStream<Uint8Array> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let finalized = false;
+  let totalBytes = 0;
+  const maxBytes =
+    typeof params.maxBytes === "number" && Number.isFinite(params.maxBytes) && params.maxBytes >= 0
+      ? Math.floor(params.maxBytes)
+      : undefined;
   const cleanupRegistrationToken = {};
   const finalize = async (
     cancelReader: () => Promise<void> = async () => {
@@ -69,6 +76,16 @@ export function wrapGuardedBodyStream(params: {
           controller.close();
           await finalize();
           return;
+        }
+        if (maxBytes !== undefined) {
+          const nextTotal = totalBytes + chunk.value.byteLength;
+          if (nextTotal > maxBytes) {
+            const overflowError = new Error(`Guarded response body exceeds ${maxBytes} bytes`);
+            await finalize();
+            controller.error(overflowError);
+            return;
+          }
+          totalBytes = nextTotal;
         }
         params.refreshTimeout?.();
         controller.enqueue(chunk.value);

@@ -1,4 +1,5 @@
 import type { AgentHarness, AgentHarnessRegistrationOptions } from "../agents/harness/types.js";
+import type { MachineTokenPluginFacade } from "../agents/machine-token-types.js";
 import type { AnyAgentTool } from "../agents/tools/common.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { OperatorScope } from "../gateway/operator-scopes.js";
@@ -186,6 +187,8 @@ export type OpenClawPluginApi = {
   registrationMode: PluginRegistrationMode;
   config: OpenClawConfig;
   pluginConfig?: Record<string, unknown>;
+  /** Host-constructed facade limited to this plugin's granted machine-token bindings. */
+  machineTokenFacade?: MachineTokenPluginFacade;
   /**
    * In-process runtime helpers for trusted native plugins.
    *
@@ -222,6 +225,12 @@ export type OpenClawPluginApi = {
   /** Bind a declared MCP server's transport to the trusted message requester. */ registerMcpServerConnectionResolver: (
     resolver: import("./types.mcp-connection.js").OpenClawPluginMcpServerConnectionResolver,
   ) => void;
+  /** Bind a declared MCP server's process-local tool selection overlay. */
+  registerMcpServerToolFilter: (
+    resolver: import("./types.mcp-tool-filter.js").OpenClawPluginMcpServerToolFilter,
+  ) => void;
+  /** Remove this plugin's owned process-local tool-filter overlay. */
+  unregisterMcpServerToolFilter: (serverName: string) => void;
   /** Register a native messaging channel plugin (channel capability). */
   registerChannel: (registration: OpenClawPluginChannelRegistration | ChannelPlugin) => void;
   /**

@@ -1,0 +1,23 @@
+{
+  "request": {
+    "client_contract_version": "0.1",
+    "client_api_version": "skills.api.v0.1"
+  },
+  "response": {
+    "status": "compatible",
+    "server_contract_version": "0.1",
+    "server_api_version": "skills.api.v0.1",
+    "negotiated_contract_version": "0.1",
+    "deprecated": false
+  },
+  "incompatible_request": {
+    "client_contract_version": "9.9",
+    "client_api_version": "skills.api.v9.9"
+  },
+  "incompatible_response": {
+    "status": "incompatible",
+    "server_contract_version": "0.1",
+    "server_api_version": "skills.api.v0.1",
+    "message": "Unsupported client contract version"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "params": {
+    "run_id": "run:fixture-skills-01",
+    "status": "running",
+    "progress": {
+      "percent": 40,
+      "stage": "validate_input"
+    }
+  },
+  "idempotency_key": "idem:run-update-01",
+  "request_id": "req:run-update-01"
+}

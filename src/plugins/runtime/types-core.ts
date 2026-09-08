@@ -6,6 +6,7 @@ import type { SessionPluginJsonValue } from "../../config/sessions/types.js";
 import type { HeartbeatRunResult } from "../../infra/heartbeat-wake.js";
 import type { LogLevel } from "../../logging/levels.js";
 import type { MediaUnderstandingRuntime } from "../../media-understanding/runtime-types.js";
+import type { PluginStateLeaseRunner } from "../../plugin-state/plugin-state-lease.types.js";
 import type { PluginRuntimeTaskFlows, PluginRuntimeTaskRuns } from "./runtime-tasks.types.js";
 
 type TtsRuntimeApi = typeof import("../../tts/runtime-api.js");
@@ -507,6 +508,7 @@ export type PluginRuntimeCore = {
     openSyncKeyedStore: <T>(
       options: import("../../plugin-state/plugin-state-store.types.js").OpenKeyedStoreOptions,
     ) => import("../../plugin-state/plugin-state-store.types.js").PluginStateSyncKeyedStore<T>;
+    withLease: PluginStateLeaseRunner;
     openChannelIngressQueue: <TPayload, TMetadata = unknown, TCompletedMetadata = unknown>(
       options?: Omit<CreateChannelIngressQueueOptions, "channelId">,
     ) => import("../../channels/message/ingress-queue.js").ChannelIngressQueue<

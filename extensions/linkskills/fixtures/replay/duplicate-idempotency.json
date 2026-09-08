@@ -1,0 +1,39 @@
+{
+  "description": "Second skills_run_start with same idempotency key returns prior response.",
+  "operation": "skills_run_start",
+  "authorization_claim": {
+    "actor_id": "actor:fixture-lisa-01",
+    "actor_kind": "openclaw_agent",
+    "org_id": "org:fixture-studio-01",
+    "scopes": [
+      "skills:read",
+      "skills:write"
+    ],
+    "audience": "linkskills",
+    "exp": 1893456000,
+    "credential_id": "cred:fixture-skills-01",
+    "runtime_binding_id": "binding:fixture-lisa-01"
+  },
+  "first_request": {
+    "params": {
+      "skill_id": "skill.fixture.echo",
+      "release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "execution_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "session_id": "session:fixture-opaque-01",
+      "correlation_id": "corr:fixture-01"
+    },
+    "idempotency_key": "idem:run-start-01",
+    "request_id": "req:run-start-01"
+  },
+  "second_request": {
+    "params": {
+      "skill_id": "skill.fixture.echo",
+      "release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "execution_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "session_id": "session:fixture-opaque-01",
+      "correlation_id": "corr:fixture-01"
+    },
+    "idempotency_key": "idem:run-start-01",
+    "request_id": "req:run-start-01"
+  }
+}

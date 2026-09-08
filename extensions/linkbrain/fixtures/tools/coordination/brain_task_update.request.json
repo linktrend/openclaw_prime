@@ -1,0 +1,10 @@
+{
+  "tool": "brain_task_update",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "taskupd:test:001",
+    "taskId": "task_test_001",
+    "status": "active",
+    "note": "Progress update."
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "description": "Sanitized auth outcome fixture: rotated credential rejected as revoked (platform.auth-claims/1.1.0).",
+  "platformContract": "platform.auth-claims/1.1.0",
+  "expect": "reject",
+  "reasons": [
+    "revoked"
+  ],
+  "expectedOutcome": "revoked",
+  "claims": {
+    "claimContractVersion": "platform.auth-claims/1.1.0",
+    "actorId": "actor-lisa",
+    "actorKind": "persona",
+    "runtimeBindingId": "bind-lisa-openclaw-1",
+    "credentialId": "cred-7",
+    "orgId": "org-internal",
+    "internal": true,
+    "serviceScopes": [
+      "lbrain"
+    ],
+    "permittedOperations": [
+      "read",
+      "execute"
+    ],
+    "issuedAt": "2026-07-27T00:00:00.000Z",
+    "expiresAt": "2026-07-27T12:00:00.000Z",
+    "issuer": "linkplatform-issuer",
+    "audience": [
+      "lbrain-api"
+    ],
+    "correlationId": "corr-rotated"
+  },
+  "context": {
+    "expectedOrgId": "org-internal",
+    "expectedAudience": "lbrain-api",
+    "requiredService": "lbrain",
+    "requiredOperation": "execute",
+    "now": "2026-07-27T06:00:00.000Z",
+    "credentialStatus": "rotated",
+    "actorLifecycleState": "active",
+    "bindingState": "active"
+  },
+  "error": {
+    "code": "unauthorized",
+    "message": "Credential rejected: rotated credential is treated as revoked.",
+    "safeMessage": "Credential revoked.",
+    "retryable": false
+  }
+}

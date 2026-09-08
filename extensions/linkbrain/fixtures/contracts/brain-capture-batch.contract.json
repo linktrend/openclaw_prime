@@ -1,0 +1,39 @@
+{
+  "description": "Mirrored public LiNKbrain PrivateCaptureBatch / ConversationEvent wire contract for OpenClaw adapter tests. Frozen shape from LiNKbrain packages/contracts/src/schemas.ts (BRAIN_CONTRACT_VERSION 1.0.0). Not an npm dependency — shape mirror only.",
+  "BRAIN_CONTRACT_VERSION": "1.0.0",
+  "source": {
+    "repo": "LiNKbrain",
+    "package": "@linktrend/lbrain-contracts",
+    "schemas": ["PrivateCaptureBatchSchema", "ConversationEventSchema"],
+    "note": "actorBindingId is stamped by Brain from authenticated actor; OpenClaw must not send actor override fields."
+  },
+  "captureBatchInput": {
+    "required": ["batchId", "sessionId", "idempotencyKey", "capturedAt", "events"],
+    "optional": ["taskId"],
+    "forbiddenActorOverrides": ["actor_id", "actorId", "platformActorId", "actorBindingId"],
+    "retiredOpenClawFields": ["streamId", "fromSequence", "toSequence", "contentHash", "actorId"]
+  },
+  "conversationEvent": {
+    "required": ["eventId", "sequence", "occurredAt", "role", "eventType"],
+    "optional": ["summary", "content", "contentRef", "classification", "metadata"],
+    "role": ["actor", "principal", "assistant", "tool", "system"],
+    "eventType": ["message", "tool_call", "tool_result", "decision", "status"],
+    "classificationDefault": "private",
+    "classification": ["private", "org", "public"]
+  },
+  "roleMappingFromOpenClawCapture": {
+    "user": "principal",
+    "human": "principal",
+    "assistant": "assistant",
+    "tool_summary": "tool",
+    "tool": "tool",
+    "system": "system",
+    "actor": "actor",
+    "principal": "principal"
+  },
+  "eventTypeMappingFromOpenClawCapture": {
+    "tool_summary": "tool_result",
+    "tool": "tool_call",
+    "default": "message"
+  }
+}

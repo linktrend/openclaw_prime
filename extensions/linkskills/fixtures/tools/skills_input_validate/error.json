@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1",
+  "error_id": "err:fixture-validation_failed",
+  "code": "validation_failed",
+  "message": "structured_input failed schema",
+  "retryable": false,
+  "occurred_at": "2026-07-27T10:00:00Z",
+  "request_id": "req:fixture-01",
+  "field_errors": [
+    {
+      "path": "tokens",
+      "message": "must be >= 0"
+    }
+  ]
+}

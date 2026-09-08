@@ -29,7 +29,7 @@ import {
   setMcpCodeModeGuestResult,
   setMcpCodeModeGuestResultFromAgentResult,
 } from "./mcp-content.js";
-import { isMcpToolAllowed } from "./mcp-tool-filter.js";
+import { serverAllowsMcpUtilityTool } from "./mcp-tool-filter-resolver.js";
 import { buildMcpAppCanvasPayload, fetchMcpAppView } from "./mcp-ui-resource.js";
 import type { AgentToolResult } from "./runtime/index.js";
 import { toToolSearchJsonSafe } from "./tool-search-json.js";
@@ -179,7 +179,7 @@ function serverAllowsUtilityTool(
   if ((server.deniedToolNames?.includes(operation) === true) !== sessionDeniedOnly) {
     return false;
   }
-  return isMcpToolAllowed(server.toolFilter, operation);
+  return serverAllowsMcpUtilityTool(server.toolFilter, operation);
 }
 
 function addMcpUtilityTool(params: {

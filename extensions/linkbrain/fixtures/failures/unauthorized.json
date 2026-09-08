@@ -1,0 +1,6 @@
+{
+  "code": "unauthorized",
+  "message": "Authentication required or credential rejected.",
+  "safeMessage": "Authentication required or credential rejected.",
+  "retryable": false
+}

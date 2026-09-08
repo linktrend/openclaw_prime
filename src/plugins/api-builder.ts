@@ -14,6 +14,7 @@ type BuildPluginApiParams = {
   registrationMode: OpenClawPluginApi["registrationMode"];
   config: OpenClawConfig;
   pluginConfig?: Record<string, unknown>;
+  machineTokenFacade?: OpenClawPluginApi["machineTokenFacade"];
   runtime: PluginRuntime;
   logger: PluginLogger;
   resolvePath: (input: string) => string;
@@ -27,6 +28,8 @@ const noops = {
   registerHostedMediaResolver: () => {},
   registerWidgetPresenter: () => {},
   registerMcpServerConnectionResolver: () => {},
+  registerMcpServerToolFilter: () => {},
+  unregisterMcpServerToolFilter: () => {},
   registerChannel: () => {},
   registerGatewayMethod: () => {},
   registerSessionCatalog: () => {},
@@ -135,6 +138,7 @@ export function buildPluginApi(params: BuildPluginApiParams): OpenClawPluginApi 
     registrationMode: params.registrationMode,
     config: params.config,
     pluginConfig: params.pluginConfig,
+    ...(params.machineTokenFacade ? { machineTokenFacade: params.machineTokenFacade } : {}),
     runtime: params.runtime,
     logger: params.logger,
     registerTool: handlers.registerTool ?? noops.registerTool,
@@ -145,6 +149,10 @@ export function buildPluginApi(params: BuildPluginApiParams): OpenClawPluginApi 
     registerWidgetPresenter: handlers.registerWidgetPresenter ?? noops.registerWidgetPresenter,
     registerMcpServerConnectionResolver:
       handlers.registerMcpServerConnectionResolver ?? noops.registerMcpServerConnectionResolver,
+    registerMcpServerToolFilter:
+      handlers.registerMcpServerToolFilter ?? noops.registerMcpServerToolFilter,
+    unregisterMcpServerToolFilter:
+      handlers.unregisterMcpServerToolFilter ?? noops.unregisterMcpServerToolFilter,
     registerChannel: handlers.registerChannel ?? noops.registerChannel,
     registerGatewayMethod: handlers.registerGatewayMethod ?? noops.registerGatewayMethod,
     registerSessionCatalog: handlers.registerSessionCatalog ?? noops.registerSessionCatalog,

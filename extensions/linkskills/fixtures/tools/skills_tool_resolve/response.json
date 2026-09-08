@@ -1,0 +1,19 @@
+{
+  "schema_version": "0.1",
+  "contract_version": "0.1",
+  "request_id": "req:fixture-01",
+  "server_time": "2026-07-27T10:00:00Z",
+  "actor_id": "actor:fixture-lisa-01",
+  "session_id": "session:fixture-opaque-01",
+  "release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "execution_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "data": {
+    "tool_id": "skill.fixture.echo.echo",
+    "version": "1.0.0",
+    "placement": "packaged",
+    "descriptor_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "warnings": [],
+  "compatibility_state": "current",
+  "recommended_next_operation": "skills_tool_invoke"
+}

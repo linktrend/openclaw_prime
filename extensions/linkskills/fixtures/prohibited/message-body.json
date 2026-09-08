@@ -1,0 +1,23 @@
+{
+  "description": "Must be hard-rejected by Skills fake: message-body",
+  "operation": "skills_run_update",
+  "request": {
+    "params": {
+      "run_id": "run:fixture-skills-01",
+      "status": "running",
+      "message": "user said hello",
+      "messages": [
+        {
+          "role": "assistant",
+          "content": "hi"
+        }
+      ]
+    },
+    "request_id": "req:prohibited-message-body"
+  },
+  "expected": {
+    "code": "validation_failed",
+    "retryable": false,
+    "prohibited_field_present": true
+  }
+}

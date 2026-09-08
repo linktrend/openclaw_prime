@@ -1,0 +1,22 @@
+{
+  "tool": "brain_private_search",
+  "contractVersion": "1.0.0",
+  "serverTime": "2026-07-27T10:00:00.000Z",
+  "actorId": "actor_test_lisa",
+  "actorBindingId": "binding_test_lisa_openclaw",
+  "requestId": "req_brain_private_search_ok",
+  "idempotencyKey": null,
+  "result": {
+    "results": [
+      {
+        "itemId": "pm_test_001",
+        "kind": "preference",
+        "summary": "Prefers concise replies."
+      }
+    ]
+  },
+  "warnings": [],
+  "retryability": {
+    "retryable": false
+  }
+}

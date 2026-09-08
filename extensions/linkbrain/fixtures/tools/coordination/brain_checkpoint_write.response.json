@@ -1,0 +1,17 @@
+{
+  "tool": "brain_checkpoint_write",
+  "contractVersion": "1.0.0",
+  "serverTime": "2026-07-27T10:00:00.000Z",
+  "actorId": "actor_test_lisa",
+  "actorBindingId": "binding_test_lisa_openclaw",
+  "requestId": "req_brain_checkpoint_write_ok",
+  "idempotencyKey": "chk:test:001",
+  "result": {
+    "checkpointId": "chk_test_001",
+    "replayed": false
+  },
+  "warnings": [],
+  "retryability": {
+    "retryable": false
+  }
+}

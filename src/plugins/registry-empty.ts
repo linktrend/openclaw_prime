@@ -51,6 +51,7 @@ export function createEmptyPluginRegistry(): PluginRegistry {
     hostedMediaResolvers: [],
     widgetPresenters: [],
     mcpServerConnectionResolvers: [],
+    mcpServerToolFilters: [],
     cliRegistrars: [],
     reloads: [],
     nodeHostCommands: [],

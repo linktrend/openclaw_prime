@@ -1,0 +1,9 @@
+{
+  "tool": "brain_handoff_accept",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "hoa:test:001",
+    "handoffId": "ho_test_001",
+    "decision": "accepted"
+  }
+}

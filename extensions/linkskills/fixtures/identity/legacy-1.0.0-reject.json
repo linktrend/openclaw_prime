@@ -1,0 +1,34 @@
+{
+  "description": "Legacy platform.auth-claims/1.0.0 Skills claim \u2014 reject under 1.1.0 consumer shape check.",
+  "platformContract": "platform.auth-claims/1.0.0",
+  "expect": "reject",
+  "reasons": [
+    "stale_contract_version"
+  ],
+  "claims": {
+    "claimContractVersion": "platform.auth-claims/1.0.0",
+    "actorId": "actor-lisa",
+    "actorKind": "persona",
+    "runtimeBindingId": "bind-lisa-openclaw-1",
+    "credentialId": "cred-skills-1",
+    "orgId": "org-internal",
+    "internal": true,
+    "serviceScopes": [
+      "lskills",
+      "linkplatform"
+    ],
+    "permittedOperations": [
+      "read",
+      "execute",
+      "skills:read",
+      "skills:write"
+    ],
+    "issuedAt": "2026-07-27T00:00:00.000Z",
+    "expiresAt": "2026-07-27T12:00:00.000Z",
+    "issuer": "linkplatform-issuer",
+    "audience": [
+      "lskills-api"
+    ],
+    "correlationId": "corr-skills-legacy-1.0"
+  }
+}

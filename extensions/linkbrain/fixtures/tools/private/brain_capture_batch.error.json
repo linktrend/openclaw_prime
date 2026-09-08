@@ -1,0 +1,14 @@
+{
+  "tool": "brain_capture_batch",
+  "contractVersion": "1.0.0",
+  "serverTime": "2026-07-27T10:00:00.000Z",
+  "actorId": "actor_test_lisa",
+  "actorBindingId": "binding_test_lisa_openclaw",
+  "requestId": "req_brain_capture_batch_err",
+  "error": {
+    "code": "validation_error",
+    "retryable": false,
+    "safeMessage": "Request rejected by Brain Gateway.",
+    "message": "Request rejected by Brain Gateway."
+  }
+}

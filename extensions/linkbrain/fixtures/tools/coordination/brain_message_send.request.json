@@ -1,0 +1,10 @@
+{
+  "tool": "brain_message_send",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "msg:test:001",
+    "taskId": "task_test_001",
+    "toActorBindingId": "binding_test_peer",
+    "body": "Structured coordination note."
+  }
+}

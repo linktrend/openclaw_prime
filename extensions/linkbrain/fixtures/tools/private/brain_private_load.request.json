@@ -1,0 +1,7 @@
+{
+  "tool": "brain_private_load",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "id": "pm_test_001"
+  }
+}

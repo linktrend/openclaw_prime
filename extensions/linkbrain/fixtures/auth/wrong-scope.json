@@ -1,0 +1,48 @@
+{
+  "description": "Sanitized auth outcome fixture: wrong-service AuthClaims (platform.auth-claims/1.1.0).",
+  "platformContract": "platform.auth-claims/1.1.0",
+  "expect": "reject",
+  "reasons": [
+    "wrong_service"
+  ],
+  "expectedOutcome": "wrong_service",
+  "claims": {
+    "claimContractVersion": "platform.auth-claims/1.1.0",
+    "actorId": "actor-lisa",
+    "actorKind": "persona",
+    "runtimeBindingId": "bind-lisa-openclaw-1",
+    "credentialId": "cred-1",
+    "orgId": "org-internal",
+    "internal": true,
+    "serviceScopes": [
+      "lskills"
+    ],
+    "permittedOperations": [
+      "read",
+      "execute"
+    ],
+    "issuedAt": "2026-07-27T00:00:00.000Z",
+    "expiresAt": "2026-07-27T12:00:00.000Z",
+    "issuer": "linkplatform-issuer",
+    "audience": [
+      "lbrain-api"
+    ],
+    "correlationId": "corr-brain-wrong-service"
+  },
+  "context": {
+    "expectedOrgId": "org-internal",
+    "expectedAudience": "lbrain-api",
+    "requiredService": "lbrain",
+    "requiredOperation": "execute",
+    "now": "2026-07-27T06:00:00.000Z",
+    "credentialStatus": "active",
+    "actorLifecycleState": "active",
+    "bindingState": "active"
+  },
+  "error": {
+    "code": "unauthorized",
+    "message": "Credential rejected: wrong service scope.",
+    "safeMessage": "Credential wrong service.",
+    "retryable": false
+  }
+}

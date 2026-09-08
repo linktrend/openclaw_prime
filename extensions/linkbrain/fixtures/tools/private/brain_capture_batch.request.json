@@ -1,0 +1,33 @@
+{
+  "tool": "brain_capture_batch",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "cap:test:001",
+    "batch": {
+      "batchId": "batch_test_001",
+      "sessionId": "session_test_lisa",
+      "idempotencyKey": "cap:test:001",
+      "capturedAt": "2026-07-27T10:00:00.000Z",
+      "events": [
+        {
+          "eventId": "event_test_001",
+          "sequence": 1,
+          "occurredAt": "2026-07-27T09:59:58.000Z",
+          "role": "principal",
+          "eventType": "message",
+          "content": "Hello Lisa test.",
+          "classification": "private"
+        },
+        {
+          "eventId": "event_test_002",
+          "sequence": 2,
+          "occurredAt": "2026-07-27T09:59:59.000Z",
+          "role": "assistant",
+          "eventType": "message",
+          "content": "Acknowledged.",
+          "classification": "private"
+        }
+      ]
+    }
+  }
+}

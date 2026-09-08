@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "agents": ["lisa", "david", "eric", "sara", "jane"],
+  "image": {
+    "requiredPlugins": [
+      "openai",
+      "codex",
+      "acpx",
+      "linkbrain",
+      "linkskills",
+      "openrouter",
+      "telegram",
+      "buzz",
+      "googlechat"
+    ]
+  },
+  "model": {
+    "primary": "openai/gpt-5.6-sol",
+    "primaryProvider": "openai",
+    "primaryThinking": "low",
+    "fallbacks": ["openrouter/openai/gpt-5.6-luna"],
+    "fallbackProvider": "openrouter",
+    "fallbackThinking": "high",
+    "fallbackTrigger": "qualifying-provider-or-model-failure-only",
+    "loadBalancing": false
+  },
+  "topology": {
+    "lisa": {
+      "compose": "compose.server01.lisa.yml",
+      "service": "lisa",
+      "container": "linktrend-openclaw-lisa",
+      "port": 18791,
+      "runtimeRoot": "/srv/linktrend/runtime/openclaw/lisa",
+      "network": "linktrend-core-services_default"
+    },
+    "fleet": {
+      "compose": "compose.server01.fleet.yml",
+      "services": ["eric", "david", "sara", "jane"],
+      "ports": {"eric": 18792, "david": 18793, "sara": 18794, "jane": 18795},
+      "runtimeRoots": {
+        "eric": "/srv/linktrend/runtime/openclaw/eric",
+        "david": "/srv/linktrend/runtime/openclaw/david",
+        "sara": "/srv/linktrend/runtime/openclaw/sara",
+        "jane": "/srv/linktrend/runtime/openclaw/jane"
+      }
+    }
+  },
+  "identityBindings": {
+    "template": "agent-bindings.template.json5",
+    "requiredDomains": ["platform", "brain", "skills", "openai", "openrouter"],
+    "distinctPerAgent": true
+  },
+  "googleChat": {
+    "pluginId": "googlechat",
+    "activation": "disabled-until-secretref",
+    "startupSafeWhenCredentialAbsent": true,
+    "operational": false
+  },
+  "commonCapabilities": [
+    "codex-owner-activation",
+    "openai-provider",
+    "linkbrain",
+    "linkskills",
+    "coding-tools",
+    "sandbox",
+    "subagents",
+    "telegram",
+    "buzz",
+    "googlechat"
+  ],
+  "isolation": [
+    "config",
+    "agentDir",
+    "workspace",
+    "authDatabase",
+    "keys",
+    "state",
+    "memory",
+    "queues",
+    "revocation"
+  ],
+  "sourceEvidence": {
+    "baseCommit": "8f396c1eb7677d4dbece731eb2eb738d4f6a5891",
+    "baseTree": "39ae372d76d22a1b693de30877d94898f0ae0ae3",
+    "pluginSourceCommit": "cbc861486c05e57d3ec512e65a7800059b8fad9c",
+    "pluginSourceTree": "8e99e62ef9d934f24fe7febed279d742bd099e66",
+    "protectedIntegrated": false,
+    "profileManifests": {
+      "david": { "path": "linkbots/blueprints/david.profile-manifest.json", "blob": "2d2e2103cdce77fb34941a8476f118dfb138276c" },
+      "eric": { "path": "linkbots/blueprints/eric.profile-manifest.json", "blob": "e60157af6570a5b4d4e5fc7dc08818e9371a3d60" },
+      "sara": { "path": "linkbots/blueprints/sara.profile-manifest.json", "blob": "24fc50d3abb18a98c474fdd098f8f902f4dff1ed" },
+      "jane": { "path": "linkbots/blueprints/jane.profile-manifest.json", "blob": "cae605a5552cc83f2ad5a9be2cfab761c5c33f4a" },
+      "lisa": { "path": "linkbots/lisa/ops/lisa-profile-manifest.json", "blob": "9fa43b47b541a9e07a6ea8ddc86b36ce656e000b" }
+    }
+  },
+  "preservationContract": {
+    "path": "profile-preservation.contract.json",
+    "overlayOnly": true,
+    "codingRoutingStatus": "HOLD"
+  }
+}

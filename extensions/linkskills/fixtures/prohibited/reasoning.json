@@ -1,0 +1,20 @@
+{
+  "description": "Must be hard-rejected by Skills fake: reasoning",
+  "operation": "skills_run_update",
+  "request": {
+    "params": {
+      "run_id": "run:fixture-skills-01",
+      "status": "running",
+      "reasoning": "chain of thought",
+      "reasoning_trace": [
+        "step1"
+      ]
+    },
+    "request_id": "req:prohibited-reasoning"
+  },
+  "expected": {
+    "code": "validation_failed",
+    "retryable": false,
+    "prohibited_field_present": true
+  }
+}

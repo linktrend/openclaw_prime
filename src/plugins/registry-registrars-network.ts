@@ -10,6 +10,7 @@ import { normalizePluginGatewayMethodScope } from "../shared/gateway-method-poli
 import { normalizeRegisteredChannelPlugin } from "./channel-validation.js";
 import { normalizePluginHttpPath } from "./http-path.js";
 import { findPluginHttpRouteRegistrationConflicts } from "./http-route-overlap.js";
+import { bumpMcpToolFilterRegistrationGeneration } from "./mcp-tool-filter-registration.js";
 import {
   resolvePluginRegistrationCapabilities,
   type PluginRegistryState,
@@ -25,6 +26,7 @@ import type {
   OpenClawPluginHostedMediaResolver,
   OpenClawPluginHttpRouteParams,
   OpenClawPluginMcpServerConnectionResolver,
+  OpenClawPluginMcpServerToolFilter,
   PluginRegistrationMode,
 } from "./types.js";
 
@@ -270,6 +272,74 @@ export function createNetworkRegistrars(state: PluginRegistryState) {
     registry.mcpServerConnectionResolvers.push(registration);
   };
 
+  const registerMcpServerToolFilter = (
+    record: PluginRecord,
+    resolver: OpenClawPluginMcpServerToolFilter,
+  ) => {
+    const serverName = normalizeOptionalString(resolver?.serverName);
+    if (!serverName || typeof resolver.resolve !== "function") {
+      reportRegistrationError(
+        record,
+        "MCP server tool filter registration missing serverName or resolve",
+      );
+      return;
+    }
+    const existingIndex = registry.mcpServerToolFilters.findIndex(
+      (entry) => entry.resolver.serverName === serverName,
+    );
+    const registration = {
+      pluginId: record.id,
+      pluginName: record.name,
+      resolver: {
+        serverName,
+        resolve: resolver.resolve,
+      },
+      source: record.source,
+      rootDir: record.rootDir,
+    };
+    if (existingIndex >= 0) {
+      const existing = registry.mcpServerToolFilters[existingIndex];
+      // Tool-filter ownership is an authorization boundary: selection must not
+      // depend on plugin load order. First registration wins; duplicates fail closed.
+      if (existing && existing.pluginId !== record.id) {
+        reportRegistrationError(
+          record,
+          `MCP server tool filter for "${serverName}" rejected: already registered by plugin "${existing.pluginId}"`,
+        );
+        return;
+      }
+      registry.mcpServerToolFilters[existingIndex] = registration;
+      bumpMcpToolFilterRegistrationGeneration();
+      return;
+    }
+    registry.mcpServerToolFilters.push(registration);
+    bumpMcpToolFilterRegistrationGeneration();
+  };
+
+  const unregisterMcpServerToolFilter = (record: PluginRecord, serverNameRaw: string) => {
+    const serverName = normalizeOptionalString(serverNameRaw);
+    if (!serverName) {
+      reportRegistrationError(record, "MCP server tool filter unregister missing serverName");
+      return;
+    }
+    const existingIndex = registry.mcpServerToolFilters.findIndex(
+      (entry) => entry.resolver.serverName === serverName,
+    );
+    if (existingIndex < 0) {
+      return;
+    }
+    const existing = registry.mcpServerToolFilters[existingIndex];
+    if (existing && existing.pluginId !== record.id) {
+      reportRegistrationError(
+        record,
+        `MCP server tool filter for "${serverName}" unregister rejected: owned by plugin "${existing.pluginId}"`,
+      );
+      return;
+    }
+    registry.mcpServerToolFilters.splice(existingIndex, 1);
+    bumpMcpToolFilterRegistrationGeneration();
+  };
+
   const registerChannel = (
     record: PluginRecord,
     registration: OpenClawPluginChannelRegistration | ChannelPlugin,
@@ -375,6 +445,8 @@ export function createNetworkRegistrars(state: PluginRegistryState) {
     registerHttpRoute,
     registerHostedMediaResolver,
     registerMcpServerConnectionResolver,
+    registerMcpServerToolFilter,
+    unregisterMcpServerToolFilter,
     registerChannel,
   };
 }

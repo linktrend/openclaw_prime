@@ -54,7 +54,13 @@ import { redactMcpDiagnosticError } from "./mcp-error.js";
 import { createMcpJsonSchemaValidator } from "./mcp-json-schema-validator.js";
 import { sanitizeMcpMetadataText } from "./mcp-metadata.js";
 import { collectMcpPaginatedItems } from "./mcp-pagination.js";
-import { isMcpToolAllowed, normalizeMcpToolFilter } from "./mcp-tool-filter.js";
+import {
+  describeComposedMcpToolFilter,
+  observeMcpToolFilterRegistrationGeneration,
+  resolveMcpToolFilterComposition,
+  shouldExposeComposedMcpTool,
+} from "./mcp-tool-filter-resolver.js";
+import { normalizeMcpToolFilter } from "./mcp-tool-filter.js";
 import { normalizeMcpToolCatalog, type McpToolCatalogMetadata } from "./mcp-tool-metadata.js";
 import { resolveMcpTransport } from "./mcp-transport.js";
 
@@ -428,6 +434,7 @@ function createServerMcpRuntime(
   let catalogRetryAfterMs: number | undefined;
   let catalogInFlight: Promise<McpToolCatalog> | undefined;
   let catalogInvalidationGeneration = 0;
+  let observedToolFilterGeneration = -1;
   const invalidateCatalog = () => {
     catalogInvalidationGeneration += 1;
     catalog = null;
@@ -668,6 +675,13 @@ function createServerMcpRuntime(
 
   const loadCatalog = async (): Promise<McpToolCatalog> => {
     failIfDisposed();
+    const toolFilterGeneration = observeMcpToolFilterRegistrationGeneration();
+    if (toolFilterGeneration !== observedToolFilterGeneration) {
+      observedToolFilterGeneration = toolFilterGeneration;
+      catalog = null;
+      catalogInFlight = undefined;
+      catalogInvalidationGeneration += 1;
+    }
     if (catalogInFlight) {
       return catalogInFlight;
     }
@@ -792,6 +806,14 @@ function createServerMcpRuntime(
         const toolFilter = normalizeMcpToolFilter(
           isRecord(rawServer) ? rawServer.toolFilter : undefined,
         );
+        const composition = await resolveMcpToolFilterComposition({
+          serverName,
+          configSelection: {
+            ...(toolFilter?.include ? { include: [...toolFilter.include] } : {}),
+            ...(toolFilter?.exclude ? { exclude: [...toolFilter.exclude] } : {}),
+          },
+        });
+        const effectiveFilter = describeComposedMcpToolFilter(composition);
         const denialMap = params.toolOverrides?.mcpToolsDeny;
         const deniedToolNames = new Set(
           denialMap && Object.hasOwn(denialMap, serverName) ? denialMap[serverName] : [],
@@ -800,7 +822,7 @@ function createServerMcpRuntime(
           listedTools,
           schemaValidator,
           (toolName) => {
-            if (!isMcpToolAllowed(toolFilter, toolName)) {
+            if (!shouldExposeComposedMcpTool(composition, toolName)) {
               return "exclude";
             }
             return deniedToolNames.has(toolName) ? "denied" : "include";
@@ -827,7 +849,7 @@ function createServerMcpRuntime(
                 },
               }
             : {}),
-          ...(toolFilter ? { toolFilter } : {}),
+          ...(effectiveFilter ? { toolFilter: effectiveFilter } : {}),
           ...(deniedToolNames.size > 0 ? { deniedToolNames: [...deniedToolNames].toSorted() } : {}),
           codexApprovalMode: resolveProjectedMcpCodexToolApprovalMode(serverName, rawServer),
         };
@@ -928,6 +950,13 @@ function createServerMcpRuntime(
 
   const getCatalog = async (): Promise<McpToolCatalog> => {
     failIfDisposed();
+    const toolFilterGeneration = observeMcpToolFilterRegistrationGeneration();
+    if (toolFilterGeneration !== observedToolFilterGeneration) {
+      observedToolFilterGeneration = toolFilterGeneration;
+      catalog = null;
+      catalogInFlight = undefined;
+      catalogInvalidationGeneration += 1;
+    }
     if (catalog && !catalogRetryIsDue()) {
       return catalog;
     }

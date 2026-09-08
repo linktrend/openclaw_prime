@@ -1,0 +1,35 @@
+{
+  agents: {
+    defaults: {
+      model: {
+        primary: "openai/gpt-5.6-sol",
+        fallbacks: ["openrouter/openai/gpt-5.6-luna"],
+      },
+      models: {
+        "openai/gpt-5.6-sol": {
+          params: { thinking: "low" },
+          agentRuntime: { id: "codex" },
+        },
+        "openrouter/openai/gpt-5.6-luna": {
+          params: { thinking: "high" },
+        },
+      },
+      thinkingDefault: "low",
+    },
+  },
+  plugins: {
+    entries: {
+      openai: { enabled: true },
+      codex: { enabled: true },
+      acpx: { enabled: true },
+      linkbrain: { enabled: true },
+      linkskills: { enabled: true },
+      openrouter: { enabled: true },
+      telegram: { enabled: true },
+      buzz: { enabled: true },
+      // The image may contain Google Chat for parity, but activation is gated
+      // per agent until SecretRef, Workspace, API, admin, endpoint, and plugin checks pass.
+      googlechat: { enabled: false },
+    },
+  },
+}

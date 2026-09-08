@@ -1,0 +1,38 @@
+{
+  "description": "Redacted capture batch accepted by Brain fake (Brain PrivateCaptureBatch wire shape)",
+  "batch": {
+    "batchId": "batch_test_sample",
+    "sessionId": "session_test_lisa",
+    "idempotencyKey": "cap:session_test_lisa:10:12",
+    "capturedAt": "2026-07-27T10:00:12.000Z",
+    "events": [
+      {
+        "eventId": "event_test_010",
+        "sequence": 10,
+        "occurredAt": "2026-07-27T10:00:10.000Z",
+        "role": "principal",
+        "eventType": "message",
+        "content": "[redacted user utterance]",
+        "classification": "private"
+      },
+      {
+        "eventId": "event_test_011",
+        "sequence": 11,
+        "occurredAt": "2026-07-27T10:00:11.000Z",
+        "role": "assistant",
+        "eventType": "message",
+        "content": "[redacted assistant reply]",
+        "classification": "private"
+      },
+      {
+        "eventId": "event_test_012",
+        "sequence": 12,
+        "occurredAt": "2026-07-27T10:00:12.000Z",
+        "role": "tool",
+        "eventType": "tool_result",
+        "content": "Called brain_search; returned 1 hit.",
+        "classification": "private"
+      }
+    ]
+  }
+}

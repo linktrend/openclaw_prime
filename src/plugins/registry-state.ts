@@ -14,6 +14,9 @@ export type PluginTypedHookPolicy = {
 
 export type PluginSideEffectGuard = {
   active: boolean;
+  machineTokenGeneration?: MachineTokenFacadeGenerationHandle;
+  machineTokenGenerationReused?: boolean;
+  machineTokenGrantedRecords?: readonly HostMachineTokenBindingRecord[];
 };
 
 type PluginRegistrationCapabilities = {
@@ -96,3 +99,5 @@ export function createPluginRegistryState(registryParams: PluginRegistryParams) 
 }
 
 export type PluginRegistryState = ReturnType<typeof createPluginRegistryState>;
+import type { MachineTokenFacadeGenerationHandle } from "../agents/machine-token-host.js";
+import type { HostMachineTokenBindingRecord } from "../agents/machine-token-host.js";

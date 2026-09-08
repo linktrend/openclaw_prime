@@ -1,0 +1,39 @@
+{
+  "description": "Service actor with orgId=null \u2014 accepted under platform.auth-claims/1.1.0.",
+  "platformContract": "platform.auth-claims/1.1.0",
+  "expect": "accept",
+  "claims": {
+    "claimContractVersion": "platform.auth-claims/1.1.0",
+    "actorId": "actor-platform-svc",
+    "actorKind": "service",
+    "runtimeBindingId": "bind-platform-svc-1",
+    "credentialId": "cred-svc-1",
+    "orgId": null,
+    "internal": true,
+    "serviceScopes": [
+      "lbrain",
+      "linkplatform"
+    ],
+    "permittedOperations": [
+      "read",
+      "execute"
+    ],
+    "issuedAt": "2026-07-27T00:00:00.000Z",
+    "expiresAt": "2026-07-27T12:00:00.000Z",
+    "issuer": "linkplatform-issuer",
+    "audience": [
+      "lbrain-api"
+    ],
+    "correlationId": "corr-brain-service-null-org"
+  },
+  "context": {
+    "expectedOrgId": null,
+    "expectedAudience": "lbrain-api",
+    "requiredService": "lbrain",
+    "requiredOperation": "execute",
+    "now": "2026-07-27T06:00:00.000Z",
+    "credentialStatus": "active",
+    "actorLifecycleState": "active",
+    "bindingState": "active"
+  }
+}

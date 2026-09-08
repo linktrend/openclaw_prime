@@ -1,0 +1,15 @@
+{
+  "tool": "brain_checkpoint_write",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "chk:test:001",
+    "taskId": "task_test_001",
+    "summary": "Continuation checkpoint.",
+    "decisions": [
+      "Use fixtures first."
+    ],
+    "nextActions": [
+      "Wire plugin skeleton."
+    ]
+  }
+}

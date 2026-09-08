@@ -1,0 +1,22 @@
+{
+  "schema_version": "0.1",
+  "contract_version": "0.1",
+  "request_id": "req:fixture-01",
+  "server_time": "2026-07-27T10:00:00Z",
+  "actor_id": "actor:fixture-lisa-01",
+  "session_id": "session:fixture-opaque-01",
+  "release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "execution_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "data": {
+    "skill_id": "skill.fixture.echo",
+    "version": "1.0.0",
+    "release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "execution_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "certification_state": "usable",
+    "immutable": true,
+    "published_at": "2026-07-27T10:00:00Z"
+  },
+  "warnings": [],
+  "compatibility_state": "current",
+  "recommended_next_operation": "skills_run_start"
+}

@@ -1,0 +1,17 @@
+{
+  "tool": "brain_task_start",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "task:test:001",
+    "title": "Test task",
+    "scopes": [
+      {
+        "kind": "issue",
+        "orgId": "org_test_linktrend",
+        "repository": "linktrend/openclaw_prime",
+        "issueId": "ocp-test-1"
+      }
+    ],
+    "sessionId": "sess_test_001"
+  }
+}

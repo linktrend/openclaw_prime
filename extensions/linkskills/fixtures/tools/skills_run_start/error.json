@@ -1,0 +1,9 @@
+{
+  "schema_version": "0.1",
+  "error_id": "err:fixture-incompatible_profile",
+  "code": "incompatible_profile",
+  "message": "execution_profile_hash mismatch",
+  "retryable": false,
+  "occurred_at": "2026-07-27T10:00:00Z",
+  "request_id": "req:fixture-01"
+}

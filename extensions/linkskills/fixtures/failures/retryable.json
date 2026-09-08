@@ -1,0 +1,13 @@
+{
+  "schema_version": "0.1",
+  "error_id": "err:fixture-dependency_unavailable",
+  "code": "dependency_unavailable",
+  "message": "Upstream dependency briefly unavailable",
+  "retryable": true,
+  "occurred_at": "2026-07-27T10:00:00Z",
+  "request_id": "req:fixture-01",
+  "details": {
+    "retry_after_ms": 500,
+    "retry_hint": "exponential_backoff"
+  }
+}

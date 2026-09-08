@@ -1,0 +1,41 @@
+{
+  "description": "Valid Lisa Skills actor claim aligned to platform.auth-claims/1.1.0 (sanitized).",
+  "platformContract": "platform.auth-claims/1.1.0",
+  "expect": "accept",
+  "claims": {
+    "claimContractVersion": "platform.auth-claims/1.1.0",
+    "actorId": "actor-lisa",
+    "actorKind": "persona",
+    "runtimeBindingId": "bind-lisa-openclaw-1",
+    "credentialId": "cred-skills-1",
+    "orgId": "org-internal",
+    "internal": true,
+    "serviceScopes": [
+      "lskills",
+      "linkplatform"
+    ],
+    "permittedOperations": [
+      "read",
+      "execute",
+      "skills:read",
+      "skills:write"
+    ],
+    "issuedAt": "2026-07-27T00:00:00.000Z",
+    "expiresAt": "2026-07-27T12:00:00.000Z",
+    "issuer": "linkplatform-issuer",
+    "audience": [
+      "lskills-api"
+    ],
+    "correlationId": "corr-skills-accept-1"
+  },
+  "context": {
+    "expectedOrgId": "org-internal",
+    "expectedAudience": "lskills-api",
+    "requiredService": "lskills",
+    "requiredOperation": "execute",
+    "now": "2026-07-27T06:00:00.000Z",
+    "credentialStatus": "active",
+    "actorLifecycleState": "active",
+    "bindingState": "active"
+  }
+}

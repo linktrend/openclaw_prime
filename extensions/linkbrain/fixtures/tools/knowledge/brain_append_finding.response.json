@@ -1,0 +1,18 @@
+{
+  "tool": "brain_append_finding",
+  "contractVersion": "1.0.0",
+  "serverTime": "2026-07-27T10:00:00.000Z",
+  "actorId": "actor_test_lisa",
+  "actorBindingId": "binding_test_lisa_openclaw",
+  "requestId": "req_brain_append_finding_ok",
+  "idempotencyKey": "find:test:001",
+  "result": {
+    "receiptId": "find_rcp_test_001",
+    "curationState": "pending",
+    "replayed": false
+  },
+  "warnings": [],
+  "retryability": {
+    "retryable": false
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "params": {
+    "run_id": "run:fixture-skills-01",
+    "tool_id": "skill.fixture.echo.echo",
+    "invocation_id": "inv:fixture-01",
+    "structured_input": {
+      "message_class": "echo",
+      "tokens": 3
+    }
+  },
+  "idempotency_key": "idem:tool-invoke-01",
+  "request_id": "req:tool-invoke-01"
+}

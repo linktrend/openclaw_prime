@@ -1,0 +1,9 @@
+{
+  "schema_version": "0.1",
+  "error_id": "err:fixture-tool_resolution_failed",
+  "code": "tool_resolution_failed",
+  "message": "Unknown tool_id",
+  "retryable": false,
+  "occurred_at": "2026-07-27T10:00:00Z",
+  "request_id": "req:fixture-01"
+}

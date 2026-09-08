@@ -1,0 +1,19 @@
+{
+  "tool": "brain_task_start",
+  "contractVersion": "1.0.0",
+  "serverTime": "2026-07-27T10:00:00.000Z",
+  "actorId": "actor_test_lisa",
+  "actorBindingId": "binding_test_lisa_openclaw",
+  "requestId": "req_brain_task_start_ok",
+  "idempotencyKey": "task:test:001",
+  "result": {
+    "taskId": "task_test_001",
+    "replayed": false,
+    "conflicts": [],
+    "inbox": []
+  },
+  "warnings": [],
+  "retryability": {
+    "retryable": false
+  }
+}

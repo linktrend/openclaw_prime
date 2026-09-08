@@ -1,0 +1,18 @@
+{
+  "tool": "brain_conflict_respond",
+  "contractVersion": "1.0.0",
+  "serverTime": "2026-07-27T10:00:00.000Z",
+  "actorId": "actor_test_lisa",
+  "actorBindingId": "binding_test_lisa_openclaw",
+  "requestId": "req_brain_conflict_respond_ok",
+  "idempotencyKey": "conf:test:001",
+  "result": {
+    "conflictId": "conflict_test_001",
+    "recorded": true,
+    "replayed": false
+  },
+  "warnings": [],
+  "retryability": {
+    "retryable": false
+  }
+}

@@ -1,5 +1,15 @@
 import path from "node:path";
+import {
+  collectGrantedMachineTokenBindingRecords,
+  createMachineTokenFacadeGeneration,
+  destroyMachineTokenFacadeGeneration,
+  getLiveMachineTokenFacadeGenerationHandle,
+  getLiveMachineTokenPluginFacade,
+  liveMachineTokenOwnershipMatchesGrantedRecords,
+  publishMachineTokenFacadeGeneration,
+} from "../agents/machine-token-host.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { resolveConfiguredSecretInputString } from "../gateway/resolve-configured-secret-input-string.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { createLazyRuntimeModule } from "../shared/lazy-runtime.js";
 import { resolveUserPath } from "../utils.js";
@@ -60,6 +70,8 @@ export function createPluginApiFactory(
     registerHttpRoute,
     registerHostedMediaResolver,
     registerMcpServerConnectionResolver,
+    registerMcpServerToolFilter,
+    unregisterMcpServerToolFilter,
     registerProvider,
     registerWorkerProvider,
     registerModelCatalogProvider,
@@ -130,6 +142,9 @@ export function createPluginApiFactory(
     }
     for (const guard of guards) {
       guard.active = false;
+      if (guard.machineTokenGeneration && !guard.machineTokenGenerationReused) {
+        destroyMachineTokenFacadeGeneration(guard.machineTokenGeneration);
+      }
     }
     pluginSideEffectGuards.delete(pluginId);
   };
@@ -164,6 +179,66 @@ export function createPluginApiFactory(
       !isPluginRegistryRetired(registry) &&
       (isActivatingLoadedRecord() ||
         (isPluginRegistryActivated(registry) && isLoadedRecordInRegistry()));
+    const mcpServers = params.config.mcp?.servers;
+    const grantedRecords = collectGrantedMachineTokenBindingRecords({
+      pluginId: record.id,
+      pluginConfig: params.pluginConfig,
+      ...(mcpServers && typeof mcpServers === "object"
+        ? { mcpServers: mcpServers as Record<string, unknown> }
+        : {}),
+    });
+    const mayStageMachineTokenFacade =
+      registrationMode === "full" &&
+      registryParams.activateGlobalSideEffects !== false &&
+      grantedRecords.length > 0;
+    let machineTokenFacade: OpenClawPluginApi["machineTokenFacade"];
+    if (mayStageMachineTokenFacade) {
+      const frozenGrantedRecords = Object.freeze(
+        grantedRecords.map((granted) =>
+          Object.freeze({
+            ...granted,
+            keyRef: Object.freeze({ ...granted.keyRef }),
+            ...(granted.operations ? { operations: Object.freeze([...granted.operations]) } : {}),
+            ...(granted.scopes ? { scopes: Object.freeze([...granted.scopes]) } : {}),
+          }),
+        ),
+      );
+      sideEffectGuard.machineTokenGrantedRecords = frozenGrantedRecords;
+      if (liveMachineTokenOwnershipMatchesGrantedRecords(record.id, grantedRecords)) {
+        const liveHandle = getLiveMachineTokenFacadeGenerationHandle(record.id);
+        const liveFacade = getLiveMachineTokenPluginFacade(record.id);
+        if (liveHandle && liveFacade) {
+          sideEffectGuard.machineTokenGeneration = liveHandle;
+          sideEffectGuard.machineTokenGenerationReused = true;
+          machineTokenFacade = liveFacade;
+        }
+      }
+      if (!machineTokenFacade) {
+        const generation = createMachineTokenFacadeGeneration({
+          pluginId: record.id,
+          grantedRecords,
+          resolveKeyPem: async ({ bindingId, keyRef }) => {
+            const resolved = await resolveConfiguredSecretInputString({
+              config: params.config,
+              env: process.env,
+              value: keyRef,
+              path: `plugins.entries.${record.id}.machineToken[${bindingId}].clientAssertionKeyRef`,
+            });
+            if (!resolved.value) {
+              throw new Error(
+                resolved.unresolvedRefReason ??
+                  `Machine-token binding "${bindingId}" clientAssertionKeyRef unresolved`,
+              );
+            }
+            return resolved.value;
+          },
+        });
+        sideEffectGuard.machineTokenGeneration = generation.handle;
+        sideEffectGuard.machineTokenGenerationReused = false;
+        publishMachineTokenFacadeGeneration(generation.handle);
+        machineTokenFacade = generation.facade;
+      }
+    }
     return buildPluginApi({
       id: record.id,
       name: record.name,
@@ -174,6 +249,7 @@ export function createPluginApiFactory(
       registrationMode,
       config: params.config,
       pluginConfig: params.pluginConfig,
+      ...(machineTokenFacade ? { machineTokenFacade } : {}),
       runtime: resolvePluginRuntime(record.id),
       logger: normalizeLogger(registryParams.logger),
       resolvePath: (input: string) => resolvePluginPath(input, record.rootDir),
@@ -188,6 +264,10 @@ export function createPluginApiFactory(
                 registerHostedMediaResolver(record, resolver),
               registerMcpServerConnectionResolver: (resolver) =>
                 registerMcpServerConnectionResolver(record, resolver),
+              registerMcpServerToolFilter: (resolver) =>
+                registerMcpServerToolFilter(record, resolver),
+              unregisterMcpServerToolFilter: (serverName) =>
+                unregisterMcpServerToolFilter(record, serverName),
               registerProvider: (provider) => registerProvider(record, provider),
               registerWorkerProvider: (provider) => registerWorkerProvider(record, provider),
               registerModelCatalogProvider: (provider) =>

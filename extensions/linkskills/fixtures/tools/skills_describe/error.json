@@ -1,0 +1,9 @@
+{
+  "schema_version": "0.1",
+  "error_id": "err:fixture-not_found",
+  "code": "not_found",
+  "message": "Unknown skill_id",
+  "retryable": false,
+  "occurred_at": "2026-07-27T10:00:00Z",
+  "request_id": "req:fixture-01"
+}

@@ -1,0 +1,45 @@
+{
+  "description": "Expired AuthClaims must be rejected (platform.auth-claims/1.1.0).",
+  "platformContract": "platform.auth-claims/1.1.0",
+  "expect": "reject",
+  "reasons": [
+    "expired"
+  ],
+  "claims": {
+    "claimContractVersion": "platform.auth-claims/1.1.0",
+    "actorId": "actor-lisa",
+    "actorKind": "persona",
+    "runtimeBindingId": "bind-lisa-openclaw-1",
+    "credentialId": "cred-skills-expired",
+    "orgId": "org-internal",
+    "internal": true,
+    "serviceScopes": [
+      "lskills"
+    ],
+    "permittedOperations": [
+      "read",
+      "execute"
+    ],
+    "issuedAt": "2026-07-26T00:00:00.000Z",
+    "expiresAt": "2026-07-26T12:00:00.000Z",
+    "issuer": "linkplatform-issuer",
+    "audience": [
+      "lskills-api"
+    ],
+    "correlationId": "corr-skills-expired"
+  },
+  "context": {
+    "expectedOrgId": "org-internal",
+    "expectedAudience": "lskills-api",
+    "requiredService": "lskills",
+    "now": "2026-07-27T06:00:00.000Z",
+    "credentialStatus": "expired",
+    "actorLifecycleState": "active",
+    "bindingState": "active"
+  },
+  "expected": {
+    "code": "unauthorized",
+    "auth_code": "auth_expired",
+    "retryable": false
+  }
+}

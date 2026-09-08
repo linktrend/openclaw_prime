@@ -1,0 +1,7 @@
+{
+  "code": "internal_error",
+  "message": "Transient Brain Gateway failure; retry with backoff.",
+  "safeMessage": "The Gateway could not complete this request.",
+  "retryable": true,
+  "retryAfterMs": 250
+}

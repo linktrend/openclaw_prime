@@ -1,0 +1,11 @@
+{
+  "tool": "brain_conflict_respond",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "conf:test:001",
+    "taskId": "task_test_001",
+    "conflictId": "conflict_test_001",
+    "response": "proceed_with_caution",
+    "note": "Acknowledged overlap."
+  }
+}

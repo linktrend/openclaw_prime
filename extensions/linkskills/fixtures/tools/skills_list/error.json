@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1",
+  "error_id": "err:fixture-validation_failed",
+  "code": "validation_failed",
+  "message": "usable_only must be boolean",
+  "retryable": false,
+  "occurred_at": "2026-07-27T10:00:00Z",
+  "request_id": "req:fixture-01",
+  "field_errors": [
+    {
+      "path": "usable_only",
+      "message": "must be boolean"
+    }
+  ]
+}

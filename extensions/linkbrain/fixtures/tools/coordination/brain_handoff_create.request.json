@@ -1,0 +1,10 @@
+{
+  "tool": "brain_handoff_create",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "ho:test:001",
+    "fromTaskId": "task_test_001",
+    "summary": "Handoff packet.",
+    "toActorBindingId": "binding_test_peer"
+  }
+}

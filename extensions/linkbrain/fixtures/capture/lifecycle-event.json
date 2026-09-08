@@ -1,0 +1,11 @@
+{
+  "description": "Lifecycle envelope for compaction/reset/session boundaries",
+  "event": {
+    "type": "before_compaction",
+    "sessionId": "sess_test_001",
+    "actorId": "actor_test_lisa",
+    "occurredAt": "2026-07-27T10:00:00.000Z",
+    "streamId": "stream_test_lisa",
+    "lastSequence": 12
+  }
+}

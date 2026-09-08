@@ -1,0 +1,22 @@
+{
+  "description": "Must be hard-rejected by Skills fake: raw-tool-args",
+  "operation": "skills_run_update",
+  "request": {
+    "params": {
+      "run_id": "run:fixture-skills-01",
+      "status": "running",
+      "tool_args": {
+        "cmd": "rm -rf /"
+      },
+      "raw_tool_parameters": {
+        "path": "/etc/passwd"
+      }
+    },
+    "request_id": "req:prohibited-raw-tool-args"
+  },
+  "expected": {
+    "code": "validation_failed",
+    "retryable": false,
+    "prohibited_field_present": true
+  }
+}

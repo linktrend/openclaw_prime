@@ -1,0 +1,26 @@
+{
+  "schema_version": "0.1",
+  "event_id": "evt:fixture-01",
+  "event_type": "skill.run_started",
+  "occurred_at": "2026-07-27T10:00:00Z",
+  "sequence": 1,
+  "idempotency_key": "idem:run-start-01",
+  "correlation_id": "corr:fixture-01",
+  "actor_id": "actor:fixture-lisa-01",
+  "runtime_profile_id": "runtime:fixture-openclaw-01",
+  "session_id": "session:fixture-opaque-01",
+  "run_id": "run:fixture-skills-01",
+  "skill_id": "skill.fixture.echo",
+  "skill_release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "execution_profile_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "outcome": "info",
+  "sensitivity": "public_internal",
+  "metrics": {
+    "duration_ms": 0,
+    "tool_calls": 0
+  },
+  "payload": {
+    "status": "started",
+    "note": "No conversation or content fields permitted"
+  }
+}

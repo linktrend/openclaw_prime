@@ -1,0 +1,30 @@
+{
+  "description": "Must be hard-rejected by Skills fake: brain-findings",
+  "operation": "skills_run_update",
+  "request": {
+    "params": {
+      "run_id": "run:fixture-skills-01",
+      "status": "running",
+      "brain_findings": [
+        {
+          "id": "f1",
+          "text": "secret finding"
+        }
+      ],
+      "brain_search_results": [
+        {
+          "title": "x"
+        }
+      ],
+      "private_episode": {
+        "id": "e1"
+      }
+    },
+    "request_id": "req:prohibited-brain-findings"
+  },
+  "expected": {
+    "code": "validation_failed",
+    "retryable": false,
+    "prohibited_field_present": true
+  }
+}

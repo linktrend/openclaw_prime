@@ -1,0 +1,26 @@
+{
+  "description": "Must be rejected: chain-of-thought / reasoning fields",
+  "batch": {
+    "batchId": "batch_test_bad_reasoning",
+    "sessionId": "session_test_lisa",
+    "idempotencyKey": "cap:session_test_lisa:1:1",
+    "capturedAt": "2026-07-27T10:00:00.000Z",
+    "events": [
+      {
+        "eventId": "event_test_bad_reasoning",
+        "sequence": 1,
+        "occurredAt": "2026-07-27T10:00:00.000Z",
+        "role": "assistant",
+        "eventType": "message",
+        "content": "ok",
+        "classification": "private",
+        "reasoning": "SECRET_CHAIN_OF_THOUGHT"
+      }
+    ]
+  },
+  "expectedRejection": "validation_error",
+  "prohibitedFields": [
+    "reasoning"
+  ],
+  "expectedRejectionDetail": "prohibited_field"
+}

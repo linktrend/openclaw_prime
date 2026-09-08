@@ -1,0 +1,7 @@
+{
+  "params": {
+    "skill_id": "skill.fixture.echo",
+    "release_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "request_id": "req:release-01"
+}

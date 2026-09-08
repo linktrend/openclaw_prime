@@ -1,0 +1,205 @@
+{
+  "id": "linkbrain",
+  "name": "LiNKbrain",
+  "description": "Private Brain adapter for Lisa: durable capture outbox and coordination against Brain Gateway contracts. Default-disabled; fake-only until activation gates.",
+  "enabledByDefault": false,
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": ["linkbrain_read", "linkbrain_write"]
+  },
+  "toolMetadata": {
+    "linkbrain_read": { "optional": true },
+    "linkbrain_write": { "optional": true }
+  },
+  "configContracts": {
+    "secretInputs": {
+      "paths": [
+        {
+          "path": "ingestionCredential",
+          "expected": "string",
+          "ownerKind": "plugin"
+        }
+      ]
+    }
+  },
+  "uiHints": {
+    "mcpRead": {
+      "label": "Brain MCP Read",
+      "help": "When false, no Brain read tools are exposed; native OpenClaw continues."
+    },
+    "captureEnqueue": {
+      "label": "Capture Enqueue",
+      "help": "When false, no new capture records are accepted; existing outbox is retained."
+    },
+    "captureDrain": {
+      "label": "Capture Drain",
+      "help": "When false, stop Brain delivery; local durable queue is retained."
+    },
+    "coordinationWrites": {
+      "label": "Coordination Writes",
+      "help": "When false, block Brain coordination mutations only."
+    },
+    "ingestionCredential": {
+      "label": "Brain Ingestion Credential",
+      "help": "SecretRef or string for the Brain-only ingestion credential. Never paste live secrets into source.",
+      "sensitive": true
+    },
+    "machineToken": {
+      "label": "Machine Token Binding",
+      "help": "Optional client_credentials + private_key_jwt binding. When set, HTTP uses machine-token instead of ingestionCredential. clientAssertionKeyRef must be a SecretRef object (no literal PEM/JWK/env/CLI strings). bindingId must not equal Skills bindingId. issuerUrl requires HTTPS outside explicit local-test loopback; managed MCP endpoints also require HTTPS except for the exact allowProductionLoopbackHttp production exception. For Tailscale/CGNAT/private-overlay HTTPS issuers set allowPrivateNetwork=true (default false); never use environment=test for stage/production."
+    },
+    "redactionPolicyVersion": {
+      "label": "Redaction Policy Version",
+      "help": "Allowlist redaction policy version applied to internal envelopes before remote writes."
+    },
+    "batchMaxEvents": {
+      "label": "Batch Max Events",
+      "help": "Upper bound on events per capture batch."
+    },
+    "batchMaxBytes": {
+      "label": "Batch Max Bytes",
+      "help": "Upper bound on serialized capture batch size."
+    },
+    "outboxMaxEntries": {
+      "label": "Outbox Max Entries",
+      "help": "Per-namespace keyed-store capacity with reject-new overflow."
+    },
+    "transportMode": {
+      "label": "Transport Mode",
+      "help": "disabled (default), fake (test-only), mcp (managed mcp.servers entry), or http (ingestionEndpoint + SecretRef bearer)."
+    },
+    "mcpServerName": {
+      "label": "MCP Server Name",
+      "help": "Key under mcp.servers for Brain managed MCP. Default linkbrain."
+    },
+    "allowProductionLoopbackHttp": {
+      "label": "Allow Production Loopback HTTP",
+      "help": "Default false. In production, permits only the co-located Brain MCP endpoint http://127.0.0.1:18789/mcp. It does not permit localhost names, IPv6, other loopback addresses, ports, paths, private networks, or public HTTP."
+    },
+    "ingestionEndpoint": {
+      "label": "Ingestion Endpoint",
+      "help": "HTTP JSON endpoint for Brain writes when transportMode is http."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "$defs": {
+      "secretRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["env", "file", "exec"]
+          },
+          "provider": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "required": ["source", "provider", "id"]
+      },
+      "secretInput": {
+        "anyOf": [
+          { "type": "string", "minLength": 1 },
+          { "$ref": "#/$defs/secretRef" }
+        ]
+      },
+      "machineToken": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bindingId", "issuerUrl", "clientId", "clientAssertionKeyRef"],
+        "properties": {
+          "bindingId": { "type": "string", "minLength": 1 },
+          "issuerUrl": { "type": "string", "minLength": 1 },
+          "clientId": { "type": "string", "minLength": 1 },
+          "audience": { "type": "string" },
+          "scope": { "type": "string" },
+          "allowPrivateNetwork": {
+            "type": "boolean",
+            "default": false,
+            "description": "Explicit least-privilege opt-in for HTTPS private/CGNAT/Tailscale issuers. Default false. Pins the configured issuer origin/hostname under SSRF; does not enable localTest and does not broadly disable SSRF. Metadata/link-local remain blocked."
+          },
+          "clientAssertionKeyRef": { "$ref": "#/$defs/secretRef" }
+        }
+      }
+    },
+    "properties": {
+      "mcpRead": {
+        "type": "boolean",
+        "default": false
+      },
+      "captureEnqueue": {
+        "type": "boolean",
+        "default": false
+      },
+      "captureDrain": {
+        "type": "boolean",
+        "default": false
+      },
+      "coordinationWrites": {
+        "type": "boolean",
+        "default": false
+      },
+      "transportMode": {
+        "type": "string",
+        "enum": ["disabled", "fake", "mcp", "http"],
+        "default": "disabled"
+      },
+      "mcpServerName": {
+        "type": "string",
+        "default": "linkbrain"
+      },
+      "allowProductionLoopbackHttp": {
+        "type": "boolean",
+        "default": false,
+        "description": "Explicit production opt-in for only http://127.0.0.1:18789/mcp. All other non-test HTTP targets remain rejected."
+      },
+      "ingestionEndpoint": {
+        "type": "string",
+        "description": "Brain ingestion endpoint for transportMode=http (SecretRef bearer via ingestionCredential)."
+      },
+      "ingestionCredential": {
+        "$ref": "#/$defs/secretInput"
+      },
+      "machineToken": {
+        "$ref": "#/$defs/machineToken"
+      },
+      "redactionPolicyVersion": {
+        "type": "string",
+        "default": "brain.redaction.v0"
+      },
+      "batchMaxEvents": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 32
+      },
+      "batchMaxBytes": {
+        "type": "integer",
+        "minimum": 1024,
+        "default": 49152
+      },
+      "flushIntervalMs": {
+        "type": "integer",
+        "minimum": 100,
+        "default": 5000
+      },
+      "outboxMaxEntries": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 1000
+      },
+      "outboxAgeAlarmMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "default": 3600000
+      },
+      "environment": {
+        "type": "string",
+        "enum": ["test", "stage", "production"],
+        "default": "test"
+      }
+    }
+  }
+}

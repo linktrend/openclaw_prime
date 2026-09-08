@@ -1,0 +1,46 @@
+{
+  "description": "Sanitized auth outcome fixture: wrong-audience AuthClaims (platform.auth-claims/1.1.0).",
+  "platformContract": "platform.auth-claims/1.1.0",
+  "expect": "reject",
+  "reasons": [
+    "wrong_audience"
+  ],
+  "expectedOutcome": "wrong_audience",
+  "claims": {
+    "claimContractVersion": "platform.auth-claims/1.1.0",
+    "actorId": "actor-lisa",
+    "actorKind": "persona",
+    "runtimeBindingId": "bind-lisa-openclaw-1",
+    "credentialId": "cred-1",
+    "orgId": "org-internal",
+    "internal": true,
+    "serviceScopes": [
+      "lbrain"
+    ],
+    "permittedOperations": [
+      "read"
+    ],
+    "issuedAt": "2026-07-27T00:00:00.000Z",
+    "expiresAt": "2026-07-27T12:00:00.000Z",
+    "issuer": "linkplatform-issuer",
+    "audience": [
+      "lskills-api"
+    ],
+    "correlationId": "corr-brain-wrong-audience"
+  },
+  "context": {
+    "expectedOrgId": "org-internal",
+    "expectedAudience": "lbrain-api",
+    "requiredService": "lbrain",
+    "now": "2026-07-27T06:00:00.000Z",
+    "credentialStatus": "active",
+    "actorLifecycleState": "active",
+    "bindingState": "active"
+  },
+  "error": {
+    "code": "unauthorized",
+    "retryable": false,
+    "safeMessage": "Credential wrong audience.",
+    "message": "Credential wrong audience."
+  }
+}

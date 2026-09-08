@@ -1,0 +1,10 @@
+{
+  "params": {
+    "run_id": "run:fixture-skills-01",
+    "kind": "rating",
+    "rating": 5,
+    "summary": "Structured feedback only"
+  },
+  "idempotency_key": "idem:feedback-01",
+  "request_id": "req:feedback-01"
+}

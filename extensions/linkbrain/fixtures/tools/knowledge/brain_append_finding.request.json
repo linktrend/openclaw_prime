@@ -1,0 +1,14 @@
+{
+  "tool": "brain_append_finding",
+  "authToken": "fake-valid-token",
+  "arguments": {
+    "idempotencyKey": "find:test:001",
+    "finding": {
+      "title": "Test finding",
+      "summary": "Sanitized finding body.",
+      "tags": [
+        "test"
+      ]
+    }
+  }
+}

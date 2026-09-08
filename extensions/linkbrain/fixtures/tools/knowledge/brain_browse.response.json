@@ -1,0 +1,26 @@
+{
+  "tool": "brain_browse",
+  "contractVersion": "1.0.0",
+  "serverTime": "2026-07-27T10:00:00.000Z",
+  "actorId": "actor_test_lisa",
+  "actorBindingId": "binding_test_lisa_openclaw",
+  "requestId": "req_brain_browse_ok",
+  "idempotencyKey": null,
+  "result": {
+    "items": [
+      {
+        "id": "know_test_001",
+        "title": "Test index node",
+        "type": "topic"
+      }
+    ],
+    "breadcrumbs": [
+      "knowledge",
+      "test"
+    ]
+  },
+  "warnings": [],
+  "retryability": {
+    "retryable": false
+  }
+}
