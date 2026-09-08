@@ -1,12 +1,41 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
 import {
+  BoardActionParamsSchema,
   BoardSnapshotSchema,
   BoardWidgetAppViewParamsSchema,
   BoardWidgetAppViewResultSchema,
   BoardWidgetGrantParamsSchema,
   BoardWidgetPutParamsSchema,
+  BoardWidgetPutResultSchema,
+  BoardWidgetResizeOpSchema,
 } from "./board.js";
+
+describe("BoardActionParamsSchema", () => {
+  it("accepts both exact cron triggers and plugin action verbs", () => {
+    expect(
+      Value.Check(BoardActionParamsSchema, {
+        ticket: "v1.ticket.signature",
+        action: "cron.trigger",
+        jobId: "nightly",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(BoardActionParamsSchema, {
+        ticket: "v1.ticket.signature",
+        action: "workboard.dispatch",
+        params: { boardId: "release" },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(BoardActionParamsSchema, {
+        ticket: "v1.ticket.signature",
+        action: "workboard.dispatch",
+        params: "release",
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("BoardSnapshotSchema", () => {
   it("accepts optional HTML widget view metadata", () => {
@@ -19,17 +48,63 @@ describe("BoardSnapshotSchema", () => {
           name: "status",
           tabId: "main",
           contentKind: "html",
+          presentation: "frameless",
+          heightMode: "fixed",
           sizeW: 6,
           sizeH: 4,
           position: 0,
           grantState: "none",
           revision: 1,
           declaredSummary: ["Network access: https://example.com"],
+          declared: { netOrigins: ["https://example.com"], tools: ["health"] },
           frameUrl: "/__openclaw__/board/agent%3Amain%3Amain/status/index.html?bt=ticket",
+          viewTicket: "v1.ticket.signature",
+          viewTicketTtlMs: 60_000,
+          viewGeneration: "a".repeat(32),
+          sandboxUrl: "/mcp-app-sandbox?csp=encoded",
+          sandboxPort: 18790,
         },
       ],
     };
     expect(Value.Check(BoardSnapshotSchema, snapshot)).toBe(true);
+    expect(
+      Value.Check(BoardSnapshotSchema, {
+        ...snapshot,
+        widgets: [{ ...snapshot.widgets[0], contentOwner: "html" }],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(BoardSnapshotSchema, {
+        ...snapshot,
+        widgets: [
+          {
+            ...snapshot.widgets[0],
+            contentKind: "plugin",
+            pluginKind: "diagrams:diagram",
+            contentOwner: "registered",
+            registeredContentKind: "diagram",
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(BoardSnapshotSchema, {
+        ...snapshot,
+        widgets: [{ ...snapshot.widgets[0], contentOwner: "unknown" }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(BoardSnapshotSchema, {
+        ...snapshot,
+        widgets: [
+          {
+            ...snapshot.widgets[0],
+            contentOwner: "registered",
+            registeredContentKind: "Invalid Kind",
+          },
+        ],
+      }),
+    ).toBe(false);
     expect(
       Value.Check(BoardSnapshotSchema, {
         ...snapshot,
@@ -39,7 +114,25 @@ describe("BoardSnapshotSchema", () => {
     expect(
       Value.Check(BoardSnapshotSchema, {
         ...snapshot,
+        widgets: [{ ...snapshot.widgets[0], presentation: "floating" }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(BoardSnapshotSchema, {
+        ...snapshot,
+        widgets: [{ ...snapshot.widgets[0], heightMode: "elastic" }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(BoardSnapshotSchema, {
+        ...snapshot,
         widgets: [{ ...snapshot.widgets[0], declaredSummary: [42] }],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(BoardSnapshotSchema, {
+        ...snapshot,
+        widgets: [{ ...snapshot.widgets[0], viewGeneration: "not-a-generation" }],
       }),
     ).toBe(false);
   });
@@ -74,14 +167,120 @@ describe("BoardSnapshotSchema", () => {
 });
 
 describe("BoardWidgetPutParamsSchema", () => {
+  it("accepts bounded plugin widget input shapes", () => {
+    const pluginWidget = {
+      sessionKey: "agent:main:main",
+      name: "work-item",
+      content: {
+        kind: "plugin",
+        pluginKind: "workboard:card",
+        props: { cardId: "card-123" },
+      },
+    };
+    expect(Value.Check(BoardWidgetPutParamsSchema, pluginWidget)).toBe(true);
+    expect(
+      Value.Check(BoardWidgetPutParamsSchema, {
+        ...pluginWidget,
+        content: { ...pluginWidget.content, pluginKind: "missing-separator" },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(BoardWidgetPutParamsSchema, {
+        ...pluginWidget,
+        content: { ...pluginWidget.content, props: ["not", "an", "object"] },
+      }),
+    ).toBe(false);
+  });
+
   it("accepts a gateway-resolved canvas document source", () => {
     expect(
       Value.Check(BoardWidgetPutParamsSchema, {
         sessionKey: "agent:main:main",
         name: "status",
         content: { kind: "canvas-doc", docId: "cv_status" },
+        presentation: "full-bleed",
+        heightMode: "auto",
       }),
     ).toBe(true);
+  });
+
+  it("accepts bounded generated widget identity metadata", () => {
+    const pin = {
+      sessionKey: "agent:main:main",
+      name: "status",
+      content: { kind: "html", html: "<p>ok</p>" },
+      generatedIdentity: {
+        source: "show_widget",
+        key: "a".repeat(64),
+        fallbackName: "status-aaaaaaaa",
+      },
+    };
+    expect(Value.Check(BoardWidgetPutParamsSchema, pin)).toBe(true);
+    expect(
+      Value.Check(BoardWidgetPutParamsSchema, {
+        ...pin,
+        generatedIdentity: { ...pin.generatedIdentity, source: "canvas" },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(BoardWidgetPutParamsSchema, {
+        ...pin,
+        generatedIdentity: { ...pin.generatedIdentity, key: "short" },
+      }),
+    ).toBe(false);
+  });
+
+  it("returns the committed widget name with the board snapshot", () => {
+    expect(
+      Value.Check(BoardWidgetPutResultSchema, {
+        sessionKey: "agent:main:main",
+        revision: 1,
+        tabs: [{ tabId: "main", title: "Main", position: 0, chatDock: "right" }],
+        widgets: [
+          {
+            name: "status-aaaaaaaa",
+            tabId: "main",
+            contentKind: "html",
+            sizeW: 6,
+            sizeH: 4,
+            position: 0,
+            grantState: "none",
+            revision: 1,
+          },
+        ],
+        resolvedWidgetName: "status-aaaaaaaa",
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects invalid widget presentation and height modes", () => {
+    const pin = {
+      sessionKey: "agent:main:main",
+      name: "status",
+      content: { kind: "html", html: "<p>ok</p>" },
+    };
+    expect(Value.Check(BoardWidgetPutParamsSchema, { ...pin, presentation: "floating" })).toBe(
+      false,
+    );
+    expect(Value.Check(BoardWidgetPutParamsSchema, { ...pin, heightMode: "elastic" })).toBe(false);
+    expect(
+      Value.Check(BoardWidgetResizeOpSchema, {
+        kind: "widget_resize",
+        name: "status",
+        sizeW: 6,
+        sizeH: 4,
+        heightMode: "fixed",
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(BoardWidgetResizeOpSchema, {
+        kind: "widget_resize",
+        name: "status",
+        sizeW: 6,
+        sizeH: 4,
+        heightMode: "elastic",
+      }),
+    ).toBe(false);
   });
 
   it("requires an active source view for MCP App pins", () => {
@@ -90,23 +289,22 @@ describe("BoardWidgetPutParamsSchema", () => {
       name: "weather-app",
       content: {
         kind: "mcp-app",
-        descriptor: {
-          viewId: "mcp-app-source",
-          serverName: "weather",
-          toolName: "show",
-          uiResourceUri: "ui://weather/app",
-          originSessionKey: "agent:main:main",
-          toolCallId: "call-1",
-        },
+        viewId: "mcp-app-source",
       },
     };
     expect(Value.Check(BoardWidgetPutParamsSchema, pin)).toBe(true);
     expect(
       Value.Check(BoardWidgetPutParamsSchema, {
         ...pin,
+        content: { ...pin.content, viewId: undefined },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(BoardWidgetPutParamsSchema, {
+        ...pin,
         content: {
-          ...pin.content,
-          descriptor: { ...pin.content.descriptor, viewId: undefined },
+          kind: "mcp-app",
+          descriptor: { viewId: "mcp-app-source" },
         },
       }),
     ).toBe(false);
@@ -127,6 +325,7 @@ describe("BoardWidgetAppView schemas", () => {
       Value.Check(BoardWidgetAppViewParamsSchema, {
         sessionKey: "agent:main:main",
         name: "weather-app",
+        revision: 3,
       }),
     ).toBe(false);
     expect(
@@ -139,7 +338,7 @@ describe("BoardWidgetAppView schemas", () => {
 });
 
 describe("BoardWidgetGrantParamsSchema", () => {
-  it("requires the widget revision being approved", () => {
+  it("requires the widget revision and instance being approved", () => {
     expect(
       Value.Check(BoardWidgetGrantParamsSchema, {
         sessionKey: "agent:main:main",
@@ -154,6 +353,15 @@ describe("BoardWidgetGrantParamsSchema", () => {
         sessionKey: "agent:main:main",
         name: "status",
         decision: "granted",
+        revision: 1,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(BoardWidgetGrantParamsSchema, {
+        sessionKey: "agent:main:main",
+        name: "status",
+        decision: "granted",
+        instanceId: "widget-instance",
       }),
     ).toBe(false);
   });

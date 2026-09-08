@@ -98,7 +98,8 @@ async function awaitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Pro
     }
     void promise.then(
       (value) => settle(() => resolve(value)),
-      (error: unknown) => settle(() => reject(error)),
+      (error: unknown) =>
+        settle(() => reject(error instanceof Error ? error : new Error(String(error)))),
     );
   });
 }
@@ -291,11 +292,5 @@ export async function resolveMachineTokenAccess(params: {
   });
   inflightByFingerprint.set(fingerprint, flight);
 
-  try {
-    return await awaitWithAbort(flight, params.signal);
-  } catch (error) {
-    // Caller abort while waiting must not strand the flight map if this caller
-    // owns the only reference and mint already failed/aborted.
-    throw error;
-  }
+  return await awaitWithAbort(flight, params.signal);
 }

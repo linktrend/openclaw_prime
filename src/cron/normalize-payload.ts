@@ -9,6 +9,7 @@ import {
   TrimmedNonEmptyStringFieldSchema,
   parseOptionalField,
 } from "./delivery-field-schemas.js";
+import { snapshotOwnCronRecord } from "./own-record.js";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -44,7 +45,7 @@ function normalizeCommandEnv(value: unknown): Record<string, string> {
   return Object.fromEntries(entries);
 }
 
-function normalizeCommandArgv(value: unknown): string[] | undefined {
+export function normalizeCronCommandArgv(value: unknown): string[] | undefined {
   if (!Array.isArray(value) || value.length === 0) {
     return undefined;
   }
@@ -66,7 +67,7 @@ function hasAgentTurnOnlyPayloadHint(payload: UnknownRecord): boolean {
 }
 
 export function normalizeCronPayload(payload: UnknownRecord): UnknownRecord {
-  const next: UnknownRecord = { ...payload };
+  const next = snapshotOwnCronRecord(payload);
   const kindRaw = normalizeLowercaseStringOrEmpty(next.kind);
   if (kindRaw === "agentturn") {
     next.kind = "agentTurn";
@@ -76,6 +77,8 @@ export function normalizeCronPayload(payload: UnknownRecord): UnknownRecord {
     next.kind = "command";
   } else if (kindRaw === "script") {
     next.kind = "script";
+  } else if (kindRaw === "skillcollectionreview") {
+    next.kind = "skillCollectionReview";
   } else if (kindRaw) {
     next.kind = kindRaw;
   }
@@ -149,7 +152,7 @@ export function normalizeCronPayload(payload: UnknownRecord): UnknownRecord {
     }
   }
   if ("argv" in next) {
-    const argv = normalizeCommandArgv(next.argv);
+    const argv = normalizeCronCommandArgv(next.argv);
     if (Array.isArray(argv) && argv.length > 0) {
       next.argv = argv;
     } else {
@@ -258,5 +261,5 @@ export function normalizeCronPayload(payload: UnknownRecord): UnknownRecord {
     delete next.noOutputTimeoutSeconds;
     delete next.outputMaxBytes;
   }
-  return next;
+  return { ...next };
 }

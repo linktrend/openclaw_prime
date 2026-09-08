@@ -2,6 +2,8 @@ use crate::gateway_device_identity::{
     GatewayAuth, GatewayDeviceIdentity, GatewayDeviceIdentityStore, CLIENT_DEVICE_FAMILY,
     CLIENT_ID, CLIENT_MODE, CLIENT_PLATFORM, CLIENT_ROLE, CLIENT_SCOPES,
 };
+#[cfg(any(target_os = "linux", test))]
+use crate::gateway_sleep::SleepPrepareOutcome;
 use crate::quickchat::QUICKCHAT_LABEL;
 use futures_util::{SinkExt, StreamExt};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -11,13 +13,18 @@ use rustls::{ClientConfig, DigitallySignedStruct, Error as RustlsError, Signatur
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::fmt;
 use std::io::ErrorKind;
+#[cfg(any(target_os = "linux", test))]
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use subtle::ConstantTimeEq;
-use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
+#[cfg(any(target_os = "linux", test))]
+use tauri::Url;
+use tauri::{AppHandle, Emitter, Manager, Webview};
 use tokio::sync::{mpsc, oneshot};
 use tokio_tungstenite::tungstenite::{Error as TungsteniteError, Message};
 use tokio_tungstenite::{
@@ -25,6 +32,7 @@ use tokio_tungstenite::{
 };
 use uuid::Uuid;
 
+const AGENT_KIND_CLIENT_CAPABILITY: &str = "agent-kind";
 const GATEWAY_STATE_EVENT: &str = "quickchat:gateway-state";
 const CHAT_EVENT: &str = "quickchat:chat-event";
 const GATEWAY_DEVICE_IDENTITY_FILE: &str = "quickchat-gateway-device.json";
@@ -33,6 +41,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(35);
+#[cfg(any(target_os = "linux", test))]
+const SUSPEND_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const DRIVER_TICK: Duration = Duration::from_secs(1);
 const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(30);
 const PAIRING_REQUIRED_DETAIL_CODE: &str = "PAIRING_REQUIRED";
@@ -44,6 +54,7 @@ const TLS_PIN_MISMATCH_ERROR: &str = "Gateway TLS certificate fingerprint mismat
 // Mirrors packages/gateway-protocol/src/version.ts. The Gateway rejects other ranges.
 const MIN_PROTOCOL_VERSION: u32 = 4;
 const MAX_PROTOCOL_VERSION: u32 = 4;
+const INLINE_WIDGETS_CLIENT_CAPABILITY: &str = "inline-widgets";
 
 #[derive(Clone)]
 pub struct GatewayWsConfig {
@@ -183,6 +194,7 @@ pub(crate) struct GatewayAgentIdentity {
 #[derive(Clone, Deserialize)]
 pub(crate) struct GatewayAgentSummary {
     pub id: String,
+    pub kind: Option<String>,
     pub name: Option<String>,
     pub identity: Option<GatewayAgentIdentity>,
 }
@@ -238,19 +250,68 @@ pub(crate) struct ChatSendResult {
     pub(crate) run_id: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginSurfaceRefreshResponse {
+    plugin_surface_urls: Option<HashMap<String, String>>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SuspendPrepareResponse {
+    status: Option<String>,
+    suspension_id: Option<String>,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl SuspendPrepareResponse {
+    fn into_outcome(self) -> SleepPrepareOutcome {
+        match (self.status.as_deref(), self.suspension_id) {
+            (Some("ready"), Some(suspension_id)) if !suspension_id.trim().is_empty() => {
+                SleepPrepareOutcome::Ready { suspension_id }
+            }
+            _ => SleepPrepareOutcome::Busy,
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Deserialize)]
+struct SuspendResumeResponse {
+    resumed: bool,
+}
+
 enum GatewayRequest {
     AgentsList,
     ChatSend(ChatSendParams),
+    RefreshCanvasSurface {
+        observed_url: Option<String>,
+    },
+    #[cfg(target_os = "linux")]
+    SuspendPrepare {
+        request_id: String,
+    },
+    #[cfg(target_os = "linux")]
+    SuspendResume {
+        suspension_id: String,
+    },
 }
 
 enum GatewayResponse {
     AgentsList(AgentsListResult),
     ChatSend(ChatSendAck),
+    CanvasSurface(Option<String>),
+    #[cfg(target_os = "linux")]
+    SuspendPrepare(SuspendPrepareResponse),
+    #[cfg(target_os = "linux")]
+    SuspendResume(SuspendResumeResponse),
 }
 
 enum DriverCommand {
     Request {
         request: GatewayRequest,
+        budget: Option<Duration>,
         reply: oneshot::Sender<Result<GatewayResponse, String>>,
     },
     Reconfigure,
@@ -357,15 +418,24 @@ impl RequestFailure {
     }
 }
 
+#[derive(Clone, Default)]
+struct CanvasSurfaceState {
+    generation: u64,
+    url: Option<String>,
+}
+
 struct GatewayClientInner {
     config: Mutex<Option<GatewayWsConfig>>,
     config_generation: AtomicU64,
     commands: Mutex<Option<mpsc::Sender<DriverCommand>>>,
     agents_cache: Mutex<Option<CachedAgents>>,
     identity: Mutex<Option<GatewayDeviceIdentityStore>>,
+    canvas_surface: Mutex<CanvasSurfaceState>,
+    user_accent: Mutex<Option<String>>,
     connection_notice: Mutex<Option<String>>,
     connection_state: AtomicU64,
     reconnect_paused: AtomicBool,
+    sleep_cycle_depth: AtomicU64,
     running: AtomicBool,
 }
 
@@ -383,9 +453,12 @@ impl GatewayClient {
                 commands: Mutex::new(None),
                 agents_cache: Mutex::new(None),
                 identity: Mutex::new(None),
+                canvas_surface: Mutex::new(CanvasSurfaceState::default()),
+                user_accent: Mutex::new(None),
                 connection_notice: Mutex::new(None),
                 connection_state: AtomicU64::new(GatewayConnectionState::Down as u64),
                 reconnect_paused: AtomicBool::new(false),
+                sleep_cycle_depth: AtomicU64::new(0),
                 running: AtomicBool::new(false),
             }),
         }
@@ -402,7 +475,8 @@ impl GatewayClient {
             .agents_cache
             .lock()
             .expect("gateway agents cache mutex poisoned") = None;
-        self.inner.config_generation.fetch_add(1, Ordering::SeqCst);
+        let generation = self.inner.config_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        self.set_canvas_surface_url(generation, None);
         self.inner.reconnect_paused.store(false, Ordering::SeqCst);
         self.set_connection_state(app, GatewayConnectionState::Down, None);
         if let Some(commands) = self
@@ -427,7 +501,8 @@ impl GatewayClient {
             .agents_cache
             .lock()
             .expect("gateway agents cache mutex poisoned") = None;
-        self.inner.config_generation.fetch_add(1, Ordering::SeqCst);
+        let generation = self.inner.config_generation.fetch_add(1, Ordering::SeqCst) + 1;
+        self.set_canvas_surface_url(generation, None);
         self.inner.reconnect_paused.store(false, Ordering::SeqCst);
         self.set_connection_state(app, GatewayConnectionState::Down, None);
         if let Some(commands) = self
@@ -457,17 +532,22 @@ impl GatewayClient {
         });
     }
 
-    pub fn emit_current_state(&self, window: &WebviewWindow) -> Result<(), String> {
+    pub fn emit_current_state(&self, webview: &Webview) -> Result<(), String> {
         let notice = self
             .inner
             .connection_notice
             .lock()
             .map_err(|_| "Gateway connection notice is unavailable.".to_string())?
             .clone();
-        window
+        webview
             .emit(
                 GATEWAY_STATE_EVENT,
-                GatewayStateEvent::new(self.connection_state(), notice),
+                GatewayStateEvent::new(
+                    self.connection_state(),
+                    notice,
+                    self.canvas_surface_url(),
+                    self.user_accent(),
+                ),
             )
             .map_err(|error| format!("Could not report Gateway connectivity: {error}"))
     }
@@ -523,10 +603,109 @@ impl GatewayClient {
         })
     }
 
-    pub fn resume_reconnect(&self) {
-        if !self.inner.reconnect_paused.load(Ordering::SeqCst) {
-            return;
+    pub async fn refresh_canvas_surface(&self) -> Result<Option<String>, String> {
+        let observed = self.canvas_surface_state();
+        if observed.url.is_none() {
+            return Ok(None);
         }
+        if self.inner.config_generation.load(Ordering::SeqCst) != observed.generation {
+            return Err("Gateway Canvas surface generation changed before refresh.".to_string());
+        }
+        let response = self
+            .request(GatewayRequest::RefreshCanvasSurface {
+                observed_url: observed.url.clone(),
+            })
+            .await?;
+        let GatewayResponse::CanvasSurface(refreshed) = response else {
+            return Err(
+                "Gateway returned the wrong response for plugin.surface.refresh.".to_string(),
+            );
+        };
+        let Some(refreshed) = refreshed else {
+            return Err("Gateway did not return a refreshed Canvas surface.".to_string());
+        };
+        let mut current = self
+            .inner
+            .canvas_surface
+            .lock()
+            .map_err(|_| "Gateway Canvas surface state is unavailable.".to_string())?;
+        if self.inner.config_generation.load(Ordering::SeqCst) != observed.generation
+            || current.generation != observed.generation
+            || current.url != observed.url
+        {
+            return Err("Gateway Canvas surface changed during refresh.".to_string());
+        }
+        current.url = Some(refreshed.clone());
+        Ok(Some(refreshed))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn suspend_prepare(&self, request_id: String) -> Result<SleepPrepareOutcome, String> {
+        let response = tokio::time::timeout(SUSPEND_REQUEST_TIMEOUT, async {
+            self.wait_for_sleep_connection().await;
+            self.request_with_budget(
+                GatewayRequest::SuspendPrepare { request_id },
+                Some(SUSPEND_REQUEST_TIMEOUT),
+            )
+            .await
+        })
+        .await
+        .map_err(|_| "Gateway sleep preparation timed out.".to_string())??;
+        let GatewayResponse::SuspendPrepare(response) = response else {
+            return Err(
+                "Gateway returned the wrong response for gateway.suspend.prepare.".to_string(),
+            );
+        };
+        Ok(response.into_outcome())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn suspend_resume(&self, suspension_id: String) -> Result<bool, String> {
+        let response = tokio::time::timeout(SUSPEND_REQUEST_TIMEOUT, async {
+            self.wait_for_sleep_connection().await;
+            self.request_with_budget(
+                GatewayRequest::SuspendResume { suspension_id },
+                Some(SUSPEND_REQUEST_TIMEOUT),
+            )
+            .await
+        })
+        .await
+        .map_err(|_| "Gateway sleep resume timed out.".to_string())??;
+        let GatewayResponse::SuspendResume(response) = response else {
+            return Err(
+                "Gateway returned the wrong response for gateway.suspend.resume.".to_string(),
+            );
+        };
+        Ok(response.resumed)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn route_token(&self) -> Option<String> {
+        self.inner
+            .config
+            .lock()
+            .expect("gateway config mutex poisoned")
+            .as_ref()
+            .map(|config| config.ws_url.clone())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn is_loopback_route(&self) -> bool {
+        self.loopback_route_token().is_some()
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn loopback_route_token(&self) -> Option<String> {
+        self.inner
+            .config
+            .lock()
+            .expect("gateway config mutex poisoned")
+            .as_ref()
+            .map(|config| config.ws_url.clone())
+            .filter(|route| is_loopback_ws_url(route))
+    }
+
+    pub fn resume_reconnect(&self) {
         if let Some(commands) = self
             .inner
             .commands
@@ -538,7 +717,45 @@ impl GatewayClient {
         }
     }
 
+    pub fn resume_paused_reconnect(&self) {
+        if self.inner.reconnect_paused.load(Ordering::SeqCst) {
+            self.resume_reconnect();
+        }
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn begin_sleep_cycle(&self) {
+        self.inner.sleep_cycle_depth.fetch_add(1, Ordering::SeqCst);
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    pub(crate) fn end_sleep_cycle(&self) {
+        // Depth, not a boolean: an older wake task ending late must not park the
+        // driver while a newer sleep cycle is still active. Saturate at zero so
+        // an unbalanced end can never wrap into a permanently active driver.
+        let _ = self.inner.sleep_cycle_depth.fetch_update(
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+            |depth| depth.checked_sub(1),
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    async fn wait_for_sleep_connection(&self) {
+        while !self.is_connected() {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    }
+
     async fn request(&self, request: GatewayRequest) -> Result<GatewayResponse, String> {
+        self.request_with_budget(request, None).await
+    }
+
+    async fn request_with_budget(
+        &self,
+        request: GatewayRequest,
+        budget: Option<Duration>,
+    ) -> Result<GatewayResponse, String> {
         if !self.is_connected() {
             return Err("Gateway unreachable — retrying".to_string());
         }
@@ -551,7 +768,11 @@ impl GatewayClient {
             .ok_or_else(|| "Gateway unreachable — retrying".to_string())?;
         let (reply, response) = oneshot::channel();
         commands
-            .send(DriverCommand::Request { request, reply })
+            .send(DriverCommand::Request {
+                request,
+                budget,
+                reply,
+            })
             .await
             .map_err(|_| "Gateway unreachable — retrying".to_string())?;
         tokio::time::timeout(COMMAND_TIMEOUT, response)
@@ -563,7 +784,10 @@ impl GatewayClient {
     async fn run_driver(&self, app: AppHandle, mut receiver: mpsc::Receiver<DriverCommand>) {
         let mut reconnect_attempt = 0_u32;
         loop {
-            if app.get_webview_window(QUICKCHAT_LABEL).is_none() {
+            if !driver_should_run(
+                app.get_webview_window(QUICKCHAT_LABEL).is_some(),
+                self.inner.sleep_cycle_depth.load(Ordering::SeqCst) > 0,
+            ) {
                 self.inner.reconnect_paused.store(false, Ordering::SeqCst);
                 self.set_connection_state(&app, GatewayConnectionState::Down, None);
                 tokio::time::sleep(DRIVER_TICK).await;
@@ -637,7 +861,10 @@ impl GatewayClient {
             if connection_result.is_ok() {
                 reconnect_attempt = 1;
             }
-            if app.get_webview_window(QUICKCHAT_LABEL).is_none() {
+            if !driver_should_run(
+                app.get_webview_window(QUICKCHAT_LABEL).is_some(),
+                self.inner.sleep_cycle_depth.load(Ordering::SeqCst) > 0,
+            ) {
                 continue;
             }
             let delay = reconnect_backoff(reconnect_attempt);
@@ -663,39 +890,81 @@ impl GatewayClient {
         let mut socket = tokio::time::timeout(CONNECT_TIMEOUT, connect_gateway_socket(config))
             .await
             .map_err(|_| RequestFailure::transport("Gateway connection timed out."))??;
-        let nonce = wait_for_connect_challenge(&mut socket).await?;
-        let signed_at_ms = unix_time_ms().map_err(RequestFailure::transport)?;
-        let params = connect_params(&identity, &auth, &nonce, signed_at_ms)
-            .map_err(RequestFailure::transport)?;
-        let hello = match request_on_socket(app, &mut socket, "connect", params).await {
-            Ok(hello) => hello,
-            Err(failure) => {
-                let failure = failure.classify_connect(&auth);
-                if should_clear_stored_device_token(&failure, &auth) {
-                    self.clear_device_token(&config.ws_url)?;
-                }
-                return Err(failure);
+        let challenge = wait_for_connect_challenge(&mut socket).await?;
+        // Native child WebViews use platform HTTP trust and cannot bind the optional
+        // WebSocket leaf pin, so pinned Gateway connections remain capability-free.
+        let inline_widgets_available = config
+            .tls_fingerprint
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty());
+        let params = connect_params(
+            &identity,
+            &auth,
+            &challenge.nonce,
+            challenge.issued_at_ms,
+            inline_widgets_available,
+        )
+        .map_err(RequestFailure::transport)?;
+        let config_changed = AtomicBool::new(false);
+        let dispatch = |frame: &Value| {
+            dispatch_chat_event(app, frame);
+            if frame.get("type").and_then(Value::as_str) == Some("event")
+                && frame.get("event").and_then(Value::as_str) == Some("config.changed")
+            {
+                config_changed.store(true, Ordering::SeqCst);
             }
         };
+        let hello =
+            match request_on_socket(&mut socket, "connect", params, REQUEST_TIMEOUT, &dispatch)
+                .await
+            {
+                Ok(hello) => hello,
+                Err(failure) => {
+                    let failure = failure.classify_connect(&auth);
+                    if should_clear_stored_device_token(&failure, &auth) {
+                        self.clear_device_token(&config.ws_url)?;
+                    }
+                    return Err(failure);
+                }
+            };
         drop(auth);
         let hello = validate_hello(hello).map_err(RequestFailure::transport)?;
         if let Some(device_token) = hello.device_token.as_deref() {
             self.persist_device_token(&config.ws_url, device_token)?;
         }
+        self.set_canvas_surface_url(
+            generation,
+            gated_canvas_surface_url(hello.canvas_surface_url, inline_widgets_available),
+        );
 
-        let agents = request_agents_list(app, &mut socket).await?;
+        let agents = request_agents_list(&mut socket, REQUEST_TIMEOUT, &dispatch).await?;
+        let accent = request_gateway_accent(&mut socket, &dispatch).await?;
         if self.inner.config_generation.load(Ordering::SeqCst) != generation {
             return Ok(());
         }
         self.cache_agents(agents);
+        self.set_user_accent(generation, accent);
         self.set_connection_state(app, GatewayConnectionState::Up, None);
         let mut last_gateway_activity = Instant::now();
 
         loop {
             if self.inner.config_generation.load(Ordering::SeqCst) != generation
-                || app.get_webview_window(QUICKCHAT_LABEL).is_none()
+                || !driver_should_run(
+                    app.get_webview_window(QUICKCHAT_LABEL).is_some(),
+                    self.inner.sleep_cycle_depth.load(Ordering::SeqCst) > 0,
+                )
             {
                 return Ok(());
+            }
+            if config_changed.swap(false, Ordering::SeqCst) {
+                let accent = request_gateway_accent(&mut socket, &dispatch).await?;
+                if self.inner.config_generation.load(Ordering::SeqCst) != generation {
+                    return Ok(());
+                }
+                if self.set_user_accent(generation, accent) {
+                    self.emit_connection_state(app, GatewayConnectionState::Up, None);
+                }
+                last_gateway_activity = Instant::now();
             }
             tokio::select! {
                 command = receiver.recv() => {
@@ -704,8 +973,8 @@ impl GatewayClient {
                     };
                     match command {
                         DriverCommand::Reconfigure => return Ok(()),
-                        DriverCommand::Request { request, reply } => {
-                            let result = perform_request(app, &mut socket, request).await;
+                        DriverCommand::Request { request, budget, reply } => {
+                            let result = perform_request(&mut socket, request, budget, &dispatch).await;
                             last_gateway_activity = Instant::now();
                             match result {
                                 Ok(response) => {
@@ -724,7 +993,7 @@ impl GatewayClient {
                     }
                 }
                 incoming = socket.next() => {
-                    handle_idle_message(app, &mut socket, incoming).await?;
+                    handle_idle_message(&dispatch, &mut socket, incoming).await?;
                     last_gateway_activity = Instant::now();
                 }
                 _ = tokio::time::sleep(DRIVER_TICK) => {
@@ -812,6 +1081,50 @@ impl GatewayClient {
         });
     }
 
+    fn set_canvas_surface_url(&self, generation: u64, url: Option<String>) {
+        let mut surface = self
+            .inner
+            .canvas_surface
+            .lock()
+            .expect("gateway canvas surface mutex poisoned");
+        if self.inner.config_generation.load(Ordering::SeqCst) == generation {
+            *surface = CanvasSurfaceState { generation, url };
+        }
+    }
+
+    fn canvas_surface_state(&self) -> CanvasSurfaceState {
+        self.inner
+            .canvas_surface
+            .lock()
+            .expect("gateway canvas surface mutex poisoned")
+            .clone()
+    }
+
+    fn canvas_surface_url(&self) -> Option<String> {
+        self.canvas_surface_state().url
+    }
+
+    fn set_user_accent(&self, generation: u64, accent: Option<String>) -> bool {
+        let mut current = self
+            .inner
+            .user_accent
+            .lock()
+            .expect("gateway user accent mutex poisoned");
+        if self.inner.config_generation.load(Ordering::SeqCst) != generation || *current == accent {
+            return false;
+        }
+        *current = accent;
+        true
+    }
+
+    fn user_accent(&self) -> Option<String> {
+        self.inner
+            .user_accent
+            .lock()
+            .expect("gateway user accent mutex poisoned")
+            .clone()
+    }
+
     fn is_connected(&self) -> bool {
         self.connection_state() == GatewayConnectionState::Up
     }
@@ -832,6 +1145,8 @@ impl GatewayClient {
                 .agents_cache
                 .lock()
                 .expect("gateway agents cache mutex poisoned") = None;
+            self.set_canvas_surface_url(self.inner.config_generation.load(Ordering::SeqCst), None);
+            self.set_user_accent(self.inner.config_generation.load(Ordering::SeqCst), None);
         }
         let notice_changed = {
             let mut current = self
@@ -854,26 +1169,47 @@ impl GatewayClient {
         if !state_changed && !notice_changed {
             return;
         }
+        self.emit_connection_state(app, state, notice);
+    }
+
+    fn emit_connection_state(
+        &self,
+        app: &AppHandle,
+        state: GatewayConnectionState,
+        notice: Option<String>,
+    ) {
         let _ = app.emit_to(
             QUICKCHAT_LABEL,
             GATEWAY_STATE_EVENT,
-            GatewayStateEvent::new(state, notice),
+            GatewayStateEvent::new(state, notice, self.canvas_surface_url(), self.user_accent()),
         );
     }
 }
 
 #[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GatewayStateEvent {
     state: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     notice: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    canvas_surface_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accent: Option<String>,
 }
 
 impl GatewayStateEvent {
-    fn new(state: GatewayConnectionState, notice: Option<String>) -> Self {
+    fn new(
+        state: GatewayConnectionState,
+        notice: Option<String>,
+        canvas_surface_url: Option<String>,
+        accent: Option<String>,
+    ) -> Self {
         Self {
             state: state.event_name(),
             notice,
+            canvas_surface_url,
+            accent,
         }
     }
 }
@@ -882,6 +1218,12 @@ fn reject_disconnected_command(command: DriverCommand) {
     if let DriverCommand::Request { reply, .. } = command {
         let _ = reply.send(Err("Gateway unreachable — retrying".to_string()));
     }
+}
+
+fn driver_should_run(window_exists: bool, sleep_active: bool) -> bool {
+    // Sleep cycles temporarily activate the driver; the companion-wide connection lifetime
+    // remains owned by Quick Chat outside that narrow window.
+    window_exists || sleep_active
 }
 
 fn routing_target(scope: &str, selected_agent_id: &str, main_key: &str) -> ChatRoutingTarget {
@@ -918,12 +1260,13 @@ fn classify_connect_failure(
     if detail_code == Some(PAIRING_REQUIRED_DETAIL_CODE) {
         return Some(GatewayConnectionState::PairingRequired);
     }
-    let credential_required = !has_local_credential
-        && detail_code.is_some_and(|code| {
-            code == AUTH_TOKEN_MISSING_DETAIL_CODE
-                || code == AUTH_PASSWORD_MISSING_DETAIL_CODE
-                || (code.starts_with("AUTH_") && code.ends_with("_MISMATCH"))
-        });
+    // A retained device token can fail because the Gateway now requires shared credentials.
+    // Mismatch errors remain credential-aware so configured auth keeps its existing recovery path.
+    let credential_required = detail_code.is_some_and(|code| {
+        code == AUTH_TOKEN_MISSING_DETAIL_CODE
+            || code == AUTH_PASSWORD_MISSING_DETAIL_CODE
+            || (!has_local_credential && code.starts_with("AUTH_") && code.ends_with("_MISMATCH"))
+    });
     credential_required.then_some(GatewayConnectionState::CredentialRequired)
 }
 
@@ -983,7 +1326,12 @@ fn connect_params(
     auth: &GatewayAuth,
     nonce: &str,
     signed_at_ms: u64,
+    inline_widgets_available: bool,
 ) -> Result<Value, String> {
+    let mut client_caps = vec![AGENT_KIND_CLIENT_CAPABILITY];
+    if inline_widgets_available {
+        client_caps.push(INLINE_WIDGETS_CLIENT_CAPABILITY);
+    }
     let mut params = json!({
         "minProtocol": MIN_PROTOCOL_VERSION,
         "maxProtocol": MAX_PROTOCOL_VERSION,
@@ -994,7 +1342,7 @@ fn connect_params(
             "mode": CLIENT_MODE,
             "deviceFamily": CLIENT_DEVICE_FAMILY
         },
-        "caps": [],
+        "caps": client_caps,
         "commands": [],
         "permissions": {},
         "role": CLIENT_ROLE,
@@ -1016,22 +1364,42 @@ fn request_frame(id: &str, method: &str, params: Value) -> Value {
     })
 }
 
-async fn wait_for_connect_challenge(socket: &mut GatewaySocket) -> Result<String, RequestFailure> {
+#[derive(Debug, PartialEq, Eq)]
+struct ConnectChallenge {
+    nonce: String,
+    issued_at_ms: u64,
+}
+
+fn parse_connect_challenge(value: &Value) -> Result<ConnectChallenge, RequestFailure> {
+    let nonce = value
+        .get("payload")
+        .and_then(|payload| payload.get("nonce"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|nonce| !nonce.is_empty());
+    let issued_at_ms = value
+        .get("payload")
+        .and_then(|payload| payload.get("ts"))
+        .and_then(Value::as_u64)
+        .ok_or_else(|| RequestFailure::transport("Gateway challenge timestamp was invalid."))?;
+    nonce
+        .map(|nonce| ConnectChallenge {
+            nonce: nonce.to_owned(),
+            issued_at_ms,
+        })
+        .ok_or_else(|| RequestFailure::transport("Gateway challenge omitted nonce."))
+}
+
+async fn wait_for_connect_challenge(
+    socket: &mut GatewaySocket,
+) -> Result<ConnectChallenge, RequestFailure> {
     tokio::time::timeout(HANDSHAKE_TIMEOUT, async {
         loop {
             let value = next_json(socket).await?;
             if value.get("type").and_then(Value::as_str) == Some("event")
                 && value.get("event").and_then(Value::as_str) == Some("connect.challenge")
             {
-                let nonce = value
-                    .get("payload")
-                    .and_then(|payload| payload.get("nonce"))
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|nonce| !nonce.is_empty());
-                return nonce
-                    .map(ToOwned::to_owned)
-                    .ok_or_else(|| RequestFailure::transport("Gateway challenge omitted nonce."));
+                return parse_connect_challenge(&value);
             }
         }
     })
@@ -1039,12 +1407,16 @@ async fn wait_for_connect_challenge(socket: &mut GatewaySocket) -> Result<String
     .map_err(|_| RequestFailure::transport("Gateway connect challenge timed out."))?
 }
 
-async fn request_on_socket(
-    app: &AppHandle,
+async fn request_on_socket<F>(
     socket: &mut GatewaySocket,
     method: &str,
     params: Value,
-) -> Result<Value, RequestFailure> {
+    budget: Duration,
+    dispatch: &F,
+) -> Result<Value, RequestFailure>
+where
+    F: Fn(&Value),
+{
     let id = Uuid::new_v4().to_string();
     let encoded = serde_json::to_string(&request_frame(&id, method, params)).map_err(|error| {
         RequestFailure::transport(format!("Could not encode {method}: {error}"))
@@ -1054,10 +1426,10 @@ async fn request_on_socket(
         .await
         .map_err(|error| RequestFailure::transport(format!("Could not send {method}: {error}")))?;
 
-    tokio::time::timeout(REQUEST_TIMEOUT, async {
+    tokio::time::timeout(budget, async {
         loop {
             let value = next_json(socket).await?;
-            dispatch_chat_event(app, &value);
+            dispatch(&value);
             if value.get("type").and_then(Value::as_str) != Some("res")
                 || value.get("id").and_then(Value::as_str) != Some(id.as_str())
             {
@@ -1082,51 +1454,177 @@ async fn request_on_socket(
     .map_err(|_| RequestFailure::transport(format!("Gateway {method} request timed out.")))?
 }
 
-async fn perform_request(
-    app: &AppHandle,
+async fn perform_request<F>(
     socket: &mut GatewaySocket,
     request: GatewayRequest,
-) -> Result<GatewayResponse, RequestFailure> {
+    budget: Option<Duration>,
+    dispatch: &F,
+) -> Result<GatewayResponse, RequestFailure>
+where
+    F: Fn(&Value),
+{
+    let budget = budget.unwrap_or(REQUEST_TIMEOUT);
     match request {
-        GatewayRequest::AgentsList => request_agents_list(app, socket)
+        GatewayRequest::AgentsList => request_agents_list(socket, budget, dispatch)
             .await
             .map(GatewayResponse::AgentsList),
         GatewayRequest::ChatSend(params) => {
             let params = serde_json::to_value(params).map_err(|error| {
                 RequestFailure::transport(format!("Could not encode chat.send: {error}"))
             })?;
-            let payload = request_on_socket(app, socket, "chat.send", params).await?;
+            let payload = request_on_socket(socket, "chat.send", params, budget, dispatch).await?;
             serde_json::from_value(payload)
                 .map(GatewayResponse::ChatSend)
                 .map_err(|error| {
                     RequestFailure::transport(format!("Invalid chat.send response: {error}"))
                 })
         }
+        GatewayRequest::RefreshCanvasSurface { observed_url } => {
+            let mut params = json!({ "surface": "canvas" });
+            if let Some(observed_url) = observed_url {
+                params["observedUrl"] = Value::String(observed_url);
+            }
+            let payload =
+                request_on_socket(socket, "plugin.surface.refresh", params, budget, dispatch)
+                    .await?;
+            let response: PluginSurfaceRefreshResponse =
+                serde_json::from_value(payload).map_err(|error| {
+                    RequestFailure::transport(format!(
+                        "Invalid plugin.surface.refresh response: {error}"
+                    ))
+                })?;
+            let canvas = response
+                .plugin_surface_urls
+                .and_then(|urls| urls.get("canvas").cloned())
+                .map(|url| url.trim().to_string())
+                .filter(|url| !url.is_empty());
+            Ok(GatewayResponse::CanvasSurface(canvas))
+        }
+        #[cfg(target_os = "linux")]
+        GatewayRequest::SuspendPrepare { request_id } => {
+            let payload = request_on_socket(
+                socket,
+                "gateway.suspend.prepare",
+                json!({ "requestId": request_id }),
+                budget,
+                dispatch,
+            )
+            .await?;
+            serde_json::from_value(payload)
+                .map(GatewayResponse::SuspendPrepare)
+                .map_err(|error| {
+                    RequestFailure::transport(format!(
+                        "Invalid gateway.suspend.prepare response: {error}"
+                    ))
+                })
+        }
+        #[cfg(target_os = "linux")]
+        GatewayRequest::SuspendResume { suspension_id } => {
+            let payload = request_on_socket(
+                socket,
+                "gateway.suspend.resume",
+                json!({ "suspensionId": suspension_id }),
+                budget,
+                dispatch,
+            )
+            .await?;
+            serde_json::from_value(payload)
+                .map(GatewayResponse::SuspendResume)
+                .map_err(|error| {
+                    RequestFailure::transport(format!(
+                        "Invalid gateway.suspend.resume response: {error}"
+                    ))
+                })
+        }
     }
 }
 
-async fn request_agents_list(
-    app: &AppHandle,
+#[cfg(any(target_os = "linux", test))]
+fn is_loopback_ws_url(raw: &str) -> bool {
+    let Ok(url) = Url::parse(raw) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "ws" | "wss") {
+        return false;
+    }
+    url.host_str().is_some_and(|host| {
+        host.eq_ignore_ascii_case("localhost")
+            || host
+                .trim_matches(['[', ']'])
+                .parse::<IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+    })
+}
+
+async fn request_agents_list<F>(
     socket: &mut GatewaySocket,
-) -> Result<AgentsListResult, RequestFailure> {
-    let payload = request_on_socket(app, socket, "agents.list", json!({})).await?;
+    budget: Duration,
+    dispatch: &F,
+) -> Result<AgentsListResult, RequestFailure>
+where
+    F: Fn(&Value),
+{
+    let payload = request_on_socket(socket, "agents.list", json!({}), budget, dispatch).await?;
     serde_json::from_value(payload).map_err(|error| {
         RequestFailure::transport(format!("Invalid agents.list response: {error}"))
     })
 }
 
+async fn request_gateway_accent<F>(
+    socket: &mut GatewaySocket,
+    dispatch: &F,
+) -> Result<Option<String>, RequestFailure>
+where
+    F: Fn(&Value),
+{
+    let config =
+        request_on_socket(socket, "config.get", json!({}), REQUEST_TIMEOUT, dispatch).await?;
+    Ok(gateway_user_accent(&config))
+}
+
+fn gateway_user_accent(config: &Value) -> Option<String> {
+    [
+        config.pointer("/config/ui/prefs/accent"),
+        config.pointer("/config/ui/seamColor"),
+    ]
+    .into_iter()
+    .flatten()
+    .filter_map(Value::as_str)
+    .find(|value| {
+        value.len() == 7
+            && value.starts_with('#')
+            && value.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
+    })
+    .map(str::to_ascii_lowercase)
+}
+
 struct ValidatedHello {
     device_token: Option<String>,
     tick_watch_timeout: Duration,
+    canvas_surface_url: Option<String>,
 }
 
 impl ValidatedHello {
-    fn new(device_token: Option<String>, tick_watch_timeout: Duration) -> Self {
+    fn new(
+        device_token: Option<String>,
+        tick_watch_timeout: Duration,
+        canvas_surface_url: Option<String>,
+    ) -> Self {
         Self {
             device_token,
             tick_watch_timeout,
+            canvas_surface_url,
         }
     }
+}
+
+fn gated_canvas_surface_url(
+    canvas_surface_url: Option<String>,
+    inline_widgets_available: bool,
+) -> Option<String> {
+    inline_widgets_available
+        .then_some(canvas_surface_url)
+        .flatten()
 }
 
 fn validate_hello(payload: Value) -> Result<ValidatedHello, String> {
@@ -1135,6 +1633,7 @@ fn validate_hello(payload: Value) -> Result<ValidatedHello, String> {
         methods: Vec<String>,
     }
     #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
     struct HelloOk {
         #[serde(rename = "type")]
         kind: String,
@@ -1142,6 +1641,7 @@ fn validate_hello(payload: Value) -> Result<ValidatedHello, String> {
         features: HelloFeatures,
         auth: HelloAuth,
         policy: Option<HelloPolicy>,
+        plugin_surface_urls: Option<HashMap<String, String>>,
     }
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -1176,9 +1676,15 @@ fn validate_hello(payload: Value) -> Result<ValidatedHello, String> {
         .unwrap_or(30_000)
         .max(1);
     let issued_device_auth = hello.auth.device_token;
+    let canvas_surface_url = hello
+        .plugin_surface_urls
+        .and_then(|surface_urls| surface_urls.get("canvas").cloned())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     Ok(ValidatedHello::new(
         issued_device_auth,
         Duration::from_millis(tick_interval_ms).saturating_mul(2),
+        canvas_surface_url,
     ))
 }
 
@@ -1280,11 +1786,14 @@ async fn next_json(socket: &mut GatewaySocket) -> Result<Value, RequestFailure> 
     }
 }
 
-async fn handle_idle_message(
-    app: &AppHandle,
+async fn handle_idle_message<F>(
+    dispatch: &F,
     socket: &mut GatewaySocket,
     incoming: Option<Result<Message, tokio_tungstenite::tungstenite::Error>>,
-) -> Result<(), RequestFailure> {
+) -> Result<(), RequestFailure>
+where
+    F: Fn(&Value),
+{
     let message = incoming
         .ok_or_else(|| RequestFailure::transport("Gateway connection closed."))?
         .map_err(|error| {
@@ -1293,7 +1802,7 @@ async fn handle_idle_message(
     match message {
         Message::Text(text) => {
             if let Ok(value) = serde_json::from_str::<Value>(text.as_ref()) {
-                dispatch_chat_event(app, &value);
+                dispatch(&value);
             }
             Ok(())
         }
@@ -1305,7 +1814,7 @@ async fn handle_idle_message(
     }
 }
 
-fn dispatch_chat_event(app: &AppHandle, frame: &Value) {
+fn dispatch_chat_event<R: tauri::Runtime>(app: &AppHandle<R>, frame: &Value) {
     if frame.get("type").and_then(Value::as_str) != Some("event")
         || frame.get("event").and_then(Value::as_str) != Some("chat")
     {
@@ -1317,16 +1826,245 @@ fn dispatch_chat_event(app: &AppHandle, frame: &Value) {
     }
 }
 
-fn unix_time_ms() -> Result<u64, String> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .map_err(|error| format!("Could not read system time: {error}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    mod dashboard_handoff {
+        use super::*;
+        use crate::{cli::OpenClawCli, gateway, NavigationState};
+        use std::ffi::OsString;
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::PathBuf;
+        use std::sync::MutexGuard;
+
+        static CLI_ENV: Mutex<()> = Mutex::new(());
+
+        struct CliFixture {
+            directory: PathBuf,
+            previous_cli: Option<OsString>,
+            _environment: MutexGuard<'static, ()>,
+        }
+
+        impl CliFixture {
+            fn new() -> Self {
+                let environment = CLI_ENV.lock().unwrap_or_else(|error| error.into_inner());
+                let directory = std::env::temp_dir()
+                    .join(format!("openclaw-dashboard-handoff-{}", Uuid::new_v4()));
+                fs::create_dir(&directory).expect("create CLI fixture");
+                let executable = directory.join("openclaw");
+                fs::write(
+                    &executable,
+                    r#"#!/bin/sh
+case "$*" in
+  --version) echo '0.0.0-test' ;;
+  'gateway status --json') echo '{"service":{"loaded":true,"runtime":{"status":"running"}},"rpc":{"ok":true}}' ;;
+  'dashboard --json --no-open') cat "$(dirname "$0")/dashboard.json" ;;
+  *) echo 'Unexpected CLI invocation' >&2; exit 1 ;;
+esac
+"#,
+                )
+                .expect("write CLI fixture");
+                fs::set_permissions(&executable, fs::Permissions::from_mode(0o700))
+                    .expect("make CLI fixture executable");
+                let previous_cli = std::env::var_os("OPENCLAW_DESKTOP_CLI");
+                std::env::set_var("OPENCLAW_DESKTOP_CLI", executable);
+                Self {
+                    directory,
+                    previous_cli,
+                    _environment: environment,
+                }
+            }
+
+            fn ready(&self, response: Value) -> Result<gateway::ReadyGateway, String> {
+                fs::write(self.directory.join("dashboard.json"), response.to_string())
+                    .expect("write dashboard response");
+                let cli = OpenClawCli::discover().expect("discover fixture CLI");
+                gateway::ensure_ready(&cli)
+            }
+        }
+
+        impl Drop for CliFixture {
+            fn drop(&mut self) {
+                match self.previous_cli.as_ref() {
+                    Some(value) => std::env::set_var("OPENCLAW_DESKTOP_CLI", value),
+                    None => std::env::remove_var("OPENCLAW_DESKTOP_CLI"),
+                }
+                let _ = fs::remove_dir_all(&self.directory);
+            }
+        }
+
+        #[test]
+        fn browser_pairing_is_separate_from_native_auth_and_survives_first_run_routing() {
+            let fixture = CliFixture::new();
+            let browser_url = "https://127.0.0.1:18789/control/?keep=yes#bootstrapToken=fixture%2Bbrowser%2Fgrant%3D&bootstrapProfile=owner";
+            let ws_url = "wss://127.0.0.1:18789/control";
+            for (mode, fragment, token, password) in [
+                ("password", "", None, Some("fixture-password")),
+                (
+                    "token",
+                    "#token=fixture%2Bshared%2Ftoken%3D",
+                    Some("fixture+shared/token="),
+                    None,
+                ),
+                // The CLI withholds SecretRef-backed shared credentials from JSON.
+                ("SecretRef", "", None, None),
+            ] {
+                let ready = fixture
+                    .ready(json!({
+                        "ok": true,
+                        "url": format!("https://127.0.0.1:18789/control/{fragment}"),
+                        "browserUrl": browser_url,
+                        "wsUrl": ws_url,
+                        "gatewayPassword": password,
+                        "tlsFingerprint": "ab".repeat(32),
+                    }))
+                    .unwrap_or_else(|error| panic!("{mode}: {error}"));
+
+                assert!(ready.snapshot.reachable, "{mode}");
+                assert_eq!(ready.gateway_ws.ws_url, ws_url, "{mode}");
+                assert_eq!(ready.gateway_ws.token.as_deref(), token, "{mode}");
+                assert_eq!(ready.gateway_ws.password.as_deref(), password, "{mode}");
+                assert_eq!(
+                    ready.gateway_ws.tls_fingerprint,
+                    Some("ab".repeat(32)),
+                    "{mode}"
+                );
+                assert_eq!(
+                    ready.dashboard_url, browser_url,
+                    "{mode}: browser pairing URL"
+                );
+
+                let mut navigation = NavigationState::default();
+                navigation.mark_onboarding_pending();
+                let first_run = navigation
+                    .prepare_dashboard_url(&ready.dashboard_url)
+                    .expect("first-run dashboard");
+                assert_eq!(first_run.path(), "/control/settings/model-setup", "{mode}");
+                assert_eq!(first_run.query(), Some("keep=yes&firstRun=1"), "{mode}");
+                assert_eq!(
+                    first_run.fragment(),
+                    Some("bootstrapToken=fixture%2Bbrowser%2Fgrant%3D&bootstrapProfile=owner"),
+                    "{mode}"
+                );
+            }
+        }
+
+        #[test]
+        fn missing_browser_handoff_requires_an_integration_upgrade() {
+            let fixture = CliFixture::new();
+            let result = fixture.ready(json!({
+                "ok": true,
+                "url": "http://127.0.0.1:18789/#token=fixture-shared-token",
+                "wsUrl": "ws://127.0.0.1:18789",
+            }));
+            let error = result
+                .err()
+                .expect("legacy shared URL cannot pair the browser");
+            assert!(error.contains("desktop dashboard integration"), "{error}");
+            assert!(error.contains("Beta or Development"), "{error}");
+        }
+    }
+
+    #[test]
+    fn sleep_cycle_runs_driver_without_quick_chat() {
+        let client = GatewayClient::new();
+        let sleep_active =
+            |client: &GatewayClient| client.inner.sleep_cycle_depth.load(Ordering::SeqCst) > 0;
+        assert!(!driver_should_run(false, false));
+        assert!(driver_should_run(true, false));
+        client.begin_sleep_cycle();
+        assert!(driver_should_run(false, sleep_active(&client)));
+        client.end_sleep_cycle();
+        assert!(!driver_should_run(false, sleep_active(&client)));
+    }
+
+    #[test]
+    fn late_wake_end_does_not_park_a_newer_sleep_cycle() {
+        let client = GatewayClient::new();
+        let sleep_active =
+            |client: &GatewayClient| client.inner.sleep_cycle_depth.load(Ordering::SeqCst) > 0;
+        client.begin_sleep_cycle(); // cycle 1 sleeps
+        client.begin_sleep_cycle(); // cycle 2 sleeps before cycle 1's wake task ends
+        client.end_sleep_cycle(); // cycle 1's wake ends late
+        assert!(driver_should_run(false, sleep_active(&client)));
+        client.end_sleep_cycle();
+        assert!(!driver_should_run(false, sleep_active(&client)));
+        // An unbalanced extra end saturates at zero instead of wrapping.
+        client.end_sleep_cycle();
+        assert!(!driver_should_run(false, sleep_active(&client)));
+    }
+
+    #[tokio::test]
+    async fn budgeted_driver_request_releases_the_serial_queue() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind websocket fixture");
+        let address = listener.local_addr().expect("fixture address");
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept websocket fixture");
+            let mut socket = tokio_tungstenite::accept_async(stream)
+                .await
+                .expect("accept websocket handshake");
+            let _request = socket.next().await.expect("request frame");
+            std::future::pending::<()>().await;
+        });
+        let (mut socket, _) = tokio_tungstenite::connect_async(format!("ws://{address}"))
+            .await
+            .expect("connect websocket fixture");
+        let (commands, mut receiver) = mpsc::channel(2);
+        let (reply, response) = oneshot::channel();
+        commands
+            .send(DriverCommand::Request {
+                request: GatewayRequest::AgentsList,
+                budget: Some(SUSPEND_REQUEST_TIMEOUT),
+                reply,
+            })
+            .await
+            .expect("queue budgeted request");
+        commands
+            .send(DriverCommand::Reconfigure)
+            .await
+            .expect("queue reconnect");
+
+        let started = Instant::now();
+        let command = receiver.recv().await.expect("budgeted request");
+        let DriverCommand::Request {
+            request,
+            budget,
+            reply,
+        } = command
+        else {
+            panic!("expected request command");
+        };
+        let failure = match perform_request(&mut socket, request, budget, &|_| {}).await {
+            Ok(_) => panic!("hung request should time out"),
+            Err(failure) => failure,
+        };
+        let elapsed = started.elapsed();
+        assert!(failure.disconnect, "timeout must recycle the socket");
+        let _ = reply.send(Err(failure.message));
+
+        assert!(matches!(
+            tokio::time::timeout(Duration::from_millis(250), receiver.recv())
+                .await
+                .expect("serial queue remained blocked"),
+            Some(DriverCommand::Reconfigure)
+        ));
+        assert!(
+            elapsed >= Duration::from_millis(2_750),
+            "elapsed: {elapsed:?}"
+        );
+        assert!(elapsed < Duration::from_secs(4), "elapsed: {elapsed:?}");
+        let reply = response.await.expect("driver reply");
+        match reply {
+            Ok(_) => panic!("expected timeout reply"),
+            Err(error) => assert!(error.contains("agents.list request timed out")),
+        }
+        server.abort();
+    }
 
     #[test]
     fn routing_matches_macos_quick_chat_contract() {
@@ -1460,6 +2198,7 @@ mod tests {
             &GatewayAuth::SharedToken("secret".to_string()),
             "fixture-nonce",
             1_800_000_000_000,
+            true,
         )
         .expect("connect params");
         let frame = request_frame("connect-1", "connect", params);
@@ -1469,6 +2208,13 @@ mod tests {
         assert_eq!(frame["method"], "connect");
         assert_eq!(frame["params"]["minProtocol"], MIN_PROTOCOL_VERSION);
         assert_eq!(frame["params"]["maxProtocol"], MAX_PROTOCOL_VERSION);
+        assert_eq!(
+            frame["params"]["caps"],
+            json!([
+                AGENT_KIND_CLIENT_CAPABILITY,
+                INLINE_WIDGETS_CLIENT_CAPABILITY
+            ])
+        );
         assert_eq!(frame["params"]["client"]["id"], CLIENT_ID);
         assert_eq!(
             frame["params"]["client"]["deviceFamily"],
@@ -1490,7 +2236,46 @@ mod tests {
         assert!(frame["params"]["device"]["signature"]
             .as_str()
             .is_some_and(|value| !value.contains('=')));
+
+        let pinned_params = connect_params(
+            &store.identity(),
+            &GatewayAuth::SharedToken("secret".to_string()),
+            "fixture-nonce",
+            1_800_000_000_000,
+            false,
+        )
+        .expect("pinned connect params");
+        // Pinning only withdraws inline widgets; agent-kind is unconditional.
+        assert_eq!(pinned_params["caps"], json!([AGENT_KIND_CLIENT_CAPABILITY]));
         std::fs::remove_dir_all(directory).expect("remove connect fixture");
+    }
+
+    #[test]
+    fn connect_challenge_uses_gateway_timestamp() {
+        let Ok(challenge) = parse_connect_challenge(&json!({
+            "payload": {
+                "nonce": " fixture-nonce ",
+                "ts": 1_700_000_000_123_u64
+            }
+        })) else {
+            panic!("expected valid challenge");
+        };
+
+        assert_eq!(
+            challenge,
+            ConnectChallenge {
+                nonce: "fixture-nonce".to_string(),
+                issued_at_ms: 1_700_000_000_123,
+            }
+        );
+        assert!(parse_connect_challenge(&json!({
+            "payload": { "nonce": "missing-time" }
+        }))
+        .is_err());
+        assert!(parse_connect_challenge(&json!({
+            "payload": { "nonce": "fixture-nonce", "ts": "1700000000123" }
+        }))
+        .is_err());
     }
 
     #[test]
@@ -1500,12 +2285,146 @@ mod tests {
             "protocol": MAX_PROTOCOL_VERSION,
             "features": { "methods": ["agents.list", "chat.send"] },
             "auth": { "deviceToken": "test-device-token" },
-            "policy": { "tickIntervalMs": 1_250 }
+            "policy": { "tickIntervalMs": 1_250 },
+            "pluginSurfaceUrls": {
+                "canvas": "https://gateway.example/__openclaw__/cap/fixture-capability"
+            }
         }))
         .expect("valid hello");
 
         assert_eq!(hello.device_token.as_deref(), Some("test-device-token"));
         assert_eq!(hello.tick_watch_timeout, Duration::from_millis(2_500));
+        assert_eq!(
+            hello.canvas_surface_url.as_deref(),
+            Some("https://gateway.example/__openclaw__/cap/fixture-capability")
+        );
+        assert_eq!(
+            gated_canvas_surface_url(hello.canvas_surface_url.clone(), true),
+            hello.canvas_surface_url
+        );
+        assert_eq!(
+            gated_canvas_surface_url(hello.canvas_surface_url, false),
+            None
+        );
+    }
+
+    #[test]
+    fn plugin_surface_refresh_response_decodes_canvas_url() {
+        let response: PluginSurfaceRefreshResponse = serde_json::from_value(json!({
+            "pluginSurfaceUrls": {
+                "canvas": "https://gateway.example/__openclaw__/cap/refreshed-capability"
+            }
+        }))
+        .expect("refresh response");
+
+        assert_eq!(
+            response
+                .plugin_surface_urls
+                .and_then(|urls| urls.get("canvas").cloned())
+                .as_deref(),
+            Some("https://gateway.example/__openclaw__/cap/refreshed-capability")
+        );
+    }
+
+    #[test]
+    fn gateway_user_accent_prefers_valid_user_preferences() {
+        for (config, expected) in [
+            (
+                json!({ "config": { "ui": { "prefs": { "accent": "#ABC123" }, "seamColor": "#654321" } } }),
+                Some("#abc123"),
+            ),
+            (
+                json!({ "config": { "ui": { "prefs": { "accent": "invalid" }, "seamColor": "#654321" } } }),
+                Some("#654321"),
+            ),
+            (
+                json!({ "config": { "ui": { "prefs": { "accent": "abc123" }, "seamColor": "#12345" } } }),
+                None,
+            ),
+            (
+                json!({ "config": { "ui": { "prefs": { "accent": "#12345g" }, "seamColor": " #654321" } } }),
+                None,
+            ),
+            (json!({ "config": {} }), None),
+        ] {
+            assert_eq!(gateway_user_accent(&config).as_deref(), expected);
+        }
+    }
+
+    #[test]
+    fn sleep_gateway_routes_are_loopback_only() {
+        for route in [
+            "ws://localhost:18789",
+            "ws://127.0.0.1:18789",
+            "wss://[::1]:18789",
+        ] {
+            assert!(
+                is_loopback_ws_url(route),
+                "expected loopback route: {route}"
+            );
+        }
+        for route in [
+            "ws://192.168.1.10:18789",
+            "wss://gateway.example:18789",
+            "https://127.0.0.1:18789",
+            "not a URL",
+        ] {
+            assert!(!is_loopback_ws_url(route), "expected remote route: {route}");
+        }
+    }
+
+    #[test]
+    fn suspend_wire_results_decode_leniently() {
+        let ready: SuspendPrepareResponse = serde_json::from_value(json!({
+            "status": "ready",
+            "suspensionId": "suspension-1",
+            "expiresAtMs": 1_800_000_000_000_u64,
+            "activeCount": 0,
+            "blockers": []
+        }))
+        .expect("ready suspension response");
+        assert_eq!(
+            ready.into_outcome(),
+            SleepPrepareOutcome::Ready {
+                suspension_id: "suspension-1".into()
+            }
+        );
+
+        let busy: SuspendPrepareResponse = serde_json::from_value(json!({
+            "status": "busy",
+            "reason": "active-work",
+            "retryAfterMs": 1000,
+            "activeCount": 1,
+            "blockers": []
+        }))
+        .expect("busy suspension response");
+        assert_eq!(busy.into_outcome(), SleepPrepareOutcome::Busy);
+
+        let resumed: SuspendResumeResponse = serde_json::from_value(json!({
+            "ok": true,
+            "status": "running",
+            "resumed": false
+        }))
+        .expect("resume response");
+        assert!(!resumed.resumed);
+    }
+
+    #[test]
+    fn gateway_state_event_carries_canvas_surface_in_camel_case() {
+        let event = serde_json::to_value(GatewayStateEvent::new(
+            GatewayConnectionState::Up,
+            None,
+            Some("https://gateway.example/__openclaw__/cap/fixture-capability".to_string()),
+            Some("#abc123".to_string()),
+        ))
+        .expect("serialize gateway state");
+
+        assert_eq!(
+            event["canvasSurfaceUrl"],
+            "https://gateway.example/__openclaw__/cap/fixture-capability"
+        );
+        assert_eq!(event["accent"], "#abc123");
+        assert!(event.get("canvas_surface_url").is_none());
     }
 
     #[test]
@@ -1572,6 +2491,69 @@ mod tests {
         assert!(should_clear_stored_device_token(
             &stale_device_auth,
             &GatewayAuth::DeviceToken("stale".to_string())
+        ));
+    }
+
+    #[test]
+    fn missing_gateway_credentials_override_retained_device_auth() {
+        for detail_code in [
+            AUTH_TOKEN_MISSING_DETAIL_CODE,
+            AUTH_PASSWORD_MISSING_DETAIL_CODE,
+        ] {
+            let details = json!({
+                "code": detail_code,
+                "retryable": false,
+                "pauseReconnect": true
+            });
+            let auth = GatewayAuth::DeviceToken("retained-device-token".to_string());
+            let failure = RequestFailure::method_with_details("credential missing", Some(&details))
+                .classify_connect(&auth);
+
+            assert_eq!(
+                failure.connect_state,
+                Some(GatewayConnectionState::CredentialRequired)
+            );
+            assert!(should_pause_reconnect(&failure.connect_details));
+            assert!(!should_clear_stored_device_token(&failure, &auth));
+            let state = failure.connect_state.expect("classified state");
+            let notice = connection_notice(state, &failure.connect_details, true);
+            assert_eq!(
+                notice.as_deref(),
+                Some("Gateway requires a credential — open the dashboard on the gateway host")
+            );
+            assert_eq!(
+                serde_json::to_value(GatewayStateEvent::new(state, notice, None, None))
+                    .expect("serialize credential-required state"),
+                json!({
+                    "state": "credential-required",
+                    "notice": "Gateway requires a credential — open the dashboard on the gateway host"
+                })
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn reopening_quick_chat_resumes_only_a_paused_reconnect() {
+        let client = GatewayClient::new();
+        let (commands, mut receiver) = mpsc::channel(2);
+        *client
+            .inner
+            .commands
+            .lock()
+            .expect("gateway command mutex poisoned") = Some(commands);
+
+        client.resume_paused_reconnect();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(25), receiver.recv())
+                .await
+                .is_err()
+        );
+
+        client.inner.reconnect_paused.store(true, Ordering::SeqCst);
+        client.resume_paused_reconnect();
+        assert!(matches!(
+            receiver.recv().await,
+            Some(DriverCommand::Reconfigure)
         ));
     }
 

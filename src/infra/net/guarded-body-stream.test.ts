@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createDeferredCore } from "../../shared/deferred.js";
 import { wrapGuardedBodyStream } from "./guarded-body-stream.js";
 
 describe("wrapGuardedBodyStream", () => {
@@ -18,7 +19,12 @@ describe("wrapGuardedBodyStream", () => {
 
   it("propagates downstream cancellation failure after releasing resources", async () => {
     const expected = new Error("source cancellation failed");
-    const cleanup = vi.fn();
+    const started = createDeferredCore();
+    const released = createDeferredCore();
+    const cleanup = vi.fn(() => {
+      started.resolve();
+      return released.promise;
+    });
     const source = new ReadableStream<Uint8Array>({
       async cancel() {
         throw expected;
@@ -26,10 +32,57 @@ describe("wrapGuardedBodyStream", () => {
     });
     const wrapped = wrapGuardedBodyStream({ body: source, cleanup });
 
-    await expect(wrapped.cancel("consumer stopped")).rejects.toBe(expected);
+    let settled = false;
+    const operation = wrapped
+      .cancel("consumer stopped")
+      .catch((error: unknown) => error)
+      .finally(() => {
+        settled = true;
+      });
+    try {
+      await started.promise;
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+      expect(settled).toBe(false);
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(source.locked).toBe(false);
+    } finally {
+      released.resolve();
+    }
+    await expect(operation).resolves.toBe(expected);
+  });
 
-    expect(cleanup).toHaveBeenCalledOnce();
-    expect(source.locked).toBe(false);
+  it("runs owner cleanup before awaiting upstream cancellation", async () => {
+    const released = createDeferredCore();
+    const order: unknown[] = [];
+    const cancel = vi.fn((reason: unknown) => {
+      order.push(reason);
+      return released.promise;
+    });
+    const source = new ReadableStream<Uint8Array>({ cancel });
+    const reason = new Error("consumer stopped");
+    const cleanup = vi.fn(() => {
+      order.push("cleanup");
+      released.resolve();
+    });
+    const wrapped = wrapGuardedBodyStream({ body: source, cleanup });
+    const operation = wrapped.cancel(reason);
+    try {
+      const completed = await Promise.race([
+        operation.then(() => true),
+        new Promise<boolean>((resolve) => {
+          setImmediate(() => resolve(false));
+        }),
+      ]);
+      expect(completed).toBe(true);
+      expect(order).toEqual([reason, "cleanup"]);
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(source.locked).toBe(false);
+    } finally {
+      released.resolve();
+      await operation;
+    }
   });
 
   it("releases the source reader lock after normal completion", async () => {
@@ -68,100 +121,5 @@ describe("wrapGuardedBodyStream", () => {
 
     expect(cleanup).toHaveBeenCalledOnce();
     expect(source.locked).toBe(false);
-  });
-
-  it("errors and cleans up once when cumulative bytes exceed maxBytes", async () => {
-    const cancel = vi.fn(async () => undefined);
-    const cleanup = vi.fn();
-    const secret = "Bearer leaked-token-value-do-not-echo";
-    let pulls = 0;
-    const source = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        pulls += 1;
-        if (pulls === 1) {
-          controller.enqueue(new TextEncoder().encode("aaaa"));
-          return;
-        }
-        controller.enqueue(new TextEncoder().encode(secret));
-      },
-      cancel,
-    });
-    const wrapped = wrapGuardedBodyStream({ body: source, cleanup, maxBytes: 4 });
-    const reader = wrapped.getReader();
-
-    await expect(reader.read()).resolves.toMatchObject({ done: false });
-    const overflow = await reader.read().then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    expect(overflow).toBeInstanceOf(Error);
-    expect((overflow as Error).message).toBe("Guarded response body exceeds 4 bytes");
-    expect((overflow as Error).message).not.toContain(secret);
-    expect((overflow as Error).message).not.toContain("Bearer");
-    reader.releaseLock();
-
-    expect(cleanup).toHaveBeenCalledOnce();
-    expect(cancel).toHaveBeenCalledOnce();
-    expect(source.locked).toBe(false);
-  });
-
-  it("aborts a never-ending chunked stream at the byte cap without unbounded growth", async () => {
-    const cancel = vi.fn(async () => undefined);
-    const cleanup = vi.fn();
-    const chunk = new Uint8Array(1024).fill(0x61);
-    const source = new ReadableStream<Uint8Array>({
-      pull(controller) {
-        controller.enqueue(chunk);
-      },
-      cancel,
-    });
-    const maxBytes = 8 * 1024;
-    const wrapped = wrapGuardedBodyStream({ body: source, cleanup, maxBytes });
-    const reader = wrapped.getReader();
-
-    let received = 0;
-    let overflow: unknown;
-    for (;;) {
-      try {
-        const result = await reader.read();
-        if (result.done || !result.value) {
-          break;
-        }
-        received += result.value.byteLength;
-      } catch (error) {
-        overflow = error;
-        break;
-      }
-    }
-
-    expect(received).toBeLessThanOrEqual(maxBytes);
-    expect(overflow).toBeInstanceOf(Error);
-    expect((overflow as Error).message).toBe(`Guarded response body exceeds ${maxBytes} bytes`);
-    reader.releaseLock();
-    expect(cleanup).toHaveBeenCalledOnce();
-    expect(cancel).toHaveBeenCalledOnce();
-    expect(source.locked).toBe(false);
-  });
-
-  it("allows bodies that fit exactly at maxBytes", async () => {
-    const cleanup = vi.fn();
-    const payload = new TextEncoder().encode("1234");
-    const source = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(payload);
-        controller.close();
-      },
-    });
-    const wrapped = wrapGuardedBodyStream({
-      body: source,
-      cleanup,
-      maxBytes: payload.byteLength,
-    });
-    const reader = wrapped.getReader();
-    const chunk = await reader.read();
-    expect(chunk.value).toEqual(payload);
-    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
-    reader.releaseLock();
-    expect(cleanup).toHaveBeenCalledOnce();
   });
 });

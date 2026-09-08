@@ -110,7 +110,7 @@ automatically.
 
 ### Safe bins versus allowlist
 
-| Topic            | `tools.exec.safeBins`                                  | Allowlist (`exec-approvals.json`)                                                  |
+| Topic            | `tools.exec.safeBins`                                  | Allowlist (SQLite exec approvals document)                                         |
 | ---------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | Goal             | Auto-allow narrow stdin filters                        | Explicitly trust specific executables                                              |
 | Match type       | Executable name + safe-bin argv policy                 | Resolved executable path glob, or bare command-name glob for PATH-invoked commands |
@@ -120,10 +120,10 @@ automatically.
 
 Configuration location:
 
-- `safeBins` comes from config (`tools.exec.safeBins` or per-agent `agents.list[].tools.exec.safeBins`).
-- `safeBinTrustedDirs` comes from config (`tools.exec.safeBinTrustedDirs` or per-agent `agents.list[].tools.exec.safeBinTrustedDirs`).
-- `safeBinProfiles` comes from config (`tools.exec.safeBinProfiles` or per-agent `agents.list[].tools.exec.safeBinProfiles`). Per-agent profile keys override global keys.
-- allowlist entries live in the host-local approvals file under `agents.<id>.allowlist` (or via Control UI / `openclaw approvals allowlist ...`).
+- `safeBins` comes from config (`tools.exec.safeBins` or per-agent `agents.entries.*.tools.exec.safeBins`).
+- `safeBinTrustedDirs` comes from config (`tools.exec.safeBinTrustedDirs` or per-agent `agents.entries.*.tools.exec.safeBinTrustedDirs`).
+- `safeBinProfiles` comes from config (`tools.exec.safeBinProfiles` or per-agent `agents.entries.*.tools.exec.safeBinProfiles`). Per-agent profile keys override global keys.
+- allowlist entries live in the host-local approvals document under `agents.<id>.allowlist` (or via Control UI / `openclaw approvals allowlist ...`).
 - `openclaw security audit` warns with `tools.exec.safe_bins_interpreter_unprofiled` when interpreter/runtime bins appear in `safeBins` without explicit profiles.
 - `openclaw doctor --fix` can scaffold missing custom `safeBinProfiles.<bin>` entries as `{}` (review and tighten afterward). Interpreter/runtime bins are not auto-scaffolded.
 
@@ -295,15 +295,13 @@ Generic model:
 - WhatsApp and Signal reaction approval delivery are gated by `approvals.exec` and
   `approvals.plugin`; they do not have `channels.<channel>.execApprovals` blocks
 
-Native approval clients auto-enable DM-first delivery when all of these are true:
+For channels with an `execApprovals` block, enable native delivery by setting
+`enabled: true` or `"auto"` and configuring resolvable approvers. Defaults vary by
+channel: Discord and Slack require explicit enablement; Telegram treats unset as
+`"auto"`. Approvers can come from `execApprovals.approvers` or the channel's
+supported owner configuration, such as `commands.ownerAllowFrom`.
 
-- the channel supports native approval delivery
-- approvers can be resolved from explicit `execApprovals.approvers` or owner
-  identity such as `commands.ownerAllowFrom`
-- `channels.<channel>.execApprovals.enabled` is unset or `"auto"`
-
-Set `enabled: false` to disable a native approval client explicitly. Set `enabled: true` to force
-it on when approvers resolve. Public origin-chat delivery stays explicit through
+Set `enabled: false` to disable a native approval client explicitly. Public origin-chat delivery stays explicit through
 `channels.<channel>.execApprovals.target`. When native `target` enables origin-chat delivery,
 approval prompts include the command text.
 
@@ -393,7 +391,8 @@ Gateway -> Node Service (WS)
 
 Security notes:
 
-- Unix socket mode `0600`, token stored in `exec-approvals.json`.
+- Unix socket mode `0600`, token stored in the `exec_approvals_config` row of
+  `state/openclaw.sqlite`.
 - Same-UID peer check.
 - Challenge/response (nonce + HMAC token + request hash) + short TTL.
 
