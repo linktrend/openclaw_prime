@@ -55,6 +55,18 @@ describe("classifyAgentHarnessTerminalOutcome", () => {
     ).toBeUndefined();
   });
 
+  it("does not classify Codex auth-refresh prompt errors as empty harness outcomes", () => {
+    expect(
+      classifyAgentHarnessTerminalOutcome({
+        assistantTexts: [],
+        reasoningText: "",
+        planText: "",
+        promptError: new Error("auth refresh request failed: code=-32603"),
+        turnCompleted: true,
+      }),
+    ).toBeUndefined();
+  });
+
   it("does not classify deliberate silent replies such as NO_REPLY", () => {
     expect(
       classifyAgentHarnessTerminalOutcome({

@@ -1,5 +1,9 @@
 /** Client-scoped Codex auth and account observers. */
-import { embeddedAgentLog, formatErrorMessage } from "openclaw/plugin-sdk/agent-harness-runtime";
+import {
+  embeddedAgentLog,
+  formatErrorMessage,
+  materializeExternalAuthRefreshPromptError,
+} from "openclaw/plugin-sdk/agent-harness-runtime";
 import { pruneMapToMaxSize } from "openclaw/plugin-sdk/collection-runtime";
 import { readCodexSessionMeta } from "../session-catalog-provenance.js";
 import { refreshCodexAppServerAuthTokens } from "./auth-bridge.js";
@@ -24,6 +28,7 @@ type ClientRuntime = {
   protectedThreads: Map<string, number>;
   sessionMetadata: Map<string, { sessionsRoot: string; rolloutPath: string; metadata: JsonObject }>;
   evictionTimer?: ReturnType<typeof setTimeout>;
+  lastExternalAuthRefreshFailure?: unknown;
 };
 
 type RetainedLiveThread = {
@@ -55,6 +60,8 @@ const CODEX_APP_SERVER_LIVE_THREAD_IDLE_TIMEOUT_MS = 30 * 60_000;
 const CODEX_APP_SERVER_LIVE_THREAD_MAX_IDLE = 64;
 /** Return a deterministic error before Codex cancels its ten-second external-auth request. */
 const CODEX_EXTERNAL_AUTH_REFRESH_TIMEOUT_MS = 9_000;
+const CODEX_EXTERNAL_AUTH_REFRESH_TIMEOUT_MESSAGE =
+  "Codex app-server ChatGPT token refresh timed out before its external-auth deadline. Retry the request; if it persists, sign in again with OpenClaw.";
 
 const configuredClients = new WeakMap<CodexAppServerClient, ClientRuntime>();
 const physicalThreadReleases = new WeakMap<
@@ -70,6 +77,52 @@ const claimedThreadReleaseTokens = new WeakMap<
 export function isCodexAppServerClientRuntimeLive(client: CodexAppServerClient): boolean {
   const runtime = configuredClients.get(client);
   return runtime !== undefined && !runtime.closed;
+}
+
+function isExternalAuthRefreshCanceled(error: unknown): boolean {
+  if (error instanceof Error && error.name === "AbortError") {
+    return true;
+  }
+  return formatErrorMessage(error) === "Codex app-server operation aborted";
+}
+
+function materializeCaughtExternalAuthRefreshFailure(error: unknown): Error {
+  const message = formatErrorMessage(error);
+  if (message === CODEX_EXTERNAL_AUTH_REFRESH_TIMEOUT_MESSAGE) {
+    return (
+      materializeExternalAuthRefreshPromptError({
+        message: "auth refresh request timed out after 9s",
+        cause: error,
+      }) ?? (error instanceof Error ? error : new Error(message))
+    );
+  }
+  if (isExternalAuthRefreshCanceled(error)) {
+    return (
+      materializeExternalAuthRefreshPromptError({
+        message: `auth refresh request canceled: ${message}`,
+        cause: error,
+      }) ?? (error instanceof Error ? error : new Error(message))
+    );
+  }
+  return (
+    materializeExternalAuthRefreshPromptError({
+      message: "auth refresh request failed: code=-32603",
+      cause: error,
+    }) ?? (error instanceof Error ? error : new Error(message))
+  );
+}
+
+/** Consume the latest OpenClaw-owned Codex external-auth refresh failure for this client. */
+export function takeCodexAppServerExternalAuthRefreshFailure(
+  client: CodexAppServerClient,
+): unknown {
+  const runtime = configuredClients.get(client);
+  if (!runtime) {
+    return undefined;
+  }
+  const failure = runtime.lastExternalAuthRefreshFailure;
+  runtime.lastExternalAuthRefreshFailure = undefined;
+  return failure;
 }
 
 /** Immutable declarations are data owned by this physical client, never retained executors. */
@@ -172,7 +225,7 @@ export function ensureCodexAppServerClientRuntime(
           config: runtime.context.config,
         }),
         CODEX_EXTERNAL_AUTH_REFRESH_TIMEOUT_MS,
-        "Codex app-server ChatGPT token refresh timed out before its external-auth deadline. Retry the request; if it persists, sign in again with OpenClaw.",
+        CODEX_EXTERNAL_AUTH_REFRESH_TIMEOUT_MESSAGE,
       );
       if (previousAccountId && tokens.chatgptAccountId !== previousAccountId) {
         throw new Error(
@@ -183,6 +236,7 @@ export function ensureCodexAppServerClientRuntime(
     } catch (error) {
       // Failed refresh leaves Codex holding its old account. Detach the cached
       // process before another acquisition; existing leases can finish safely.
+      runtime.lastExternalAuthRefreshFailure = materializeCaughtExternalAuthRefreshFailure(error);
       runtime.context.onAuthRefreshFailure?.();
       throw error;
     }

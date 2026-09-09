@@ -12,6 +12,7 @@ import {
   projectAgentRunAttemptTerminal,
 } from "../../agent-run-terminal-outcome.js";
 import type { AuthProfileFailureReason, AuthProfileStore } from "../../auth-profiles.js";
+import { isExternalAuthRefreshFallbackEligible } from "../../auth-profiles/oauth-refresh-failure.js";
 import { AGENT_LANE_SUBAGENT } from "../../lanes.js";
 import type { ResolvedProviderAuth } from "../../model-auth.js";
 import { log } from "../logger.js";
@@ -374,7 +375,7 @@ export async function resolveEmbeddedRunTerminal(input: {
   const incompleteTurnFallbackSafe = Boolean(
     incompleteTurnText &&
     !terminalInterrupted &&
-    !promptError &&
+    !(promptError && !isExternalAuthRefreshFallbackEligible(promptError)) &&
     !attempt.lastToolError &&
     !hasAttemptTerminalState(attempt) &&
     !terminalAssistantError &&

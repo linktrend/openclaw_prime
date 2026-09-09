@@ -3,6 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import { wrapRunWithTestPreparedAdmission } from "./admitted-run-context.test-support.js";
 import type { ModelFallbackAvailability } from "./agent-scope.js";
+import { saveAuthProfileStore } from "./auth-profiles/store.js";
 import { classifyEmbeddedAgentRunResultForModelFallback } from "./embedded-agent-runner/result-fallback-classifier.js";
 import type { EmbeddedRunAttemptResult } from "./embedded-agent-runner/run/types.js";
 import { FailoverError } from "./failover-error.js";
@@ -1066,6 +1067,161 @@ describe("runWithModelFallback + runEmbeddedAgent failover behavior", () => {
         "openai:p2",
       ]);
       expect(primaryCalls.map((params) => params.modelId)).toStrictEqual(["mock-1", "mock-1"]);
+    });
+  });
+
+  it("fails openai/gpt-5.6-sol before inference on Codex OAuth refresh then attempts one luna candidate", async () => {
+    await withModelFallbackWorkspace(async ({ agentDir, workspaceDir }) => {
+      const apiKeyField = ["api", "Key"].join("");
+      saveAuthProfileStore(
+        {
+          version: 1,
+          profiles: {
+            "openai:p1": { type: "api_key", provider: "openai", key: "sk-primary" },
+            "openrouter:p1": { type: "api_key", provider: "openrouter", key: "sk-openrouter" },
+          },
+          usageStats: {
+            "openai:p1": { lastUsed: 1 },
+            "openrouter:p1": { lastUsed: 2 },
+          },
+        },
+        agentDir,
+      );
+      const cfg = {
+        agents: {
+          defaults: {
+            model: {
+              primary: "openai/gpt-5.6-sol",
+              fallbacks: ["openrouter/openai/gpt-5.6-luna"],
+            },
+            models: {
+              "openai/gpt-5.6-sol": { params: { reasoning: { effort: "low" } } },
+              "openrouter/openai/gpt-5.6-luna": { params: { reasoning: { effort: "high" } } },
+            },
+          },
+          list: [{ id: "test" }],
+        },
+        models: {
+          providers: {
+            openai: {
+              api: "openai-responses",
+              [apiKeyField]: "openai-test-key",
+              baseUrl: "https://example.com/openai",
+              models: [
+                {
+                  id: "gpt-5.6-sol",
+                  name: "GPT 5.6 Sol",
+                  reasoning: true,
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 16_000,
+                  maxTokens: 2048,
+                },
+              ],
+            },
+            openrouter: {
+              api: "openai-responses",
+              [apiKeyField]: "openrouter-test-key",
+              baseUrl: "https://example.com/openrouter",
+              models: [
+                {
+                  id: "openai/gpt-5.6-luna",
+                  name: "GPT 5.6 Luna",
+                  reasoning: true,
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 16_000,
+                  maxTokens: 2048,
+                },
+              ],
+            },
+          },
+        },
+      } satisfies OpenClawConfig;
+
+      runEmbeddedAttemptMock.mockImplementation(async (params: unknown) => {
+        const attemptParams = params as EmbeddedAttemptParams;
+        if (attemptParams.provider === "openai") {
+          return makeEmbeddedRunnerAttempt({
+            assistantTexts: [],
+            terminal: {
+              kind: "failed",
+              source: "prompt",
+              error: new Error("auth refresh request failed: code=-32603"),
+            },
+          });
+        }
+        if (attemptParams.provider === "openrouter") {
+          return makeEmbeddedRunnerAttempt({
+            assistantTexts: ["fallback ok"],
+            lastAssistant: buildEmbeddedRunnerAssistant({
+              provider: "openrouter",
+              model: "openai/gpt-5.6-luna",
+              stopReason: "stop",
+              content: [{ type: "text", text: "fallback ok" }],
+            }),
+          });
+        }
+        throw new Error(`Unexpected provider ${attemptParams.provider}`);
+      });
+
+      const result = await runWithModelFallback({
+        cfg,
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        runId: "run:codex-auth-refresh-fallback",
+        sessionId: "session:codex-auth-refresh-fallback",
+        agentDir,
+        run: (provider, model, options) =>
+          runEmbeddedAgent({
+            sessionId: "session:codex-auth-refresh-fallback",
+            sessionKey: "agent:test:codex-auth-refresh-fallback",
+            workspaceDir,
+            agentDir,
+            config: cfg,
+            prompt: "hello",
+            provider,
+            model,
+            authProfileIdSource: "auto",
+            allowTransientCooldownProbe: options?.allowTransientCooldownProbe,
+            isFinalFallbackAttempt: options?.isFinalFallbackAttempt,
+            timeoutMs: 5_000,
+            runId: "run:codex-auth-refresh-fallback",
+            enqueue: async (task) => await task(),
+          }),
+      });
+
+      expect(result.provider).toBe("openrouter");
+      expect(result.model).toBe("openai/gpt-5.6-luna");
+      expect(result.result.payloads?.[0]?.text).toBe("fallback ok");
+      expect(result.result.payloads).toHaveLength(1);
+      expect(result.attempts).toEqual([
+        expect.objectContaining({
+          provider: "openai",
+          model: "gpt-5.6-sol",
+          reason: "auth_permanent",
+        }),
+      ]);
+      expect(result.result.meta.executionTrace).toMatchObject({
+        winnerProvider: "openrouter",
+        winnerModel: "openai/gpt-5.6-luna",
+      });
+      expect(result.attempts).toHaveLength(1);
+      expect(
+        runEmbeddedAttemptMock.mock.calls.map(([params]) => {
+          const attempt = params as EmbeddedAttemptParams;
+          return { provider: attempt.provider, modelId: attempt.modelId };
+        }),
+      ).toEqual([
+        { provider: "openai", modelId: "gpt-5.6-sol" },
+        { provider: "openrouter", modelId: "openai/gpt-5.6-luna" },
+      ]);
+      expect(cfg.agents?.defaults?.models?.["openai/gpt-5.6-sol"]).toMatchObject({
+        params: { reasoning: { effort: "low" } },
+      });
+      expect(cfg.agents?.defaults?.models?.["openrouter/openai/gpt-5.6-luna"]).toMatchObject({
+        params: { reasoning: { effort: "high" } },
+      });
     });
   });
 });
