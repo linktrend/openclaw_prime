@@ -21,6 +21,9 @@ function readJson(filePath) {
 }
 
 const selected = {
+  acpx: {
+    entries: ["index.js"],
+  },
   clickclack: {
     entries: ["index.js"],
     capability: "channel",
@@ -51,6 +54,16 @@ const expectedBuiltAt = new Date(
 assert(buildInfo.commit === expectedCommit, `unexpected build commit: ${buildInfo.commit}`);
 assert(buildInfo.builtAt === expectedBuiltAt, `unexpected build timestamp: ${buildInfo.builtAt}`);
 
+const pluginList = readJson("/tmp/openclaw-plugins-list.json");
+const acpxListEntry = pluginList.plugins?.find((plugin) => plugin.id === "acpx");
+assert(acpxListEntry?.status === "loaded", "ACPX did not load in plugins list --json");
+assert(
+  !pluginList.diagnostics?.some(
+    (diagnostic) => diagnostic.pluginId === "acpx" && diagnostic.level === "error",
+  ),
+  "ACPX has a load error in plugins list --json",
+);
+
 for (const [pluginId, expected] of Object.entries(selected)) {
   const pluginRoot = path.join("/app/dist/extensions", pluginId);
   for (const entry of expected.entries) {
@@ -77,12 +90,14 @@ for (const [pluginId, expected] of Object.entries(selected)) {
   assert(inspect.plugin?.id === pluginId, `unexpected ${pluginId} inspect id`);
   assert(inspect.plugin?.status === "loaded", `${pluginId} runtime did not load`);
   assert(inspect.plugin?.origin === "bundled", `${pluginId} did not load from bundled dist`);
-  assert(
-    inspect.capabilities?.some(
-      (entry) => entry?.kind === expected.capability && entry.ids?.includes(pluginId),
-    ),
-    `${pluginId} did not register ${expected.capability} capability`,
-  );
+  if (expected.capability) {
+    assert(
+      inspect.capabilities?.some(
+        (entry) => entry?.kind === expected.capability && entry.ids?.includes(pluginId),
+      ),
+      `${pluginId} did not register ${expected.capability} capability`,
+    );
+  }
 }
 
 for (const pluginId of ["clickclack", "slack", "whatsapp"]) {
@@ -94,6 +109,12 @@ for (const pluginId of ["clickclack", "slack", "whatsapp"]) {
 }
 
 const declaredDependencies = {
+  acpx: [
+    "@agentclientprotocol/claude-agent-acp",
+    "@agentclientprotocol/codex-acp",
+    "acpx",
+    "smol-toml",
+  ],
   clickclack: ["ws"],
   slack: ["@slack/bolt", "@slack/web-api"],
   msteams: ["@microsoft/teams.apps"],
@@ -107,7 +128,13 @@ for (const [pluginId, dependencies] of Object.entries(declaredDependencies)) {
       typeof packageJson.dependencies?.[dependency] === "string",
       `${pluginId} package metadata omitted ${dependency}`,
     );
-    assertFile(require.resolve(dependency));
+    const resolved = require.resolve(dependency);
+    const canonical = fs.realpathSync(resolved);
+    assert(
+      canonical.startsWith("/app/node_modules/"),
+      `${pluginId} dependency ${dependency} escaped /app/node_modules: ${canonical}`,
+    );
+    assertFile(resolved);
   }
 }
 
