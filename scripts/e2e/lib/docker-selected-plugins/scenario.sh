@@ -11,7 +11,7 @@ node --input-type=module <<'NODE'
 import fs from "node:fs";
 
 const entries = Object.fromEntries(
-  ["clickclack", "slack", "msteams", "whatsapp"].map((id) => [id, { enabled: true }]),
+  ["acpx", "clickclack", "slack", "msteams", "whatsapp"].map((id) => [id, { enabled: true }]),
 );
 fs.writeFileSync(
   process.env.OPENCLAW_CONFIG_PATH,
@@ -20,7 +20,9 @@ fs.writeFileSync(
 );
 NODE
 
-for plugin_id in clickclack slack msteams whatsapp clawrouter; do
+node /app/openclaw.mjs plugins list --json >"/tmp/openclaw-plugins-list.json"
+
+for plugin_id in acpx clickclack slack msteams whatsapp clawrouter; do
   node /app/openclaw.mjs plugins inspect "$plugin_id" --runtime --json \
     >"/tmp/openclaw-${plugin_id}-inspect.json"
 done
