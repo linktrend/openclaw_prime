@@ -1,7 +1,6 @@
 import {
-  classifyExternalAuthRefreshTerminalFailure,
+  agentHarnessAttemptTerminal,
   formatErrorMessage,
-  materializeExternalAuthRefreshPromptError,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import type { AttemptFailureSource } from "./attempt-terminal.js";
 import { readCodexProviderRefusal, type CodexProviderRefusal } from "./event-projector-values.js";
@@ -23,14 +22,14 @@ export function resolveCodexExternalAuthRefreshPromptError(
   promptError: unknown,
   stashed?: unknown,
 ): unknown {
-  const projectedKind = classifyExternalAuthRefreshTerminalFailure(promptError);
-  const stashedKind = classifyExternalAuthRefreshTerminalFailure(stashed);
+  const projectedKind = agentHarnessAttemptTerminal.externalAuthRefresh.classify(promptError);
+  const stashedKind = agentHarnessAttemptTerminal.externalAuthRefresh.classify(stashed);
   if (stashedKind && (projectedKind?.kind === "refresh_failed" || promptError == null)) {
     return stashed;
   }
   const message = readPromptErrorMessage(promptError);
   return (
-    materializeExternalAuthRefreshPromptError({
+    agentHarnessAttemptTerminal.externalAuthRefresh.materializePromptError({
       message,
       cause: promptError instanceof Error ? promptError : undefined,
     }) ?? promptError

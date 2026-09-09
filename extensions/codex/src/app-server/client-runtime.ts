@@ -1,8 +1,8 @@
 /** Client-scoped Codex auth and account observers. */
 import {
+  agentHarnessAttemptTerminal,
   embeddedAgentLog,
   formatErrorMessage,
-  materializeExternalAuthRefreshPromptError,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { pruneMapToMaxSize } from "openclaw/plugin-sdk/collection-runtime";
 import { readCodexSessionMeta } from "../session-catalog-provenance.js";
@@ -88,9 +88,10 @@ function isExternalAuthRefreshCanceled(error: unknown): boolean {
 
 function materializeCaughtExternalAuthRefreshFailure(error: unknown): Error {
   const message = formatErrorMessage(error);
+  const materialize = agentHarnessAttemptTerminal.externalAuthRefresh.materializePromptError;
   if (message === CODEX_EXTERNAL_AUTH_REFRESH_TIMEOUT_MESSAGE) {
     return (
-      materializeExternalAuthRefreshPromptError({
+      materialize({
         message: "auth refresh request timed out after 9s",
         cause: error,
       }) ?? (error instanceof Error ? error : new Error(message))
@@ -98,14 +99,14 @@ function materializeCaughtExternalAuthRefreshFailure(error: unknown): Error {
   }
   if (isExternalAuthRefreshCanceled(error)) {
     return (
-      materializeExternalAuthRefreshPromptError({
+      materialize({
         message: `auth refresh request canceled: ${message}`,
         cause: error,
       }) ?? (error instanceof Error ? error : new Error(message))
     );
   }
   return (
-    materializeExternalAuthRefreshPromptError({
+    materialize({
       message: "auth refresh request failed: code=-32603",
       cause: error,
     }) ?? (error instanceof Error ? error : new Error(message))
