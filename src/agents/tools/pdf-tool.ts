@@ -19,8 +19,9 @@ import {
 import { extractPdfContent, type PdfExtractedContent } from "../../media/pdf-extract.js";
 import { loadWebMediaRaw } from "../../media/web-media.js";
 import { resolveUserPath } from "../../utils.js";
-import { resolveDefaultAgentDir } from "../agent-scope.js";
 import type { AuthProfileStore } from "../auth-profiles/types.js";
+import { resolveModelAsync } from "../embedded-agent-runner/model.js";
+import { abortable } from "../embedded-agent-runner/run/abortable.js";
 import { applySecretRefHeaderSentinels } from "../model-auth.js";
 import {
   acquireAgentRunPreparedModelRuntime,
@@ -36,11 +37,12 @@ import {
   applyImageModelConfigDefaults,
   buildTextToolResult,
   REMOTE_MEDIA_READ_IDLE_TIMEOUT_MS,
-  resolveModelFromRegistry,
-  resolveMediaToolLocalRoots,
+  resolveMediaToolSandboxConfig,
+  resolveMediaToolReferenceAccess,
   resolveModelRuntimeApiKey,
   resolvePromptAndModelOverride,
   resolveRemoteMediaSsrfPolicy,
+  type MediaToolSandbox,
 } from "./media-tool-shared.js";
 import { hasToolModelConfig } from "./model-config.helpers.js";
 import { anthropicAnalyzePdf, geminiAnalyzePdf } from "./pdf-native-providers.js";
@@ -55,11 +57,8 @@ import {
 import { resolvePdfModelConfigForTool } from "./pdf-tool.model-config.js";
 import {
   createSandboxBridgeReadFile,
-  resolveSandboxedBridgeMediaPath,
   runWithImageModelFallback,
   type AnyAgentTool,
-  type SandboxedBridgeMediaPathConfig,
-  type SandboxFsBridge,
   type ToolFsPolicy,
 } from "./tool-runtime.helpers.js";
 
@@ -139,10 +138,7 @@ function buildPdfExtractionContext(
 // Run PDF prompt with model fallback
 // ---------------------------------------------------------------------------
 
-type PdfSandboxConfig = {
-  root: string;
-  bridge: SandboxFsBridge;
-};
+type PdfSandboxConfig = MediaToolSandbox;
 
 async function runPdfPrompt(params: {
   cfg?: OpenClawConfig;
@@ -153,10 +149,11 @@ async function runPdfPrompt(params: {
   pdfModelConfig: ImageModelConfig;
   modelOverride?: string;
   prompt: string;
-  pdfBuffers: Array<{ base64: string; filename: string }>;
+  pdfBuffers: Array<{ buffer: Buffer; filename: string }>;
   password?: string;
   pageNumbers?: number[];
   getExtractions: () => Promise<PdfExtractedContent[]>;
+  signal?: AbortSignal;
 }): Promise<{
   text: string;
   provider: string;
@@ -166,22 +163,40 @@ async function runPdfPrompt(params: {
 }> {
   const requestedCfg = applyImageModelConfigDefaults(params.cfg, params.pdfModelConfig);
 
-  const preparedRuntimeLease = params.preparedModelRuntime
-    ? { snapshot: params.preparedModelRuntime, release: () => {} }
-    : await acquireAgentRunPreparedModelRuntime({
-        agentDir: params.agentDir,
-        ...(params.agentId ? { agentId: params.agentId } : {}),
-        config: requestedCfg ?? {},
-        inheritedAuthDir: resolveDefaultAgentDir(requestedCfg ?? {}),
-        ...(params.workspaceDir ? { workspaceDir: params.workspaceDir } : {}),
-      });
+  let preparedRuntimeLease: Pick<
+    Awaited<ReturnType<typeof acquireAgentRunPreparedModelRuntime>>,
+    "snapshot" | "release"
+  >;
+  if (params.preparedModelRuntime) {
+    preparedRuntimeLease = { snapshot: params.preparedModelRuntime, release: () => {} };
+  } else {
+    const acquireRuntime = acquireAgentRunPreparedModelRuntime({
+      agentDir: params.agentDir,
+      ...(params.agentId ? { agentId: params.agentId } : {}),
+      config: requestedCfg ?? {},
+      ...(params.workspaceDir ? { workspaceDir: params.workspaceDir } : {}),
+    });
+    try {
+      preparedRuntimeLease = params.signal
+        ? await abortable(params.signal, acquireRuntime)
+        : await acquireRuntime;
+    } catch (error) {
+      if (params.signal?.aborted) {
+        void acquireRuntime.then(
+          (late) => late.release(),
+          () => undefined,
+        );
+      }
+      throw error;
+    }
+  }
 
   try {
+    params.signal?.throwIfAborted();
     const preparedRuntime = preparedRuntimeLease.snapshot;
     const runtimeAgentDir = preparedRuntime.agentDir;
     const runtimeWorkspaceDir = preparedRuntime.workspaceDir ?? params.workspaceDir;
-    const { authStorage, modelRegistry } = preparedRuntime.createStores();
-    const modelRuntime = getModelRegistryRuntime(modelRegistry);
+    const preparedStores = preparedRuntime.createStores();
     const committedPdfModelConfig = resolvePdfModelConfigForTool({
       cfg: preparedRuntime.config,
       agentDir: runtimeAgentDir,
@@ -194,6 +209,7 @@ async function runPdfPrompt(params: {
       preparedRuntime.config,
       committedPdfModelConfig,
     );
+    let nativePdfs: Array<{ base64: string; filename: string }> | undefined;
     let extractionCache: PdfExtractedContent[] | null = null;
     const getExtractions = async (): Promise<PdfExtractedContent[]> => {
       if (!extractionCache) {
@@ -205,19 +221,29 @@ async function runPdfPrompt(params: {
     const result = await runWithImageModelFallback({
       cfg: effectiveCfg,
       modelOverride: params.modelOverride,
+      abortSignal: params.signal,
       run: async (provider, modelId) => {
+        // Static snapshots serve configured models through prepared facts; a fresh registry can be empty.
+        const resolved = await resolveModelAsync(provider, modelId, runtimeAgentDir, effectiveCfg, {
+          allowBundledStaticCatalogFallback: true,
+          ...preparedStores,
+          preparedModelRuntime: preparedRuntime,
+          skipAgentDiscovery: true,
+          ...(runtimeWorkspaceDir ? { workspaceDir: runtimeWorkspaceDir } : {}),
+        });
+        if (resolved.error || !resolved.model) {
+          throw new Error(resolved.error ?? `Unknown model: ${provider}/${modelId}`);
+        }
+        const modelRuntime = getModelRegistryRuntime(resolved.modelRegistry);
         const model = bindModelLlmRuntime(
-          applySecretRefHeaderSentinels(
-            resolveModelFromRegistry({ modelRegistry, provider, modelId }),
-            effectiveCfg,
-          ),
+          applySecretRefHeaderSentinels(resolved.model, effectiveCfg),
           modelRuntime.llmRuntime,
         );
         const apiKey = await resolveModelRuntimeApiKey({
           model,
           cfg: effectiveCfg,
           agentDir: runtimeAgentDir,
-          authStorage,
+          authStorage: resolved.authStorage,
         });
 
         if (providerSupportsNativePdf(provider)) {
@@ -232,10 +258,12 @@ async function runPdfPrompt(params: {
             );
           }
 
-          const pdfs = params.pdfBuffers.map((p) => ({
-            base64: p.base64,
-            filename: p.filename,
-          }));
+          // Encode only native requests, once across retries, after checking cancellation.
+          params.signal?.throwIfAborted();
+          const pdfs = (nativePdfs ??= params.pdfBuffers.map(({ buffer, filename }) => ({
+            base64: buffer.toString("base64"),
+            filename,
+          })));
 
           if (provider === "anthropic") {
             const text = await anthropicAnalyzePdf({
@@ -249,6 +277,7 @@ async function runPdfPrompt(params: {
                 headers: model.headers,
                 request: getModelProviderRequestTransport(model),
               },
+              signal: params.signal,
             });
             return { text, provider, model: modelId, native: true };
           }
@@ -264,6 +293,7 @@ async function runPdfPrompt(params: {
                 headers: model.headers,
                 request: getModelProviderRequestTransport(model),
               },
+              signal: params.signal,
             });
             return { text, provider, model: modelId, native: true };
           }
@@ -293,19 +323,31 @@ async function runPdfPrompt(params: {
             images: [],
           }));
           const context = buildPdfExtractionContext(params.prompt, textOnlyExtractions, model);
-          const message = await complete(model, context, {
+          // A run cancelled mid-dispatch must not buy another provider call.
+          params.signal?.throwIfAborted();
+          const completion = complete(model, context, {
             apiKey,
             maxTokens: resolvePdfToolMaxTokens(model.maxTokens),
+            signal: params.signal,
           });
+          const message = params.signal
+            ? await abortable(params.signal, completion)
+            : await completion;
           const text = coercePdfAssistantText({ message, provider, model: modelId });
           return { text, provider, model: modelId, native: false };
         }
 
         const context = buildPdfExtractionContext(params.prompt, extractions, model);
-        const message = await complete(model, context, {
+        // A run cancelled mid-dispatch must not buy another provider call.
+        params.signal?.throwIfAborted();
+        const completion = complete(model, context, {
           apiKey,
           maxTokens: resolvePdfToolMaxTokens(model.maxTokens),
+          signal: params.signal,
         });
+        const message = params.signal
+          ? await abortable(params.signal, completion)
+          : await completion;
         const text = coercePdfAssistantText({ message, provider, model: modelId });
         return { text, provider, model: modelId, native: false };
       },
@@ -371,7 +413,7 @@ export function createPdfTool(options?: {
 
   const maxBytesMbDefault = (
     options?.config?.agents?.defaults as Record<string, unknown> | undefined
-  )?.pdfMaxBytesMb;
+  )?.pdfMaxMb;
   const maxPagesDefault = (options?.config?.agents?.defaults as Record<string, unknown> | undefined)
     ?.pdfMaxPages;
   const configuredMaxBytesMb =
@@ -384,7 +426,7 @@ export function createPdfTool(options?: {
       : DEFAULT_MAX_PAGES;
 
   const description =
-    "Analyze PDF(s): Anthropic/Google native when supported, else text/image extraction. pdf one; pdfs max 10; prompt says inspection.";
+    'Analyze PDF(s): Anthropic/Google native when supported, else text/image extraction. pdf one; pdfs max 10; prompt says inspection. `pages` selects a page range ("1-5", "1,3,5-7"); `password` opens encrypted PDFs (both non-native only).';
   const remoteMediaSsrfPolicy = resolveRemoteMediaSsrfPolicy(options?.config);
 
   return {
@@ -392,7 +434,7 @@ export function createPdfTool(options?: {
     name: "pdf",
     description,
     parameters: PdfToolSchema,
-    execute: async (_toolCallId, args) => {
+    execute: async (_toolCallId, args, signal) => {
       const record = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
 
       // MARK: - Normalize pdf + pdfs input
@@ -440,18 +482,13 @@ export function createPdfTool(options?: {
         throw new ToolInputError("No PDF model configured.");
       }
 
-      const sandboxConfig: SandboxedBridgeMediaPathConfig | null =
-        options?.sandbox && options.sandbox.root.trim()
-          ? {
-              root: options.sandbox.root.trim(),
-              bridge: options.sandbox.bridge,
-              workspaceOnly: options.fsPolicy?.workspaceOnly === true,
-            }
-          : null;
+      const sandboxConfig = resolveMediaToolSandboxConfig(
+        options?.sandbox,
+        options?.fsPolicy?.workspaceOnly,
+      );
 
       // MARK: - Load each PDF
       const loadedPdfs: Array<{
-        base64: string;
         buffer: Buffer;
         filename: string;
         resolvedPath: string;
@@ -459,6 +496,9 @@ export function createPdfTool(options?: {
       }> = [];
 
       for (const pdfRaw of pdfInputs) {
+        // Stop before starting the next sequential download when the run was
+        // aborted, so a dead run cannot keep pulling remote PDFs.
+        signal?.throwIfAborted();
         const trimmed = normalizeMediaReferenceSource(pdfRaw);
         const refInfo = classifyMediaReferenceSource(trimmed);
         const { isHttpUrl } = refInfo;
@@ -489,36 +529,34 @@ export function createPdfTool(options?: {
           return trimmed;
         })();
 
-        const resolvedPathInfo: { resolved: string; rewrittenFrom?: string } = sandboxConfig
-          ? await resolveSandboxedBridgeMediaPath({
-              sandbox: sandboxConfig,
-              mediaPath: resolvedPdf,
-              inboundFallbackDir: "media/inbound",
-            })
-          : {
-              resolved: resolvedPdf.startsWith("file://")
-                ? resolvedPdf.slice("file://".length)
-                : resolvedPdf,
-            };
-        const localRoots = resolveMediaToolLocalRoots(
-          options?.workspaceDir,
-          {
+        const { resolvedPath, localRoots, rewrittenFrom } = await resolveMediaToolReferenceAccess({
+          input: resolvedPdf,
+          isDataUrl: false,
+          workspaceDir: options?.workspaceDir,
+          sandbox: sandboxConfig,
+          rootOptions: {
             workspaceOnly: options?.fsPolicy?.workspaceOnly === true,
           },
-          [resolvedPathInfo.resolved],
-        );
+        });
+        if (resolvedPath === null) {
+          throw new Error("PDF reference resolved without a path.");
+        }
 
         const media = sandboxConfig
-          ? await loadWebMediaRaw(resolvedPathInfo.resolved, {
+          ? await loadWebMediaRaw(resolvedPath, {
               maxBytes,
               sandboxValidated: true,
               readFile: createSandboxBridgeReadFile({ sandbox: sandboxConfig }),
             })
-          : await loadWebMediaRaw(resolvedPathInfo.resolved, {
+          : await loadWebMediaRaw(resolvedPath, {
               maxBytes,
               localRoots,
+              ...(options?.workspaceDir ? { workspaceDir: options.workspaceDir } : {}),
               ...(isHttpUrl ? { readIdleTimeoutMs: REMOTE_MEDIA_READ_IDLE_TIMEOUT_MS } : {}),
               ssrfPolicy: remoteMediaSsrfPolicy,
+              // Forward the run abort signal into the fetch layer so an abort
+              // mid-download disconnects the in-flight socket.
+              ...(signal ? { requestInit: { signal } } : {}),
             });
 
         if (media.kind !== "document") {
@@ -529,7 +567,6 @@ export function createPdfTool(options?: {
           }
         }
 
-        const base64 = media.buffer.toString("base64");
         const filename =
           media.fileName ??
           (isHttpUrl
@@ -537,19 +574,19 @@ export function createPdfTool(options?: {
             : "document.pdf");
 
         loadedPdfs.push({
-          base64,
           buffer: media.buffer,
           filename,
-          resolvedPath: resolvedPathInfo.resolved,
-          ...(resolvedPathInfo.rewrittenFrom
-            ? { rewrittenFrom: resolvedPathInfo.rewrittenFrom }
-            : {}),
+          resolvedPath,
+          ...(rewrittenFrom ? { rewrittenFrom } : {}),
         });
       }
 
       const getExtractions = async (): Promise<PdfExtractedContent[]> => {
         const extractedAll: PdfExtractedContent[] = [];
         for (const pdf of loadedPdfs) {
+          // Extraction is sequential and can be CPU-heavy. Do not start the next
+          // document after the owning agent run has been cancelled.
+          signal?.throwIfAborted();
           const extracted = await extractPdfContent({
             buffer: pdf.buffer,
             maxPages: configuredMaxPages,
@@ -564,7 +601,10 @@ export function createPdfTool(options?: {
         return extractedAll;
       };
 
+      // Do not issue a paid PDF-model call for an already-aborted run.
+      signal?.throwIfAborted();
       const result = await runPdfPrompt({
+        signal,
         cfg: options?.config,
         agentId: options?.agentId,
         agentDir,
@@ -575,7 +615,7 @@ export function createPdfTool(options?: {
         pdfModelConfig,
         modelOverride,
         prompt: promptRaw,
-        pdfBuffers: loadedPdfs.map((p) => ({ base64: p.base64, filename: p.filename })),
+        pdfBuffers: loadedPdfs,
         ...(password ? { password } : {}),
         pageNumbers,
         getExtractions,

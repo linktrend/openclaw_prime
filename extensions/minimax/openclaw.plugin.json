@@ -1,12 +1,18 @@
 {
   "id": "minimax",
-  "icon": "https://cdn.simpleicons.org/minimax",
+  "capabilityCatalogEntry": "./capability-catalog.ts",
   "activation": {
     "onStartup": false
   },
   "enabledByDefault": true,
   "legacyPluginIds": ["minimax-portal-auth"],
   "providers": ["minimax", "minimax-portal"],
+  "modelCatalog": {
+    "discovery": {
+      "minimax": "runtime",
+      "minimax-portal": "runtime"
+    }
+  },
   "providerEndpoints": [
     {
       "endpointClass": "minimax-native",

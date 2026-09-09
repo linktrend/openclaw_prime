@@ -1,24 +1,20 @@
 import path from "node:path";
 import {
   collectGrantedMachineTokenBindingRecords,
-  commitMachineTokenOwnershipSnapshot,
   createMachineTokenFacadeGeneration,
-  destroyCandidateMachineTokenFacadeGeneration,
   destroyMachineTokenFacadeGeneration,
   getLiveMachineTokenFacadeGenerationHandle,
   getLiveMachineTokenPluginFacade,
   liveMachineTokenOwnershipMatchesGrantedRecords,
   publishMachineTokenFacadeGeneration,
-  type HostMachineTokenBindingRecord,
-  type MachineTokenFacadeGenerationHandle,
 } from "../agents/machine-token-host.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolveConfiguredSecretInputString } from "../gateway/resolve-configured-secret-input-string.js";
 import { formatErrorMessage } from "../infra/errors.js";
+import { createLazyRuntimeModule } from "../shared/lazy-runtime.js";
 import { resolveUserPath } from "../utils.js";
 import { emitPluginAgentEvent } from "./agent-event-emission.js";
 import { buildPluginApi } from "./api-builder.js";
-import { sendPluginSessionAttachment } from "./host-hook-attachments.js";
 import {
   clearPluginRunContext,
   getPluginRunContext,
@@ -28,7 +24,6 @@ import {
   schedulePluginSessionTurn,
   unschedulePluginSessionTurnsByTag,
 } from "./host-hook-scheduled-turns.js";
-import { enqueuePluginNextTurnInjection } from "./host-hook-state.js";
 import { isPluginRegistryActivated, isPluginRegistryRetired } from "./registry-lifecycle.js";
 import type { PluginRegistrars } from "./registry-registrars.js";
 import type { PluginRuntimeResolver } from "./registry-runtime.js";
@@ -40,6 +35,10 @@ import {
 } from "./registry-state.js";
 import type { PluginRecord } from "./registry-types.js";
 import type { OpenClawPluginApi, PluginLogger, PluginRegistrationMode } from "./types.js";
+
+// Registration exposes these async operations without loading session storage or delivery.
+const loadAttachments = createLazyRuntimeModule(() => import("./host-hook-attachments.js"));
+const loadHookState = createLazyRuntimeModule(() => import("./host-hook-state.js"));
 
 function normalizeLogger(logger: PluginLogger): PluginLogger {
   return {
@@ -99,6 +98,7 @@ export function createPluginApiFactory(
     registerReload,
     registerNodeHostCommand,
     registerNodeInvokePolicy,
+    registerWidgetPresenter,
     registerSecurityAuditCollector,
     registerInteractiveHandler,
     registerConversationBindingResolvedHandler,
@@ -111,6 +111,7 @@ export function createPluginApiFactory(
     registerTrustedToolPolicy,
     registerToolMetadata,
     registerControlUiDescriptor,
+    registerBoardWidgetContentKind,
     registerRuntimeLifecycle,
     registerAgentEventSubscription,
     registerSessionSchedulerJob,
@@ -120,25 +121,20 @@ export function createPluginApiFactory(
     registerMemoryPromptSupplement,
     registerMemoryPromptPreparation,
     registerMemoryCorpusSupplement,
-    registerMemoryEmbeddingProvider,
     registerCli,
     registerChannel,
   } = registrars;
-  const { resolvePluginRuntime, setPluginRuntimeRecord } = runtimeResolver;
+  const { resolvePluginRuntime, resolveRegisteredChannelRuntime, setPluginRuntimeRecord } =
+    runtimeResolver;
 
   const createPluginSideEffectGuard = (pluginId: string): PluginSideEffectGuard => {
-    const guard: PluginSideEffectGuard = { active: true };
+    const guard = { active: true };
     const guards = pluginSideEffectGuards.get(pluginId) ?? new Set<PluginSideEffectGuard>();
     guards.add(guard);
     pluginSideEffectGuards.set(pluginId, guards);
     return guard;
   };
 
-  /**
-   * Registration failure / stop: destroy only generations owned by this plugin's
-   * guards. Does not blanket-kill an unrelated live generation that a failed
-   * candidate never replaced.
-   */
   const deactivatePluginSideEffectGuards = (pluginId: string): void => {
     const guards = pluginSideEffectGuards.get(pluginId);
     if (!guards) {
@@ -146,146 +142,11 @@ export function createPluginApiFactory(
     }
     for (const guard of guards) {
       guard.active = false;
-      const generation = guard.machineTokenGeneration;
-      if (generation) {
-        if (guard.machineTokenGenerationReused) {
-          // Shared live ownership — leave minting intact for still-running services.
-        } else {
-          // This registration created (and possibly published) the generation.
-          destroyMachineTokenFacadeGeneration(generation);
-        }
-        guard.machineTokenGeneration = undefined;
-        guard.machineTokenGenerationReused = undefined;
+      if (guard.machineTokenGeneration && !guard.machineTokenGenerationReused) {
+        destroyMachineTokenFacadeGeneration(guard.machineTokenGeneration);
       }
     }
     pluginSideEffectGuards.delete(pluginId);
-  };
-
-  /**
-   * Publish candidate generations owned by this plugin's active guards
-   * (retires only the prior live generation for that plugin).
-   *
-   * Production loader must call this only at the registry-activation boundary
-   * via {@link publishAllPluginMachineTokenGenerations}, not per-candidate.
-   */
-  const commitPluginSideEffectGuards = (pluginId: string): void => {
-    const guards = pluginSideEffectGuards.get(pluginId);
-    if (!guards) {
-      return;
-    }
-    for (const guard of guards) {
-      if (!guard.active) {
-        continue;
-      }
-      const generation = guard.machineTokenGeneration;
-      if (generation) {
-        publishMachineTokenFacadeGeneration(generation);
-      }
-    }
-  };
-
-  /**
-   * Publish every staged machine-token generation owned by this registry
-   * builder. Intended for the complete load-transaction activation boundary.
-   */
-  const publishAllPluginMachineTokenGenerations = (): void => {
-    for (const pluginId of [...pluginSideEffectGuards.keys()].toSorted()) {
-      commitPluginSideEffectGuards(pluginId);
-    }
-  };
-
-  /**
-   * Collect staged generation handles for the combined ownership commit.
-   * Includes reused live handles so reconcile keep-set preserves same-ownership
-   * generations across rematerialize.
-   */
-  const collectStagedMachineTokenGenerationHandles = (): MachineTokenFacadeGenerationHandle[] => {
-    const handles: MachineTokenFacadeGenerationHandle[] = [];
-    for (const pluginId of [...pluginSideEffectGuards.keys()].toSorted()) {
-      const guards = pluginSideEffectGuards.get(pluginId);
-      if (!guards) {
-        continue;
-      }
-      for (const guard of guards) {
-        if (!guard.active || !guard.machineTokenGeneration) {
-          continue;
-        }
-        handles.push(guard.machineTokenGeneration);
-      }
-    }
-    return handles;
-  };
-
-  /**
-   * Capture immutable ownership descriptors for cache publication / reconstruct.
-   * Descriptors only — never live generation handles.
-   */
-  const collectMachineTokenOwnershipBlueprintPlugins = (): Array<{
-    pluginId: string;
-    grantedRecords: readonly HostMachineTokenBindingRecord[];
-  }> => {
-    const byPlugin = new Map<string, HostMachineTokenBindingRecord[]>();
-    for (const pluginId of [...pluginSideEffectGuards.keys()].toSorted()) {
-      const guards = pluginSideEffectGuards.get(pluginId);
-      if (!guards) {
-        continue;
-      }
-      for (const guard of guards) {
-        if (!guard.active || !guard.machineTokenGrantedRecords?.length) {
-          continue;
-        }
-        const existing = byPlugin.get(pluginId) ?? [];
-        existing.push(...guard.machineTokenGrantedRecords);
-        byPlugin.set(pluginId, existing);
-      }
-    }
-    return [...byPlugin.entries()].map(([pluginId, grantedRecords]) => ({
-      pluginId,
-      grantedRecords,
-    }));
-  };
-
-  /**
-   * Publish staged generations and retire obsolete live generations according
-   * to reconcileScope. Call only after activatePluginRegistry succeeds.
-   */
-  const commitMachineTokenOwnershipForRegistry = (params: {
-    reconcileScope: "full" | ReadonlySet<string>;
-  }): void => {
-    commitMachineTokenOwnershipSnapshot({
-      publish: collectStagedMachineTokenGenerationHandles(),
-      reconcileScope: params.reconcileScope,
-    });
-  };
-
-  /**
-   * Non-activating snapshot loads: abandon candidates without publishing so the
-   * process-global live generation is unchanged.
-   */
-  const abandonPluginMachineTokenGenerations = (pluginId: string): void => {
-    const guards = pluginSideEffectGuards.get(pluginId);
-    if (!guards) {
-      return;
-    }
-    for (const guard of guards) {
-      const generation = guard.machineTokenGeneration;
-      if (!generation) {
-        continue;
-      }
-      // Candidate-only: do not retire a reused live generation on abandon.
-      destroyCandidateMachineTokenFacadeGeneration(generation);
-      guard.machineTokenGeneration = undefined;
-    }
-  };
-
-  /**
-   * Abandon every staged (unpublished) machine-token generation owned by this
-   * registry builder without touching unrelated live generations.
-   */
-  const abandonAllPluginMachineTokenGenerations = (): void => {
-    for (const pluginId of [...pluginSideEffectGuards.keys()]) {
-      abandonPluginMachineTokenGenerations(pluginId);
-    }
   };
 
   const createApi = (
@@ -318,8 +179,7 @@ export function createPluginApiFactory(
       !isPluginRegistryRetired(registry) &&
       (isActivatingLoadedRecord() ||
         (isPluginRegistryActivated(registry) && isLoadedRecordInRegistry()));
-    const openClawConfig = params.config as OpenClawConfig;
-    const mcpServers = openClawConfig.mcp?.servers;
+    const mcpServers = params.config.mcp?.servers;
     const grantedRecords = collectGrantedMachineTokenBindingRecords({
       pluginId: record.id,
       pluginConfig: params.pluginConfig,
@@ -327,8 +187,6 @@ export function createPluginApiFactory(
         ? { mcpServers: mcpServers as Record<string, unknown> }
         : {}),
     });
-    // Control-plane / setup / discovery paths must not stage production facades.
-    // Only full runtime registration under an activating load may create candidates.
     const mayStageMachineTokenFacade =
       registrationMode === "full" &&
       registryParams.activateGlobalSideEffects !== false &&
@@ -346,9 +204,6 @@ export function createPluginApiFactory(
         ),
       );
       sideEffectGuard.machineTokenGrantedRecords = frozenGrantedRecords;
-      // Same-ownership rematerialize must reuse the live generation. Publishing a
-      // replacement force-retires service-held facades (leases do not block owner
-      // publish) and deadletters capture drain with "facade … is unregistered".
       if (liveMachineTokenOwnershipMatchesGrantedRecords(record.id, grantedRecords)) {
         const liveHandle = getLiveMachineTokenFacadeGenerationHandle(record.id);
         const liveFacade = getLiveMachineTokenPluginFacade(record.id);
@@ -364,7 +219,7 @@ export function createPluginApiFactory(
           grantedRecords,
           resolveKeyPem: async ({ bindingId, keyRef }) => {
             const resolved = await resolveConfiguredSecretInputString({
-              config: openClawConfig,
+              config: params.config,
               env: process.env,
               value: keyRef,
               path: `plugins.entries.${record.id}.machineToken[${bindingId}].clientAssertionKeyRef`,
@@ -380,6 +235,7 @@ export function createPluginApiFactory(
         });
         sideEffectGuard.machineTokenGeneration = generation.handle;
         sideEffectGuard.machineTokenGenerationReused = false;
+        publishMachineTokenFacadeGeneration(generation.handle);
         machineTokenFacade = generation.facade;
       }
     }
@@ -417,7 +273,8 @@ export function createPluginApiFactory(
               registerModelCatalogProvider: (provider) =>
                 registerModelCatalogProvider(record, provider),
               registerEmbeddingProvider: (provider) => registerEmbeddingProvider(record, provider),
-              registerAgentHarness: (harness) => registerAgentHarness(record, harness),
+              registerAgentHarness: (harness, options) =>
+                registerAgentHarness(record, harness, options),
               registerDetachedTaskRuntime: (runtime) =>
                 registerDetachedTaskRuntime(record, runtime),
               registerSpeechProvider: (provider) => registerSpeechProvider(record, provider),
@@ -450,6 +307,7 @@ export function createPluginApiFactory(
               registerNodeHostCommand: (command) => registerNodeHostCommand(record, command),
               registerNodeInvokePolicy: (policy) =>
                 registerNodeInvokePolicy(record, policy, params.pluginConfig),
+              registerWidgetPresenter: (presenter) => registerWidgetPresenter(record, presenter),
               registerSecurityAuditCollector: (collector) =>
                 registerSecurityAuditCollector(record, collector),
               registerInteractiveHandler: (registration) =>
@@ -468,7 +326,7 @@ export function createPluginApiFactory(
                 registerAgentToolResultMiddleware(record, handler, options, params.hookPolicy);
               },
               registerSessionExtension: (extension) => registerSessionExtension(record, extension),
-              enqueueNextTurnInjection: (injection) => {
+              enqueueNextTurnInjection: async (injection) => {
                 if (params.hookPolicy?.allowPromptInjection === false) {
                   pushDiagnostic({
                     level: "warn",
@@ -476,12 +334,13 @@ export function createPluginApiFactory(
                     source: record.source,
                     message: `next-turn injection blocked by plugins.entries.${record.id}.hooks.allowPromptInjection=false`,
                   });
-                  return Promise.resolve({
+                  return {
                     enqueued: false,
                     id: "",
                     sessionKey: injection.sessionKey,
-                  });
+                  };
                 }
+                const { enqueuePluginNextTurnInjection } = await loadHookState();
                 return enqueuePluginNextTurnInjection({
                   cfg: registryParams.runtime.config.current() as OpenClawConfig,
                   pluginId: record.id,
@@ -493,6 +352,8 @@ export function createPluginApiFactory(
               registerToolMetadata: (metadata) => registerToolMetadata(record, metadata),
               registerControlUiDescriptor: (descriptor) =>
                 registerControlUiDescriptor(record, descriptor),
+              registerBoardWidgetContentKind: (definition) =>
+                registerBoardWidgetContentKind(record, definition),
               registerRuntimeLifecycle: (lifecycle) => registerRuntimeLifecycle(record, lifecycle),
               registerAgentEventSubscription: (subscription) =>
                 registerAgentEventSubscription(record, subscription),
@@ -515,7 +376,11 @@ export function createPluginApiFactory(
                 shouldCommitWorkflowSideEffect()
                   ? setPluginRunContext({ pluginId: record.id, patch })
                   : false,
-              getRunContext: (get) => getPluginRunContext({ pluginId: record.id, get }),
+              getRunContext: (get) =>
+                registryParams.activateGlobalSideEffects !== false &&
+                shouldCommitWorkflowSideEffect()
+                  ? getPluginRunContext({ pluginId: record.id, get })
+                  : undefined,
               clearRunContext: (paramsLocal) => {
                 if (
                   registryParams.activateGlobalSideEffects === false ||
@@ -536,6 +401,7 @@ export function createPluginApiFactory(
                   return { ok: false, error: "global side effects disabled" };
                 }
                 try {
+                  const { sendPluginSessionAttachment } = await loadAttachments();
                   if (!isLoadedRecordInLiveRegistry()) {
                     return { ok: false, error: "plugin is not loaded" };
                   }
@@ -592,8 +458,6 @@ export function createPluginApiFactory(
                 registerMemoryPromptPreparation(record, prepare),
               registerMemoryCorpusSupplement: (supplement) =>
                 registerMemoryCorpusSupplement(record, supplement),
-              registerMemoryEmbeddingProvider: (adapter) =>
-                registerMemoryEmbeddingProvider(record, adapter),
               on: (hookName, handler, opts) =>
                 registerTypedHook(record, hookName, handler, opts, params.hookPolicy),
             }
@@ -609,20 +473,18 @@ export function createPluginApiFactory(
         // Allow setup-only/setup-runtime paths to surface parse-time CLI metadata
         // without opting into the wider full-registration surface.
         registerCli: (registrar, opts) => registerCli(record, registrar, opts),
-        registerChannel: (registration) => registerChannel(record, registration, registrationMode),
+        registerChannel: (registration) =>
+          registerChannel(
+            record,
+            registration,
+            registrationMode,
+            registrationCapabilities.runtimeChannel
+              ? () => resolveRegisteredChannelRuntime(record)
+              : undefined,
+          ),
       },
     });
   };
 
-  return {
-    createApi,
-    deactivatePluginSideEffectGuards,
-    commitPluginSideEffectGuards,
-    publishAllPluginMachineTokenGenerations,
-    collectStagedMachineTokenGenerationHandles,
-    collectMachineTokenOwnershipBlueprintPlugins,
-    commitMachineTokenOwnershipForRegistry,
-    abandonPluginMachineTokenGenerations,
-    abandonAllPluginMachineTokenGenerations,
-  };
+  return { createApi, deactivatePluginSideEffectGuards };
 }

@@ -5,6 +5,7 @@ import {
   isHelpOrVersionInvocation,
   isRootHelpInvocation,
 } from "./argv.js";
+import { resolveParentAwareCommandPath } from "./parent-command-path.js";
 
 type CliArgvInvocation = {
   argv: string[];
@@ -18,7 +19,7 @@ type CliArgvInvocation = {
 export function resolveCliArgvInvocation(argv: string[]): CliArgvInvocation {
   return {
     argv,
-    commandPath: getCommandPathWithRootOptions(argv, 2),
+    commandPath: resolveParentAwareCommandPath(argv) ?? getCommandPathWithRootOptions(argv, 2),
     primary: getPrimaryCommand(argv),
     hasHelpOrVersion: isHelpOrVersionInvocation(argv),
     isRootHelpInvocation: isRootHelpInvocation(argv),

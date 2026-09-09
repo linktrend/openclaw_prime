@@ -4,16 +4,18 @@
  * observability decisions shared across embedded-agent hot paths.
  */
 import type { TSchema } from "typebox";
+import type { MessagePresentationAction } from "../../interactive/payload.js";
 import type {
   ModelApi,
   ProviderModelRouteRuntimePolicy,
   ProviderRouteOverridePresence,
 } from "../../plugin-sdk/provider-model-types.js";
 import type { AuthProfileStore } from "../auth-profiles/types.js";
+import type { ProviderModelAuthSourceClassification } from "../provider-model-auth-source-plan.js";
 import type { AgentTool } from "../runtime/index.js";
 
 /** Runtime transport selected for one model attempt. */
-export type AgentRuntimeTransport = "sse" | "websocket" | "auto";
+export type AgentRuntimeTransport = "sse" | "websocket" | "websocket-cached" | "auto";
 
 /** Thinking levels accepted by runtime-plan extra-param preparation. */
 type AgentRuntimeThinkLevel =
@@ -41,6 +43,7 @@ type AgentRuntimeFailoverReason =
   | "billing"
   | "server_error"
   | "timeout"
+  | "tls_certificate"
   | "context_overflow"
   | "model_not_found"
   | "session_expired"
@@ -48,9 +51,6 @@ type AgentRuntimeFailoverReason =
   | "no_error_details"
   | "unclassified"
   | "unknown";
-
-/** Provider/runtime config object passed through plugin boundaries. */
-type AgentRuntimeConfig = unknown;
 
 /** Provider model descriptor consumed by runtime-plan hooks. */
 type AgentRuntimeModel = {
@@ -88,56 +88,26 @@ type AgentRuntimeTextTransforms = {
 /** Resolved provider runtime handle forwarded to plugin-owned hooks. */
 type AgentRuntimeProviderHandle = {
   provider: string;
-  config?: AgentRuntimeConfig;
+  modelId?: string | null;
+  config?: unknown;
   workspaceDir?: string;
   env?: NodeJS.ProcessEnv;
   applyAutoEnable?: boolean;
-  bundledProviderVitestCompat?: boolean;
+};
+
+type PreparedAgentRuntimeProviderHandle = AgentRuntimeProviderHandle & {
+  modelId: string | null;
+  prepared: true;
 };
 
 type AgentRuntimeInteractiveButtonStyle = "primary" | "secondary" | "success" | "danger";
-
-type AgentRuntimeMessagePresentationAction =
-  | {
-      type: "command";
-      command: string;
-    }
-  | {
-      type: "callback";
-      value: string;
-    }
-  | {
-      type: "approval";
-      approvalId: string;
-      approvalKind: "exec" | "plugin";
-      decision: "allow-once" | "allow-always" | "deny";
-    }
-  | {
-      type: "question";
-      questionId: string;
-      optionValue: string;
-    }
-  | {
-      type: "url";
-      url: string;
-    }
-  | {
-      type: "web-app";
-      url: string;
-      widgetId?: string;
-    }
-  | {
-      type: "web-app";
-      url?: string;
-      widgetId: string;
-    };
 
 /** Portable action control exposed to agent runtime reply payloads. */
 type AgentRuntimeMessagePresentationButton = {
   /** User-visible button label. */
   label: string;
   /** Typed action sent when pressed. */
-  action?: AgentRuntimeMessagePresentationAction;
+  action?: MessagePresentationAction;
   /** @deprecated Use action. */
   value?: string;
   /** @deprecated Use an action with type "url". */
@@ -159,7 +129,7 @@ type AgentRuntimeMessagePresentationOption = {
   /** User-visible option label. */
   label: string;
   /** Typed action sent when selected. */
-  action?: Extract<AgentRuntimeMessagePresentationAction, { type: "command" | "callback" }>;
+  action?: Extract<MessagePresentationAction, { type: "command" | "callback" | "model-picker" }>;
   /** @deprecated Use action. */
   value?: string;
 };
@@ -264,8 +234,26 @@ type AgentRuntimeReplyPayloadLocation = {
 /** Portable reply payload emitted by agent runtimes before channel rendering. */
 type AgentRuntimeReplyPayload = {
   text?: string;
+  fallbackText?: {
+    text: string;
+    replacesPayloadIndex?: number;
+  };
   mediaUrl?: string;
   mediaUrls?: string[];
+  attachments?: Array<{
+    type?: "image" | "audio" | "video" | "file";
+    path?: string;
+    url?: string;
+    mediaUrl?: string;
+    filePath?: string;
+    mimeType?: string;
+    name?: string;
+    sizeBytes?: number;
+    durationMs?: number;
+    width?: number;
+    height?: number;
+    trustedLocalMedia?: boolean;
+  }>;
   trustedLocalMedia?: boolean;
   sensitiveMedia?: boolean;
   presentation?: AgentRuntimeMessagePresentation;
@@ -312,7 +300,7 @@ type AgentRuntimeSystemPromptContribution = {
 
 /** Context passed when resolving provider system prompt contributions. */
 type AgentRuntimeSystemPromptContributionContext = {
-  config?: AgentRuntimeConfig;
+  config?: unknown;
   agentDir?: string;
   workspaceDir?: string;
   provider: string;
@@ -407,6 +395,15 @@ type AgentRuntimeAuthDeferredRouteSupport = {
 };
 
 /** Auth forwarding decision for one runtime attempt. */
+export type AgentRuntimeCredentialSource = ProviderModelAuthSourceClassification | { kind: "none" };
+
+/** Actual provider/model/source tuple owned by one physical model attempt. */
+export type AgentRuntimeModelAttempt = {
+  provider: string;
+  model: string;
+  credentialSource: AgentRuntimeCredentialSource;
+};
+
 export type AgentRuntimeAuthPlan = {
   providerForAuth: string;
   /** Model whose order, cooldown, and route facts produced this plan. */
@@ -424,6 +421,8 @@ export type AgentRuntimeAuthPlan = {
   modelRoute?: AgentRuntimeAuthModelRoute;
   /** Secret-free support shared by every route deferred to harness-owned auth. */
   deferredRouteSupport?: AgentRuntimeAuthDeferredRouteSupport;
+  /** Redacted source selected for this concrete physical attempt. */
+  credentialSource?: AgentRuntimeCredentialSource;
 };
 
 /** Prompt transforms and provider contribution hooks for one runtime attempt. */
@@ -447,7 +446,6 @@ type AgentRuntimePreparedMetadataSnapshot = object;
 /** Prepared metadata loader used by tool planning without eager manifest reads. */
 type PreparedOpenClawToolPlanning = {
   metadataSnapshot?: AgentRuntimePreparedMetadataSnapshot;
-  loadMetadataSnapshot?: () => AgentRuntimePreparedMetadataSnapshot;
 };
 
 /** Tool normalization and diagnostics hooks for one runtime attempt. */
@@ -509,7 +507,7 @@ type AgentRuntimeTransportPlan = {
 /** Complete prepared runtime plan consumed by embedded-agent attempts. */
 export type AgentRuntimePlan = {
   resolvedRef: AgentRuntimeResolvedRef;
-  providerRuntimeHandle?: AgentRuntimeProviderHandle;
+  providerRuntimeHandle?: PreparedAgentRuntimeProviderHandle;
   auth: AgentRuntimeAuthPlan;
   prompt: AgentRuntimePromptPlan;
   tools: AgentRuntimeToolPlan;
@@ -537,17 +535,17 @@ export type AgentRuntimePlan = {
 
 /** Inputs needed to build delivery-only runtime decisions. */
 export type BuildAgentRuntimeDeliveryPlanParams = {
-  config?: AgentRuntimeConfig;
+  config?: unknown;
   workspaceDir?: string;
   agentDir?: string;
   provider: string;
   modelId: string;
-  providerRuntimeHandle?: AgentRuntimeProviderHandle;
+  providerRuntimeHandle?: PreparedAgentRuntimeProviderHandle;
 };
 
 /** Inputs needed to build the full prepared runtime plan. */
 export type BuildAgentRuntimePlanParams = {
-  config?: AgentRuntimeConfig;
+  config?: unknown;
   workspaceDir?: string;
   agentDir?: string;
   provider: string;
@@ -562,7 +560,7 @@ export type BuildAgentRuntimePlanParams = {
   authProfileProvider?: string;
   authProfileMode?: string;
   sessionAuthProfileId?: string;
-  sessionAuthProfileSource?: "auto" | "user";
+  sessionAuthProfileSource?: "auto" | "user" | "user-link";
   sessionAuthProfileCandidateIds?: string[];
   authProfileStore?: AuthProfileStore;
   modelRoute?: AgentRuntimeAuthModelRoute;
@@ -570,5 +568,8 @@ export type BuildAgentRuntimePlanParams = {
   thinkingLevel?: AgentRuntimeThinkLevel;
   extraParamsOverride?: Record<string, unknown>;
   resolvedTransport?: AgentRuntimeTransport;
-  providerRuntimeHandle?: AgentRuntimeProviderHandle;
+  /** Omit only when a standalone caller intentionally resolves provider hooks lazily. */
+  providerRuntimeHandle?: PreparedAgentRuntimeProviderHandle;
+  /** Lifecycle-owned plugin metadata prepared before the attempt starts. */
+  metadataSnapshot?: AgentRuntimePreparedMetadataSnapshot;
 };

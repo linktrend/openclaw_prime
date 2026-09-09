@@ -167,8 +167,11 @@ describe("mcp transport machine-token wiring", () => {
 
     expect(oauthBearerMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        serverName: "probe",
-        resourceUrl: "https://mcp.example.com/mcp",
+        identity: expect.objectContaining({
+          principal: "operator",
+          serverName: "probe",
+          serverUrl: "https://mcp.example.com/mcp",
+        }),
       }),
     );
     expect(machineTokenBearerMock).not.toHaveBeenCalled();

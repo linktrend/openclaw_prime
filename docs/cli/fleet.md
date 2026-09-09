@@ -223,7 +223,7 @@ Restore needs an existing stopped container because its inspected runtime profil
 
 Both commands accept `--max-bytes <bytes>` to bound archived or extracted file data, and both apply the same fixed one-million budget of archive path segments so metadata-only archive bombs cannot exhaust host inodes and every accepted backup stays restorable. Backup accepts `--out <path>` and both commands support `--json`.
 
-Archives contain regular files and directories only. Backup never follows or stores symlinks, hard links, sockets, or device nodes; skipped counts are reported in the result. Restore rejects archives containing any other entry type. Recreatable symlink trees such as workspace `node_modules` must be reinstalled inside the cell after a restore.
+Archives contain regular files and directories only. Backup never follows or stores symlinks, hard links, sockets, or device nodes; skipped counts are reported in the result. Restore rejects archives containing any other entry type, ignores archived ownership, and clamps restored file and directory modes before applying the cell runtime owner. Recreatable symlink trees such as workspace `node_modules` must be reinstalled inside the cell after a restore.
 
 ## `fleet doctor`
 
@@ -262,14 +262,16 @@ Purge is retryable when an exact expected tenant directory is already absent. Th
 
 ## Storage and container layout
 
-Cell state and auth-profile encryption keys use separate per-tenant host paths under the active OpenClaw state directory:
+Cell state and the legacy auth-profile encryption key use separate per-tenant host paths under the active OpenClaw state directory:
 
 ```text
 <state-dir>/fleet/cells/<tenant>/
 <state-dir>/fleet/auth-profile-secrets/<tenant>/
 ```
 
-The first directory is mounted at `/home/node/.openclaw`. The second is mounted at `/home/node/.config/openclaw`, matching the official Docker setup's encryption-key mount. The encryption key is therefore not exposed beneath the ordinary state mount or included when only the cell-state directory is backed up or shared. Both directories survive normal removal and upgrade; `fleet rm --purge-data --force` deletes both after separate containment checks.
+The first directory is mounted at `/home/node/.openclaw`. The second is mounted at `/home/node/.config/openclaw`, matching the official Docker setup's legacy OAuth migration-key mount. Both directories survive normal removal and upgrade; `fleet rm --purge-data --force` deletes both after separate containment checks.
+
+Current OAuth token material is stored as plaintext in SQLite beneath the ordinary state mount, including access, refresh, and ID-token values. The separate key can recover legacy encrypted sidecar credentials; it does not encrypt current SQLite rows or protect them from a state-only backup or copy. Treat cell-state backups and shared copies as credentials because they can contain usable OAuth material.
 
 Before first start, Fleet initializes the cell config with `gateway.mode=local`, token auth, the LAN container bind, and Control UI origins for the allocated host port. The token value is not written to that config; it remains in the container environment.
 

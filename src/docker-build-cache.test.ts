@@ -46,9 +46,9 @@ describe("docker build cache layout", () => {
     await Promise.all(dockerfilePaths.map((path) => readRepoFile(path)));
   });
 
-  it("keeps the root dependency layer independent from scripts changes", async () => {
+  it("keeps both dependency installs independent from the full source copy", async () => {
     const dockerfile = await readRepoFile("Dockerfile");
-    const installIndex = dockerfile.indexOf("pnpm install --frozen-lockfile");
+    const installIndex = dockerfile.lastIndexOf("pnpm install --frozen-lockfile");
     const copyAllIndex = dockerfile.indexOf("COPY . .");
     const scriptsCopyIndex = dockerfile.indexOf("COPY scripts ./scripts");
 
@@ -106,8 +106,9 @@ describe("docker build cache layout", () => {
       /chmod 0644 "\$installer"; \\\n\s+su - linuxbrew -c "NONINTERACTIVE=1 CI=1 \/bin\/bash '\$installer'" \|\| exit 1/u,
     );
     expect(dockerfile).not.toMatch(/curl[^\n]+\|\s*(?:bash|sh)/u);
+    expect(dockerfile).toContain("source=package.json,target=/tmp/openclaw-package.json");
     expect(dockerfile).toContain(
-      'RUN if [ "${INSTALL_PNPM}" = "1" ]; then npm install -g pnpm && pnpm --version; fi',
+      'npm install -g "$pnpm_spec" "--allow-scripts=$pnpm_spec" && pnpm --version;',
     );
   });
 
@@ -139,11 +140,9 @@ describe("docker build cache layout", () => {
     expect(dockerfile).toContain(
       "COPY --from=functional-deps --chown=appuser:appuser /tmp/openclaw-deps/node_modules /app/node_modules",
     );
-    // Packaged postinstall must run before the self-link exists so its prune
+    // Packaged prune/hotfix logic must run before the self-link exists so its
     // walks cannot cycle through /app/node_modules/openclaw -> /app.
-    const postinstallIndex = dockerfile.indexOf(
-      "node /app/scripts/postinstall-bundled-plugins.mjs",
-    );
+    const postinstallIndex = dockerfile.indexOf("runBundledPluginPostinstall");
     const selfLinkIndex = dockerfile.indexOf("ln -sfn /app /app/node_modules/openclaw");
     expect(postinstallIndex).toBeGreaterThan(-1);
     expect(selfLinkIndex).toBeGreaterThan(postinstallIndex);

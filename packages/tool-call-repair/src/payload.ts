@@ -1,3 +1,10 @@
+import { safeParseJsonRecord } from "@openclaw/normalization-core";
+import {
+  isOffsetInProtectedRanges,
+  type PlainTextToolCallNameMatcher,
+  type PlainTextToolCallParseOptions,
+  type PlainTextToolCallProtectedRangeResolver,
+} from "./contracts.js";
 // Tool Call Repair module implements payload behavior.
 import {
   consumeLineBreak,
@@ -14,16 +21,6 @@ import {
   type StructuralLineBreakOptions,
   utf8ByteLengthWithinLimit,
 } from "./grammar.js";
-import { parseOpenAiStyleToolCallBlockAt } from "./openai-style.js";
-import {
-  normalizeStandaloneParseOptions,
-  skipMarkdownFence,
-  skipMarkdownFenceClose,
-  type NormalizedPlainTextToolCallParseOptions,
-  type PlainTextToolCallParseOptions,
-} from "./standalone-helpers.js";
-
-export type { PlainTextToolCallParseOptions } from "./standalone-helpers.js";
 
 /** Parsed standalone plain-text tool call block with source offsets for repair. */
 export type PlainTextToolCallBlock = {
@@ -38,6 +35,11 @@ export type PlainTextToolCallBlock = {
   /** Inclusive start offset of the parsed block. */
   start: number;
 };
+
+type NormalizedPlainTextToolCallParseOptions = Omit<
+  PlainTextToolCallParseOptions,
+  "allowedToolNames"
+> & { allowedToolNames?: ReadonlySet<string> };
 
 const DEFAULT_MAX_PLAIN_TEXT_TOOL_PAYLOAD_BYTES = 256_000;
 const MAX_PLAIN_TEXT_TOOL_NAME_CHARS = 120;
@@ -66,11 +68,6 @@ export type PlainTextJsonToolCallScan =
       nameComplete: true;
       payload: PlainTextJsonToolCallSpan;
     });
-
-export type PlainTextToolCallNameMatcher = {
-  hasExactName(name: string): boolean;
-  hasNamePrefix(prefix: string): boolean;
-};
 
 type PlainTextToolCallScanBranches = {
   json: PlainTextJsonToolCallScan;
@@ -553,15 +550,7 @@ function parseJsonArguments(
   text: string,
   payload: PlainTextJsonToolCallSpan,
 ): Record<string, unknown> | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(text.slice(payload.start, payload.end)) as unknown;
-  } catch {
-    return null;
-  }
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  return safeParseJsonRecord(text.slice(payload.start, payload.end)) ?? null;
 }
 
 function extractXmlishParameterValue(
@@ -638,14 +627,19 @@ function parsePlainTextToolCallBlockAtAnySyntax(
 ): PlainTextToolCallBlock | null {
   return (
     parsePlainTextToolCallBlockAt(text, start, options, structuralLineBreaks) ??
-    parseXmlishPlainTextToolCallBlockAt(text, start, options, structuralLineBreaks) ??
-    parseOpenAiStyleToolCallBlockAt({
-      text,
-      start,
-      allowedToolNames: options?.allowedToolNames,
-      maxPayloadBytes: options?.maxPayloadBytes ?? DEFAULT_MAX_PLAIN_TEXT_TOOL_PAYLOAD_BYTES,
-    })
+    parseXmlishPlainTextToolCallBlockAt(text, start, options, structuralLineBreaks)
   );
+}
+
+function normalizeParseOptions(
+  options?: PlainTextToolCallParseOptions,
+): NormalizedPlainTextToolCallParseOptions | undefined {
+  return options
+    ? {
+        ...options,
+        allowedToolNames: options.allowedToolNames ? new Set(options.allowedToolNames) : undefined,
+      }
+    : undefined;
 }
 
 export function parseStandalonePlainTextToolCallBlocks(
@@ -654,14 +648,9 @@ export function parseStandalonePlainTextToolCallBlocks(
   structuralLineBreaks?: StructuralLineBreakOptions,
 ): PlainTextToolCallBlock[] | null {
   const blocks: PlainTextToolCallBlock[] = [];
-  const normalizedOptions = normalizeStandaloneParseOptions(options);
+  const normalizedOptions = normalizeParseOptions(options);
   let cursor = skipWhitespace(text, 0);
   while (cursor < text.length) {
-    cursor = skipMarkdownFence(text, cursor);
-    cursor = skipWhitespace(text, cursor);
-    if (cursor >= text.length) {
-      break;
-    }
     const block = parsePlainTextToolCallBlockAtAnySyntax(
       text,
       cursor,
@@ -673,25 +662,26 @@ export function parseStandalonePlainTextToolCallBlocks(
     }
     blocks.push(block);
     cursor = skipWhitespace(text, block.end);
-    cursor = skipMarkdownFenceClose(text, cursor);
-    cursor = skipWhitespace(text, cursor);
   }
   return blocks.length > 0 ? blocks : null;
 }
 
 /** Removes full-line standalone plain-text tool-call blocks from user-visible text. */
-export function stripPlainTextToolCallBlocks(text: string): string {
+export function stripPlainTextToolCallBlocks(
+  text: string,
+  options: { resolveProtectedRanges?: PlainTextToolCallProtectedRangeResolver } = {},
+): string {
   if (
     !text ||
     (!/\[(?:tool:)?[A-Za-z0-9_-]+\]/.test(text) &&
       !/(?:^|[\r\n])[^\S\r\n]*(?:<\|channel\|>)?(?:commentary|analysis|final)[ \t]+to=/.test(
         text,
       ) &&
-      !/(?:^|[\r\n])[^\S\r\n]*<function=/i.test(text) &&
-      !/(?:^|[\r\n])[^\S\r\n]*\{\s*"name"\s*:/.test(text))
+      !/(?:^|[\r\n])[^\S\r\n]*<function=/i.test(text))
   ) {
     return text;
   }
+  const protectedRanges = options.resolveProtectedRanges?.(text) ?? [];
   let result = "";
   let cursor = 0;
   let index = 0;
@@ -702,6 +692,10 @@ export function stripPlainTextToolCallBlocks(text: string): string {
       continue;
     }
     const blockStart = skipLineIndentation(text, index);
+    if (isOffsetInProtectedRanges(blockStart, protectedRanges)) {
+      index += 1;
+      continue;
+    }
     const scan = scanPlainTextToolCall(text, blockStart);
     if (scan.kind === "prefix" && scan.completeEnd === undefined) {
       return result + text.slice(cursor);
@@ -719,6 +713,9 @@ export function stripPlainTextToolCallBlocks(text: string): string {
     result += text.slice(cursor, index);
     while (true) {
       const adjacentStart = skipLineIndentation(text, blockEnd);
+      if (isOffsetInProtectedRanges(adjacentStart, protectedRanges)) {
+        break;
+      }
       const adjacent = scanPlainTextToolCall(text, adjacentStart);
       const adjacentEnd =
         adjacent.kind === "complete"

@@ -3,6 +3,7 @@
 export const BOARD_GRID_COLUMNS = 12;
 export const BOARD_GRID_ROW_HEIGHT = 56;
 export const BOARD_GRID_GAP = 12;
+export const BOARD_DOCUMENT_AUTO_MAX_ROWS = 240;
 const BOARD_GRID_MAX_HEIGHT = 20;
 
 export type BoardGridItem = {
@@ -41,12 +42,15 @@ function withOrder(item: BoardGridItem, order: number): BoardGridItem {
   return { name: item.name, w: item.w, h: item.h, order };
 }
 
-function canonicalItems(items: readonly BoardGridItem[]): BoardGridItem[] {
+function canonicalItems(
+  items: readonly BoardGridItem[],
+  maxItemHeight = BOARD_GRID_MAX_HEIGHT,
+): BoardGridItem[] {
   return items
     .map((item) => ({
       name: item.name,
       w: clampInteger(item.w, 1, BOARD_GRID_COLUMNS),
-      h: clampInteger(item.h, 1, BOARD_GRID_MAX_HEIGHT),
+      h: clampInteger(item.h, 1, maxItemHeight),
       order: Number.isFinite(item.order) ? item.order : 0,
     }))
     .toSorted((left, right) => left.order - right.order || left.name.localeCompare(right.name))
@@ -88,10 +92,13 @@ function firstFit(occupied: readonly boolean[][], item: BoardGridItem): BoardGri
  * Places canonical-order items at the first available row-major cell. Earlier
  * items therefore keep priority while every later item is gravity-tight.
  */
-export function layout(items: readonly BoardGridItem[]): BoardGridRect[] {
+export function layout(
+  items: readonly BoardGridItem[],
+  maxItemHeight = BOARD_GRID_MAX_HEIGHT,
+): BoardGridRect[] {
   const occupied: boolean[][] = [];
   const rects: BoardGridRect[] = [];
-  for (const item of canonicalItems(items)) {
+  for (const item of canonicalItems(items, maxItemHeight)) {
     const placed = firstFit(occupied, item);
     occupy(occupied, placed);
     rects.push(placed);
@@ -197,3 +204,102 @@ export function nudge(
 export function toCssPlacement(rect: BoardGridRect): string {
   return `grid-column: ${rect.x + 1} / span ${rect.w}; grid-row: ${rect.y + 1} / span ${rect.h};`;
 }
+
+// Keep this numeric inset aligned with the app-level --widget-frame-inset token.
+const BOARD_WIDGET_FRAME_INSET = 12;
+// board.css keeps a 1px border even when frameless. Reserve both edges so
+// viewport-sized content does not lose 2px on every resize report.
+const BOARD_WIDGET_BORDER_PX = 1;
+const BOARD_WIDGET_AUTO_MIN_ROWS = 2;
+const BOARD_WIDGET_AUTO_MAX_ROWS = 20;
+// Mirrors the 38px header grid row in board.css: coarse-pointer layouts keep
+// the bar in flow, so auto height must reserve it or content clips by one bar.
+const BOARD_WIDGET_TOUCH_BAR_PX = 38;
+
+export const FINE_POINTER_QUERY = "(hover: hover) and (pointer: fine)";
+
+export function boardChromeRowPx(): number {
+  // jsdom lacks matchMedia; missing capability data defaults to the overlay
+  // (fine-pointer) layout where the bar reserves no row space.
+  return typeof window.matchMedia === "function" && !window.matchMedia(FINE_POINTER_QUERY).matches
+    ? BOARD_WIDGET_TOUCH_BAR_PX
+    : 0;
+}
+
+function autoBoardWidgetHeightPx(
+  widget: BoardWidgetSizingInput,
+  contentHeightPx: number | undefined,
+  chromeRowPx: number,
+): number | undefined {
+  // Absent heightMode means auto BY DESIGN, including widgets pinned before
+  // the contract existed: retroactive content-fitting is the product goal, and
+  // one menu click re-pins. Only an explicit "fixed" preserves stored height.
+  if (
+    widget.contentKind !== "html" ||
+    widget.heightMode === "fixed" ||
+    contentHeightPx === undefined ||
+    !Number.isFinite(contentHeightPx) ||
+    contentHeightPx <= 0
+  ) {
+    return undefined;
+  }
+  return (
+    contentHeightPx +
+    BOARD_WIDGET_BORDER_PX * 2 +
+    chromeRowPx +
+    ((widget.presentation ?? "card") === "card" ? BOARD_WIDGET_FRAME_INSET * 2 : 0)
+  );
+}
+
+function boardRowSpanPx(rows: number): number {
+  return rows * BOARD_GRID_ROW_HEIGHT + (rows - 1) * BOARD_GRID_GAP;
+}
+
+export function effectiveBoardWidgetRows(
+  widget: BoardWidgetSizingInput,
+  contentHeightPx: number | undefined,
+  chromeRowPx = 0,
+  maxAutoRows = BOARD_WIDGET_AUTO_MAX_ROWS,
+): number {
+  const requiredHeight = autoBoardWidgetHeightPx(widget, contentHeightPx, chromeRowPx);
+  if (requiredHeight === undefined) {
+    return widget.sizeH;
+  }
+  const rows = Math.ceil(
+    (requiredHeight + BOARD_GRID_GAP) / (BOARD_GRID_ROW_HEIGHT + BOARD_GRID_GAP),
+  );
+  const minimumRows = Math.max(BOARD_WIDGET_AUTO_MIN_ROWS, rows);
+  return Math.min(maxAutoRows, minimumRows);
+}
+
+/**
+ * Exact card height for auto-sized HTML widgets. The grid cell stays quantized
+ * to rows (`effectiveBoardWidgetRows`), but the card hugs its content so the
+ * ceil-to-row slack lands outside the card as background spacing instead of
+ * dead space inside it. Undefined means "fill the cell" (fixed/non-HTML).
+ */
+export function exactBoardWidgetHeightPx(
+  widget: BoardWidgetSizingInput,
+  contentHeightPx: number | undefined,
+  chromeRowPx = 0,
+  maxAutoRows = BOARD_WIDGET_AUTO_MAX_ROWS,
+): number | undefined {
+  const requiredHeight = autoBoardWidgetHeightPx(widget, contentHeightPx, chromeRowPx);
+  if (requiredHeight === undefined) {
+    return undefined;
+  }
+  // Never exceed the quantized cell. The normal editable board retains its row
+  // cap; shell-free documents can raise it so the document owns vertical scroll.
+  return Math.min(
+    requiredHeight,
+    boardRowSpanPx(effectiveBoardWidgetRows(widget, contentHeightPx, chromeRowPx, maxAutoRows)),
+  );
+}
+
+/** Structural sizing inputs so pure grid math stays free of view-type imports. */
+type BoardWidgetSizingInput = {
+  contentKind: string;
+  heightMode?: "auto" | "fixed";
+  presentation?: "card" | "full-bleed" | "frameless";
+  sizeH: number;
+};

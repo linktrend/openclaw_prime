@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import { resolveDefaultModelForAgent } from "../../agents/model-selection-config.js";
+import { SessionManager } from "../../agents/sessions/index.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
-import { CommandLane } from "../../process/lanes.js";
 import {
   buildSkillHistoryScanPrompt,
   type SkillHistoryScanPromptSession,
@@ -12,8 +9,9 @@ import {
 import {
   HISTORY_SCAN_MAX_PROPOSAL_MUTATIONS,
   resolveSkillHistoryScanReviewOutcome,
-  resolveSkillHistoryScanRunFailure,
-} from "./history-scan-review-outcome.js";
+  assertSkillReviewRunSucceeded,
+} from "./review-outcome.js";
+import { runSkillWorkshopReview } from "./review-run.js";
 import type { SkillWorkshopProposalReviewProgress } from "./types.js";
 
 export const HISTORY_SCAN_SESSION_SEGMENT = "skill-workshop-history-scan";
@@ -58,23 +56,19 @@ export async function runSkillHistoryScanReview(params: {
         recordProgress: params.onProgress,
       }
     : undefined;
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-skill-history-scan-"));
   const runId = params.runId ?? `${HISTORY_SCAN_SESSION_SEGMENT}:${randomUUID()}`;
   let runError: unknown;
   try {
     const sessionId = randomUUID();
-    const sessionKey = `agent:${params.agentId}:${HISTORY_SCAN_SESSION_SEGMENT}:${sessionId}`;
-    const { runEmbeddedAgent } = await import("../../agents/embedded-agent.js");
-    const result = await runEmbeddedAgent({
+    const sessionKey = `agent:${params.agentId}:${HISTORY_SCAN_SESSION_SEGMENT}:incognito-${sessionId}`;
+    const result = await runSkillWorkshopReview({
+      reviewKind: "history-scan",
       sessionId,
       sessionKey,
       sandboxSessionKey: sessionKey,
-      sessionFile: path.join(tempDir, "session.jsonl"),
+      sessionManager: SessionManager.inMemory(params.workspaceDir),
       agentId: params.agentId,
       trigger: "manual",
-      lane: CommandLane.SkillWorkshopReview,
-      agentHarnessId: "openclaw",
-      agentHarnessRuntimeOverride: "openclaw",
       workspaceDir: params.workspaceDir,
       config: params.config,
       prompt: buildSkillHistoryScanPrompt({
@@ -83,30 +77,20 @@ export async function runSkillHistoryScanReview(params: {
       }),
       provider: modelRef.provider,
       model: modelRef.model,
-      // A smaller configured fallback must not receive a prompt sized for the primary model.
-      modelFallbacksOverride: [],
       timeoutMs: HISTORY_SCAN_TIMEOUT_MS,
       runId,
       toolsAllow: ["skill_workshop"],
-      disableMessageTool: true,
-      disableTrajectory: true,
-      skillWorkshopProposalOnly: true,
       skillWorkshopProposalEnv: params.env,
       skillWorkshopProposalMutationBudget: proposalMutationBudget,
       skillWorkshopProposalReviewCompletion: proposalReviewCompletion,
       skillWorkshopOrigin: { agentId: params.agentId, runId },
-      cleanupBundleMcpOnRunEnd: true,
       bootstrapContextMode: "lightweight",
       skillsSnapshot: { prompt: "", skills: [] },
-      verboseLevel: "off",
       reasoningLevel: "off",
-      suppressToolErrorWarnings: true,
     });
-    runError = resolveSkillHistoryScanRunFailure(result);
+    assertSkillReviewRunSucceeded(result);
   } catch (error) {
     runError = error;
-  } finally {
-    await fs.rm(tempDir, { recursive: true, force: true });
   }
   if (proposalReviewCompletion?.completed) {
     return proposalMutationBudget.completed;

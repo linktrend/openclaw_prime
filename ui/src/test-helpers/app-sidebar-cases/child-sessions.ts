@@ -12,7 +12,7 @@ import { waitForFast } from "../wait-for.ts";
 import "../../components/app-sidebar.ts";
 
 describe("AppSidebar agent chip", () => {
-  it("loads and expands child sessions inline without root session controls", async () => {
+  it("loads and expands child sessions with menus but without root placement controls", async () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const harness = createSessionsHarness("main", ["agent:main:parent"]);
     harness.list.mockResolvedValue({
@@ -77,18 +77,35 @@ describe("AppSidebar agent chip", () => {
 
     expect(harness.list).toHaveBeenCalledWith({
       spawnedBy: "agent:main:parent",
-      limit: 20,
+      limit: 100,
       includeGlobal: false,
       includeUnknown: false,
       configuredAgentsOnly: true,
     });
     const childRows = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-recent-session--child")];
+    const parentTree = sidebar.querySelector('[data-session-tree="agent:main:parent"]');
+    const childList = parentTree?.querySelector(
+      ":scope > .sidebar-session-tree__children [role=list]",
+    );
+    const childTrees = [...(childList?.children ?? [])];
+    expect(childList?.getAttribute("aria-label")).toBe("Child sessions");
+    expect(childTrees).toHaveLength(2);
+    expect(childTrees.every((tree) => tree.getAttribute("role") === "listitem")).toBe(true);
+    expect(childRows.every((row) => !row.hasAttribute("role"))).toBe(true);
+    expect(childRows.every((row) => row.closest("[role=list]") === childList)).toBe(true);
     expect(childRows.map((row) => row.textContent)).toEqual([
       expect.stringContaining("Research sources"),
       expect.stringContaining("Check tests"),
     ]);
     expect(childRows.every((row) => row.getAttribute("draggable") === "false")).toBe(true);
-    expect(childRows.every((row) => row.querySelector(".session-row-actions") === null)).toBe(true);
+    expect(childRows.every((row) => row.querySelector("[data-session-menu]") !== null)).toBe(true);
+    expect(childRows.every((row) => row.querySelector("[data-sidebar-session-pin]") === null)).toBe(
+      true,
+    );
+    expect(childRows.every((row) => row.querySelector(".session-row-state") === null)).toBe(true);
+    expect(childRows.every((row) => row.querySelector(".sidebar-session-indicator") !== null)).toBe(
+      true,
+    );
     expect(sidebar.querySelector('[aria-label="Done"]')).not.toBeNull();
     const runtimeStartMs = (
       sidebar.querySelector('[data-session-key="agent:main:child-one"] openclaw-elapsed-time') as
@@ -156,6 +173,77 @@ describe("AppSidebar agent chip", () => {
     );
   });
 
+  it("propagates loaded child workspace conflicts to a collapsed parent", async () => {
+    const gateway = createGateway({} as GatewayBrowserClient);
+    const harness = createSessionsHarness("main", ["agent:main:parent"]);
+    harness.list.mockResolvedValue({
+      ts: 2,
+      path: "",
+      count: 1,
+      defaults: { modelProvider: null, model: null, contextTokens: null },
+      sessions: [
+        {
+          key: "agent:worker:child",
+          spawnedBy: "agent:main:parent",
+          kind: "direct",
+          label: "Conflicted child",
+          updatedAt: 2,
+          placement: {
+            state: "reclaimed",
+            generation: 1,
+            createdAtMs: 1,
+            updatedAtMs: 2,
+            stateChangedAtMs: 2,
+            workspaceResultConflict: {
+              paths: ["src/local.ts", "src/other.ts"],
+              stagedResultRef: "refs/openclaw/worker-results/claim-child",
+            },
+          },
+        },
+      ],
+    });
+    const { sidebar } = await mountSidebar(gateway, harness.sessions);
+    harness.publishList({
+      result: {
+        ts: 2,
+        path: "",
+        count: 1,
+        defaults: { modelProvider: null, model: null, contextTokens: null },
+        sessions: [
+          {
+            key: "agent:main:parent",
+            kind: "direct",
+            label: "Parent task",
+            updatedAt: 1,
+            childSessions: ["agent:worker:child"],
+          },
+        ],
+      },
+    });
+    await sidebar.updateComplete;
+
+    const toggle = sidebar.querySelector<HTMLButtonElement>("[data-child-session-toggle]");
+    toggle?.click();
+    await waitForFast(() => expect(harness.list).toHaveBeenCalledOnce());
+    await waitForFast(() =>
+      expect(sidebar.querySelector('[data-session-key="agent:worker:child"]')).not.toBeNull(),
+    );
+
+    toggle?.click();
+    await sidebar.updateComplete;
+    expect(sidebar.querySelector('[data-session-key="agent:worker:child"]')).toBeNull();
+    const parentBadge = sidebar.querySelector<HTMLElement>(
+      '[data-session-key="agent:main:parent"] .session-row-badge--cloud',
+    );
+    expect(parentBadge?.dataset.workspaceConflicts).toBe("2");
+    expect(parentBadge?.dataset.placementState).toBeUndefined();
+    expect(parentBadge?.hasAttribute("title")).toBe(false);
+    expect(
+      (parentBadge?.closest("openclaw-tooltip") as (HTMLElement & { content?: string }) | null)
+        ?.content,
+    ).toBe("Cloud worker children: 2 workspace conflicts");
+  });
+
   it("loads every child-session page before marking a parent complete", async () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const harness = createSessionsHarness("main", ["agent:main:parent"]);
@@ -165,7 +253,7 @@ describe("AppSidebar agent chip", () => {
       count: 1,
       totalCount: 2,
       hasMore,
-      nextOffset: hasMore ? 20 : null,
+      nextOffset: hasMore ? 100 : null,
       defaults: { modelProvider: null, model: null, contextTokens: null },
       sessions: [
         {
@@ -202,14 +290,14 @@ describe("AppSidebar agent chip", () => {
     await waitForFast(() => expect(harness.list).toHaveBeenCalledTimes(2));
     expect(harness.list.mock.calls[1]?.[0]).toMatchObject({
       spawnedBy: "agent:main:parent",
-      offset: 20,
+      offset: 100,
     });
     await waitForFast(() =>
       expect(sidebar.querySelectorAll(".sidebar-recent-session--child")).toHaveLength(2),
     );
   });
 
-  it("retries an incomplete child page set after the canonical list advances", async () => {
+  it("retries an incomplete child page set only after the operator retries", async () => {
     const gateway = createGateway({} as GatewayBrowserClient);
     const harness = createSessionsHarness("main", ["agent:main:parent"]);
     const page = (sessions: SessionsListResult["sessions"], hasMore: boolean) => ({
@@ -218,7 +306,7 @@ describe("AppSidebar agent chip", () => {
       count: sessions.length,
       totalCount: 2,
       hasMore,
-      nextOffset: hasMore ? 20 : null,
+      nextOffset: hasMore ? 100 : null,
       defaults: { modelProvider: null, model: null, contextTokens: null },
       sessions,
     });
@@ -262,8 +350,20 @@ describe("AppSidebar agent chip", () => {
 
     await waitForFast(() => expect(harness.list).toHaveBeenCalledTimes(2));
     expect(sidebar.querySelector(".sidebar-recent-session--child")).toBeNull();
+    await waitForFast(() =>
+      expect(
+        sidebar.querySelector('[data-child-session-error="agent:main:parent"]')?.textContent,
+      ).toContain("child session list returned no result"),
+    );
 
     publishParent(11);
+    await sidebar.updateComplete;
+    expect(harness.list).toHaveBeenCalledTimes(2);
+    expect(sidebar.querySelector('[data-child-session-error="agent:main:parent"]')).not.toBeNull();
+
+    sidebar
+      .querySelector<HTMLButtonElement>('[data-retry-child-sessions="agent:main:parent"]')
+      ?.click();
     await waitForFast(() => expect(harness.list).toHaveBeenCalledTimes(3));
     await waitForFast(() =>
       expect(sidebar.querySelectorAll(".sidebar-recent-session--child")).toHaveLength(2),
@@ -339,20 +439,30 @@ describe("AppSidebar agent chip", () => {
     expect(sidebar.querySelector('[data-session-key="agent:worker:child"]')?.textContent).toContain(
       "Replacement child",
     );
+    expect(sidebar.querySelector("[data-child-session-error]")).toBeNull();
   });
 
   it("nests the selected child under its parent and reveals the active path", async () => {
-    const request = vi.fn(async (method: string) => {
+    const request = vi.fn(async (method: string, params?: { key?: string }) => {
       if (method === "sessions.describe") {
         return {
-          session: {
-            key: "agent:worker:child",
-            parentSessionKey: "agent:main:parent",
-            kind: "direct" as const,
-            label: "Selected child",
-            updatedAt: 2,
-            status: "running" as const,
-          },
+          session:
+            params?.key === "agent:main:parent"
+              ? {
+                  key: "agent:main:parent",
+                  kind: "direct" as const,
+                  label: "Parent task",
+                  updatedAt: 1,
+                  childSessions: ["agent:worker:child"],
+                }
+              : {
+                  key: "agent:worker:child",
+                  parentSessionKey: "agent:main:parent",
+                  kind: "direct" as const,
+                  label: "Selected child",
+                  updatedAt: 2,
+                  status: "running" as const,
+                },
         };
       }
       return undefined;
@@ -389,9 +499,9 @@ describe("AppSidebar agent chip", () => {
     await waitForFast(() =>
       expect(sidebar.querySelectorAll('[data-session-key="agent:worker:child"]')).toHaveLength(1),
     );
-    await waitForFast(() => expect(harness.list).toHaveBeenCalledOnce());
-
-    expect(sidebar.querySelectorAll(".sidebar-recent-session")).toHaveLength(2);
+    await waitForFast(() =>
+      expect(sidebar.querySelectorAll(".sidebar-recent-session")).toHaveLength(2),
+    );
     expect(sidebar.querySelectorAll('[data-session-key="agent:worker:child"]')).toHaveLength(1);
     expect(
       sidebar
@@ -403,7 +513,6 @@ describe("AppSidebar agent chip", () => {
         .querySelector('[data-session-key="agent:worker:child"]')
         ?.classList.contains("sidebar-recent-session--active"),
     ).toBe(true);
-
     const toggle = sidebar.querySelector<HTMLButtonElement>(
       '[data-child-session-toggle="agent:main:parent"]',
     );
@@ -418,6 +527,52 @@ describe("AppSidebar agent chip", () => {
     await waitForFast(() =>
       expect(sidebar.querySelector('[data-session-key="agent:worker:child"]')).not.toBeNull(),
     );
+  });
+
+  it("keeps the selected archived child when its archived parent is filtered out", async () => {
+    const request = vi.fn(async (_method: string, params: { key: string }) => ({
+      session:
+        params.key === "agent:worker:child"
+          ? {
+              key: "agent:worker:child",
+              parentSessionKey: "agent:main:parent",
+              kind: "direct" as const,
+              label: "Selected child",
+              archived: true,
+              updatedAt: 2,
+            }
+          : {
+              key: "agent:main:parent",
+              kind: "direct" as const,
+              label: "Archived parent",
+              archived: true,
+              updatedAt: 1,
+              childSessions: ["agent:worker:child"],
+            },
+    }));
+    const gateway = createGateway({ request } as unknown as GatewayBrowserClient);
+    const harness = createSessionsHarness("main", []);
+    const { sidebar, context } = await mountSidebar(gateway, harness.sessions);
+    context.agentSelection.state.selectedId = "main";
+    context.agentSelection.state.scopeId = "main";
+    (sidebar as unknown as { activeRouteId: string }).activeRouteId = "chat";
+    sidebar.sessionKey = "agent:worker:child";
+
+    await waitForFast(() => expect(request).toHaveBeenCalledTimes(2));
+    await waitForFast(() =>
+      expect(sidebar.querySelector('[data-session-key="agent:worker:child"]')).not.toBeNull(),
+    );
+    expect(sidebar.querySelector('[data-session-key="agent:main:parent"]')).toBeNull();
+    expect(
+      sidebar.querySelector(
+        '[data-session-key="agent:worker:child"] .sidebar-session__archive-glyph',
+      ),
+    ).not.toBeNull();
+    expect(
+      sidebar
+        .querySelector('[data-session-key="agent:worker:child"]')
+        ?.classList.contains("sidebar-recent-session--active"),
+    ).toBe(true);
   });
 
   it("retries a failed child load after collapsing and reopening the parent", async () => {
@@ -568,36 +723,5 @@ describe("AppSidebar agent chip", () => {
     expect(
       sidebar.querySelector('[data-session-key="agent:worker:child"] [aria-label="Done"]'),
     ).not.toBeNull();
-  });
-
-  it("keeps a selected child reachable when its parent is outside the loaded window", async () => {
-    const gateway = createGateway({} as GatewayBrowserClient);
-    const harness = createSessionsHarness("main", ["agent:main:child"]);
-    const { sidebar } = await mountSidebar(gateway, harness.sessions);
-    harness.publishList({
-      result: {
-        ts: 2,
-        path: "",
-        count: 1,
-        defaults: { modelProvider: null, model: null, contextTokens: null },
-        sessions: [
-          {
-            key: "agent:main:child",
-            spawnedBy: "agent:main:missing-parent",
-            kind: "direct",
-            label: "Reachable orphan",
-            updatedAt: 2,
-            status: "done",
-          },
-        ],
-      },
-    });
-    (sidebar as unknown as { activeRouteId: string }).activeRouteId = "chat";
-    sidebar.sessionKey = "agent:main:child";
-    await sidebar.updateComplete;
-
-    const row = sidebar.querySelector('[data-session-key="agent:main:child"]');
-    expect(row?.textContent).toContain("Reachable orphan");
-    expect(row?.classList.contains("sidebar-recent-session--child")).toBe(false);
   });
 });

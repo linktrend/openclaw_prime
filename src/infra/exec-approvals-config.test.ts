@@ -1,45 +1,49 @@
 // Covers exec approval config normalization and safe-bin policy.
-import fs from "node:fs";
-import path from "node:path";
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { makeTempDir } from "./exec-approvals-test-helpers.js";
+import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
+import { tryParsePersistedExecApprovals } from "./exec-approvals-config.js";
+import { makeExecApprovalsTempDir } from "./exec-approvals-test-helpers.js";
 import {
   isSafeBinUsage,
-  loadExecApprovals,
   matchAllowlist,
   normalizeExecApprovals,
   normalizeSafeBins,
   resolveExecApprovals,
   resolveExecApprovalsFromFile,
+  saveExecApprovals,
   type ExecApprovalsAgent,
   type ExecAllowlistEntry,
   type ExecApprovalsFile,
-  type ExecHostAdapterBinding,
 } from "./exec-approvals.js";
+
+describe("exec approval temp fixture cleanup", { concurrent: false }, () => {
+  let cleanupProbeRoot = "";
+
+  it("creates a disposable fixture root", () => {
+    cleanupProbeRoot = makeExecApprovalsTempDir();
+    expect(existsSync(cleanupProbeRoot)).toBe(true);
+  });
+
+  it("removes the fixture root before the next test", () => {
+    expect(existsSync(cleanupProbeRoot), cleanupProbeRoot).toBe(false);
+  });
+});
 
 describe("exec approvals wildcard agent", () => {
   it("merges wildcard allowlist entries with agent entries", () => {
-    const dir = makeTempDir();
+    const dir = makeExecApprovalsTempDir();
     const prevOpenClawHome = process.env.OPENCLAW_HOME;
 
     try {
       process.env.OPENCLAW_HOME = dir;
-      const approvalsPath = path.join(dir, ".openclaw", "exec-approvals.json");
-      fs.mkdirSync(path.dirname(approvalsPath), { recursive: true });
-      fs.writeFileSync(
-        approvalsPath,
-        JSON.stringify(
-          {
-            version: 1,
-            agents: {
-              "*": { allowlist: [{ pattern: "/bin/hostname" }] },
-              main: { allowlist: [{ pattern: "/usr/bin/uname" }] },
-            },
-          },
-          null,
-          2,
-        ),
-      );
+      saveExecApprovals({
+        version: 1,
+        agents: {
+          "*": { allowlist: [{ pattern: "/bin/hostname" }] },
+          main: { allowlist: [{ pattern: "/usr/bin/uname" }] },
+        },
+      });
 
       const resolved = resolveExecApprovals("main");
       expect(resolved.allowlist.map((entry) => entry.pattern)).toEqual([
@@ -47,6 +51,7 @@ describe("exec approvals wildcard agent", () => {
         "/usr/bin/uname",
       ]);
     } finally {
+      closeOpenClawStateDatabaseForTest();
       if (prevOpenClawHome === undefined) {
         delete process.env.OPENCLAW_HOME;
       } else {
@@ -64,6 +69,7 @@ describe("exec approvals node host allowlist check", () => {
   it.each([
     {
       resolution: {
+        kind: "executable" as const,
         rawExecutable: "python3",
         resolvedPath: "/usr/bin/python3",
         resolvedRealPath: "/usr/bin/python3",
@@ -76,6 +82,7 @@ describe("exec approvals node host allowlist check", () => {
       // Simulates symlink resolution:
       // /opt/homebrew/bin/python3 -> /opt/homebrew/opt/python@3.14/bin/python3.14
       resolution: {
+        kind: "executable" as const,
         rawExecutable: "python3",
         resolvedPath: "/opt/homebrew/opt/python@3.14/bin/python3.14",
         executableName: "python3.14",
@@ -85,6 +92,7 @@ describe("exec approvals node host allowlist check", () => {
     },
     {
       resolution: {
+        kind: "executable" as const,
         rawExecutable: "unknown-tool",
         resolvedPath: "/usr/local/bin/unknown-tool",
         executableName: "unknown-tool",
@@ -102,6 +110,7 @@ describe("exec approvals node host allowlist check", () => {
 
   it("does not treat unknown tools as safe bins", () => {
     const resolution = {
+      kind: "executable" as const,
       rawExecutable: "unknown-tool",
       resolvedPath: "/usr/local/bin/unknown-tool",
       executableName: "unknown-tool",
@@ -116,6 +125,7 @@ describe("exec approvals node host allowlist check", () => {
 
   it("satisfies via safeBins even when not in allowlist", () => {
     const resolution = {
+      kind: "executable" as const,
       rawExecutable: "head",
       resolvedPath: "/usr/bin/head",
       executableName: "head",
@@ -140,198 +150,6 @@ describe("exec approvals node host allowlist check", () => {
   });
 });
 
-describe("exec approvals denylist config", () => {
-  it("merges wildcard denylist entries with agent entries", () => {
-    const resolved = resolveExecApprovalsFromFile({
-      file: {
-        version: 1,
-        agents: {
-          "*": { denylist: [{ pattern: "git push*--force*" }] },
-          main: { denylist: [{ pattern: "launchctl*" }] },
-        },
-      },
-      agentId: "main",
-    });
-    expect(resolved.denylist.map((entry) => entry.pattern)).toEqual([
-      "git push*--force*",
-      "launchctl*",
-    ]);
-  });
-
-  it("resolves an empty denylist when none is configured", () => {
-    const resolved = resolveExecApprovalsFromFile({ file: { version: 1 } });
-    expect(resolved.denylist).toEqual([]);
-  });
-
-  it("drops malformed denylist entries during normalization", () => {
-    const denylist = [
-      { pattern: "  rm -rf /*  " },
-      { pattern: "" },
-      "rm -rf /",
-    ] as unknown as NonNullable<ExecApprovalsAgent["denylist"]>;
-    const normalized = normalizeExecApprovals({
-      version: 1,
-      agents: { main: { denylist } },
-    });
-    expect(normalized.agents?.main?.denylist).toEqual([{ pattern: "rm -rf /*" }]);
-  });
-
-  it("keeps agents without denylist untouched during normalization", () => {
-    const normalized = normalizeExecApprovals({
-      version: 1,
-      agents: { main: { allowlist: [{ pattern: "/bin/hostname" }] } },
-    });
-    expect(normalized.agents?.main?.denylist).toBeUndefined();
-  });
-});
-
-describe("exec approvals host-adapter config", () => {
-  const sharedAdapter = {
-    id: "shared",
-    target: "gateway" as const,
-    executable: "/usr/local/libexec/shared-wrapper",
-    argvPrefix: ["read"],
-    environment: { PATH: "/usr/local/bin:/usr/bin:/bin" },
-  };
-  const mainAdapter = {
-    id: "main",
-    target: "gateway" as const,
-    executable: "/usr/local/libexec/main-wrapper",
-    argvPrefix: ["dispatch"],
-    environment: { PATH: "/usr/local/bin:/usr/bin:/bin" },
-  };
-
-  it("merges structural host-adapter bindings and explicit secure routing", () => {
-    const resolved = resolveExecApprovalsFromFile({
-      file: {
-        version: 1,
-        agents: {
-          "*": {
-            secureRouting: true,
-            hostAdapters: [sharedAdapter],
-          },
-          main: {
-            hostAdapters: [mainAdapter],
-          },
-        },
-      },
-      agentId: "main",
-    });
-    expect(resolved.hostAdapters).toEqual([sharedAdapter, mainAdapter]);
-    expect(resolved.secureRouting).toBe(true);
-  });
-
-  it("lets unrelated profiles opt into the same secure mechanism with their own STOP policy", () => {
-    const file = {
-      version: 1 as const,
-      agents: {
-        "second-agent": { secureRouting: true, denylist: [{ pattern: "second-stop" }] },
-        "lisa-derived-clone": { secureRouting: true, denylist: [{ pattern: "clone-stop" }] },
-        legacy: { denylist: [{ pattern: "legacy-stop" }] },
-      },
-    };
-    const second = resolveExecApprovalsFromFile({ file, agentId: "second-agent" });
-    const clone = resolveExecApprovalsFromFile({ file, agentId: "lisa-derived-clone" });
-    const legacy = resolveExecApprovalsFromFile({ file, agentId: "legacy" });
-    expect(second.secureRouting).toBe(true);
-    expect(second.denylist).toEqual([{ pattern: "second-stop" }]);
-    expect(clone.secureRouting).toBe(true);
-    expect(clone.denylist).toEqual([{ pattern: "clone-stop" }]);
-    expect(legacy.secureRouting).toBe(false);
-  });
-
-  it("drops malformed host-adapter bindings during normalization", () => {
-    const normalized = normalizeExecApprovals({
-      version: 1,
-      agents: {
-        main: {
-          hostAdapters: [
-            sharedAdapter,
-            {
-              id: "bad-target",
-              target: "node",
-              executable: "/bin/false",
-              argvPrefix: [],
-              environment: {},
-            } as unknown as ExecHostAdapterBinding,
-            {
-              id: "",
-              target: "gateway",
-              executable: "/bin/false",
-              argvPrefix: [],
-              environment: {},
-            },
-            {
-              id: "bad-path",
-              target: "gateway",
-              executable: "relative",
-              argvPrefix: [],
-              environment: {},
-            },
-            {
-              id: "empty-contract",
-              target: "gateway",
-              executable: "/bin/false",
-              argvPrefix: [],
-              environment: {},
-            },
-            {
-              id: "unsafe-env",
-              target: "gateway",
-              executable: "/bin/false",
-              argvPrefix: ["read"],
-              environment: { PATH: "/usr/bin:/bin", LD_PRELOAD: "/tmp/inject" },
-            },
-            {
-              id: "unsafe-startup",
-              target: "gateway",
-              executable: "/bin/false",
-              argvPrefix: ["read"],
-              environment: { PATH: "/usr/bin:/bin", BASH_ENV: "/tmp/inject" },
-            },
-          ],
-        },
-      },
-    });
-    expect(normalized.agents?.main?.hostAdapters).toEqual([sharedAdapter]);
-  });
-
-  it("drops malformed secure-routing fields during direct normalization", () => {
-    const normalized = normalizeExecApprovals({
-      version: 1,
-      agents: {
-        main: {
-          secureRouting: "true" as unknown as boolean,
-          hostAdapters: [{ id: "legacy", target: "gateway", command: "unsafe" }] as never,
-        },
-      },
-    });
-    expect(normalized.agents?.main?.secureRouting).toBeUndefined();
-    expect(normalized.agents?.main?.hostAdapters).toBeUndefined();
-  });
-
-  it("fails closed when persisted secure-routing state is malformed", () => {
-    const dir = makeTempDir();
-    const previousStateDir = process.env.OPENCLAW_STATE_DIR;
-    try {
-      process.env.OPENCLAW_STATE_DIR = dir;
-      fs.writeFileSync(
-        path.join(dir, "exec-approvals.json"),
-        JSON.stringify({ version: 1, agents: { main: { secureRouting: "true" } } }),
-      );
-      const loaded = loadExecApprovals();
-      expect(loaded.defaults?.security).toBe("deny");
-      expect(loaded.defaults?.ask).toBe("off");
-    } finally {
-      if (previousStateDir === undefined) {
-        delete process.env.OPENCLAW_STATE_DIR;
-      } else {
-        process.env.OPENCLAW_STATE_DIR = previousStateDir;
-      }
-    }
-  });
-});
-
 describe("exec approvals default agent migration", () => {
   it("migrates legacy default agent entries to main", () => {
     const file: ExecApprovalsFile = {
@@ -340,7 +158,7 @@ describe("exec approvals default agent migration", () => {
         default: { allowlist: [{ pattern: "/bin/legacy" }] },
       },
     };
-    const resolved = resolveExecApprovalsFromFile({ file });
+    const resolved = resolveExecApprovalsFromFile({ file, agentId: "main" });
     expect(resolved.allowlist.map((entry) => entry.pattern)).toEqual(["/bin/legacy"]);
     expect(resolved.file.agents?.default).toBeUndefined();
     expect(resolved.file.agents?.main?.allowlist?.[0]?.pattern).toBe("/bin/legacy");
@@ -354,10 +172,82 @@ describe("exec approvals default agent migration", () => {
         default: { ask: "off", allowlist: [{ pattern: "/bin/legacy" }] },
       },
     };
-    const resolved = resolveExecApprovalsFromFile({ file });
+    const resolved = resolveExecApprovalsFromFile({ file, agentId: "main" });
     expect(resolved.agent.ask).toBe("always");
     expect(resolved.allowlist.map((entry) => entry.pattern)).toEqual(["/bin/main", "/bin/legacy"]);
     expect(resolved.file.agents?.default).toBeUndefined();
+  });
+});
+
+describe("persisted exec approvals schema", () => {
+  it("round-trips exact MCP grants and tolerates unrelated future agent metadata", () => {
+    const mcpTools = [
+      { server: "project.docs", tool: "write_note", source: "allow-always", addedAt: 123 },
+    ];
+    const file = { version: 1, agents: { main: { mcpTools, futurePolicy: { enabled: true } } } };
+    const parsed = tryParsePersistedExecApprovals(JSON.stringify(file));
+    expect(parsed?.agents?.main).toMatchObject(file.agents.main);
+    expect(tryParsePersistedExecApprovals(JSON.stringify(parsed))?.agents?.main).toMatchObject(
+      file.agents.main,
+    );
+  });
+
+  it("retains MCP grants when merging legacy default and canonical main policy", () => {
+    const grant = {
+      server: "project.docs",
+      tool: "write_note",
+      source: "allow-always",
+      addedAt: 123,
+    };
+    const parsed = tryParsePersistedExecApprovals(
+      JSON.stringify({
+        version: 1,
+        agents: { main: { mcpTools: [grant] }, default: { ask: "off" } },
+      }),
+    );
+    expect(parsed?.agents?.main).toMatchObject({ mcpTools: [grant], ask: "off" });
+    expect(parsed?.agents?.default).toBeUndefined();
+  });
+
+  it("keeps legacy string allowlist entries while normalizing them", () => {
+    const parsed = tryParsePersistedExecApprovals(
+      JSON.stringify({
+        version: 1,
+        agents: { main: { allowlist: ["  ls  ", { pattern: "cat", source: "legacy" }] } },
+      }),
+    );
+    expect(parsed?.agents?.main?.allowlist?.[0]).toMatchObject({ pattern: "ls" });
+    expect(parsed?.agents?.main?.allowlist?.[1]).toEqual(
+      expect.objectContaining({ pattern: "cat", source: undefined }),
+    );
+  });
+
+  it.each([
+    ...[
+      { server: "", tool: "write_note", source: "allow-always", addedAt: 123 },
+      { server: "project.docs", tool: "", source: "allow-always", addedAt: 123 },
+      { server: "project.docs", tool: "write_note", source: "other", addedAt: 123 },
+      { server: "project.docs", tool: "write_note", source: "allow-always", addedAt: -1 },
+    ].map((grant, index) => ({
+      name: `MCP grant ${index}`,
+      value: { version: 1, agents: { main: { mcpTools: [grant] } } },
+    })),
+    { name: "version", value: { version: 2 } },
+    { name: "socket token", value: { version: 1, socket: { token: 42 } } },
+    { name: "policy enum", value: { version: 1, defaults: { security: "none" } } },
+    ...["lastUsedAt", "lastUsedCommand"].map((field) => ({
+      name: `null ${field}`,
+      value: { version: 1, agents: { main: { allowlist: [{ pattern: "ls", [field]: null }] } } },
+    })),
+    {
+      name: "allowlist metadata",
+      value: {
+        version: 1,
+        agents: { main: { allowlist: [{ pattern: "ls", lastUsedAt: "now" }] } },
+      },
+    },
+  ])("rejects invalid persisted $name", ({ value }) => {
+    expect(tryParsePersistedExecApprovals(JSON.stringify(value))).toBeNull();
   });
 });
 
@@ -623,7 +513,7 @@ describe("normalizeExecApprovals strips invalid security/ask enum values (#59006
         "*": { security: "none", ask: "off" },
       },
     } as unknown as ExecApprovalsFile;
-    const resolved = resolveExecApprovalsFromFile({ file });
+    const resolved = resolveExecApprovalsFromFile({ file, agentId: "main" });
     // Invalid "none" in defaults is stripped, so fallback to DEFAULT_SECURITY ("full")
     expect(resolved.defaults.security).toBe("full");
     // Invalid "never" in defaults is stripped, so fallback to DEFAULT_ASK ("off")

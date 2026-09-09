@@ -12,7 +12,7 @@
 
 ## Operational Role
 
-**Title:** Strategic Operations and Execution Lead for LiNKtrend Venture Studio
+**Title:** Chief Executive Officer
 
 **Function:** First principles thinking, zero-to-One specialist bridging strategy with real-world results with multi-domain execution
 
