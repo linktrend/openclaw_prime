@@ -1,10 +1,8 @@
-import type { MachineTokenFacadeGenerationHandle } from "../agents/machine-token-host.js";
-import type { HostMachineTokenBindingRecord } from "../agents/machine-token-host.js";
-import type { registerInternalHook } from "../hooks/internal-hooks.js";
 import type { PluginDiagnostic } from "./manifest-types.js";
 import { createModelCatalogRegistrationHandlers } from "./model-catalog-registration.js";
 import { createEmptyPluginRegistry } from "./registry-empty.js";
-import type { PluginRegistryParams } from "./registry-types.js";
+import { bindPluginRegistryRuntime } from "./registry-runtime-binding.js";
+import type { PluginRecord, PluginRegistryParams } from "./registry-types.js";
 import type { PluginHookName } from "./types.js";
 
 export type PluginTypedHookPolicy = {
@@ -16,17 +14,8 @@ export type PluginTypedHookPolicy = {
 
 export type PluginSideEffectGuard = {
   active: boolean;
-  /** Candidate/live machine-token generation owned by this registration attempt. */
   machineTokenGeneration?: MachineTokenFacadeGenerationHandle;
-  /**
-   * True when this registration reused an already-live generation. Rollback must
-   * not force-retire that shared live ownership.
-   */
   machineTokenGenerationReused?: boolean;
-  /**
-   * Frozen ownership descriptors for this generation — cache blueprint only.
-   * Never serialize the live handle into the registry cache.
-   */
   machineTokenGrantedRecords?: readonly HostMachineTokenBindingRecord[];
 };
 
@@ -72,16 +61,22 @@ export function resolveTypedHookTimeoutMs(params: {
 
 export function createPluginRegistryState(registryParams: PluginRegistryParams) {
   const registry = createEmptyPluginRegistry();
-  const coreGatewayMethodNames = Array.from(
-    new Set([
-      ...(registryParams.coreGatewayMethodNames ?? []),
-      ...Object.keys(registryParams.coreGatewayHandlers ?? {}),
-    ]),
-  ).toSorted();
-  registry.coreGatewayMethodNames = coreGatewayMethodNames;
+  bindPluginRegistryRuntime(registry, registryParams.runtime);
+  const coreGatewayMethods = new Set(registryParams.coreGatewayMethodNames);
+  for (const name of Object.keys(registryParams.coreGatewayHandlers ?? {})) {
+    coreGatewayMethods.add(name);
+  }
+  // oxlint-disable-next-line unicorn/no-array-sort -- This array is separate from the membership index.
+  registry.coreGatewayMethodNames = Array.from(coreGatewayMethods).sort();
 
   const pushDiagnostic = (diagnostic: PluginDiagnostic) => {
     registry.diagnostics.push(diagnostic);
+  };
+  const reportRegistrationError = (record: PluginRecord, message: string) => {
+    pushDiagnostic({ level: "error", pluginId: record.id, source: record.source, message });
+  };
+  const reportRegistrationWarning = (record: PluginRecord, message: string) => {
+    pushDiagnostic({ level: "warn", pluginId: record.id, source: record.source, message });
   };
   const modelCatalogRegistrars = createModelCatalogRegistrationHandlers({
     registry,
@@ -91,23 +86,18 @@ export function createPluginRegistryState(registryParams: PluginRegistryParams) 
   return {
     registry,
     registryParams,
-    coreGatewayMethods: new Set(coreGatewayMethodNames),
+    allowProcessHomeSessionCatalogs: registryParams.allowProcessHomeSessionCatalogs ?? true,
+    coreGatewayMethods,
     getHostCronService: () => registryParams.hostServices?.cron,
-    pluginHookRollback: new Map<
-      string,
-      Array<{
-        name: string;
-        previousRegistrations: Array<{
-          event: string;
-          handler: Parameters<typeof registerInternalHook>[1];
-        }>;
-      }>
-    >(),
     pluginsWithChannelRegistrationConflict: new Set<string>(),
     pluginSideEffectGuards: new Map<string, Set<PluginSideEffectGuard>>(),
     pushDiagnostic,
+    reportRegistrationError,
+    reportRegistrationWarning,
     ...modelCatalogRegistrars,
   };
 }
 
 export type PluginRegistryState = ReturnType<typeof createPluginRegistryState>;
+import type { MachineTokenFacadeGenerationHandle } from "../agents/machine-token-host.js";
+import type { HostMachineTokenBindingRecord } from "../agents/machine-token-host.js";

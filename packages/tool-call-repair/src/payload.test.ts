@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { scanXmlishToolCall } from "./grammar.js";
-import {
-  parseStandalonePlainTextToolCallBlocks,
-  scanPlainTextJsonToolCall,
-  stripPlainTextToolCallBlocks,
-} from "./payload.js";
+import { scanPlainTextJsonToolCall, stripPlainTextToolCallBlocks } from "./payload.js";
 
 function trackStringOperations(value: string) {
   let indexedReads = 0;
@@ -150,6 +146,32 @@ describe("scanPlainTextJsonToolCall", () => {
 });
 
 describe("stripPlainTextToolCallBlocks", () => {
+  it("preserves protected candidates while stripping adjacent unprotected calls", () => {
+    const protectedCall = '[read]\n{"path":"example.txt"}\n[/read]';
+    const unprotectedCall = '[read]\n{"path":"secret.txt"}\n[/read]';
+    const raw = [protectedCall, unprotectedCall].join("\n");
+
+    expect(
+      stripPlainTextToolCallBlocks(raw, {
+        resolveProtectedRanges: () => [{ start: 0, end: protectedCall.length }],
+      }),
+    ).toBe(`${protectedCall}\n`);
+    expect(stripPlainTextToolCallBlocks(raw)).toBe("");
+  });
+
+  it("checks protection for every adjacent candidate", () => {
+    const first = '[read]\n{"path":"secret.txt"}\n[/read]';
+    const second = '[server]\n{"host":"example.test"}\n[/server]';
+    const raw = `${first}\n${second}`;
+    const secondStart = raw.indexOf(second);
+
+    expect(
+      stripPlainTextToolCallBlocks(raw, {
+        resolveProtectedRanges: () => [{ start: secondStart, end: raw.length }],
+      }),
+    ).toBe(second);
+  });
+
   it("preserves a balanced tool block whose JSON is invalid", () => {
     const raw = '[read]\n{"path":}\n[/read]';
 
@@ -190,56 +212,5 @@ describe("stripPlainTextToolCallBlocks", () => {
 
     expect(stripPlainTextToolCallBlocks(tracked.text)).toBe(raw);
     expect(tracked.indexedReads).toBeLessThan(raw.length * 16);
-  });
-});
-
-describe("OpenAI-style plain-text tool calls", () => {
-  it("parses object-argument tool calls emitted by local Ollama coders", () => {
-    const raw =
-      '{"name": "write", "arguments": {"path": "/tmp/test_local_prime.py", "content": "def is_prime(n):\\n    return n > 1\\n"}}';
-    const blocks = parseStandalonePlainTextToolCallBlocks(raw, {
-      allowedToolNames: ["write", "read", "exec"],
-    });
-
-    expect(blocks).toHaveLength(1);
-    expect(blocks?.[0]?.name).toBe("write");
-    expect(blocks?.[0]?.arguments).toEqual({
-      path: "/tmp/test_local_prime.py",
-      content: "def is_prime(n):\n    return n > 1\n",
-    });
-  });
-
-  it("parses stringified arguments payloads", () => {
-    const raw = '{"name":"exec","arguments":"{\\"command\\":\\"python3 /tmp/x.py\\"}"}';
-    const blocks = parseStandalonePlainTextToolCallBlocks(raw);
-
-    expect(blocks).toHaveLength(1);
-    expect(blocks?.[0]?.name).toBe("exec");
-    expect(blocks?.[0]?.arguments).toEqual({ command: "python3 /tmp/x.py" });
-  });
-
-  it("rejects non-tool JSON objects", () => {
-    expect(parseStandalonePlainTextToolCallBlocks('{"path":"/tmp/x"}')).toBeNull();
-    expect(parseStandalonePlainTextToolCallBlocks('{"name":123,"arguments":{}}')).toBeNull();
-  });
-
-  it("promotes markdown-fenced OpenAI-style tool calls from local Ollama coders", () => {
-    const raw = [
-      "```json",
-      '{"name": "write", "arguments": {"path": "/tmp/scratch/test_local_final.py", "content": "x = 1\\n"}}',
-      "```",
-      "",
-      "```json",
-      '{"name": "exec", "arguments": {"command": "python3 /tmp/scratch/test_local_final.py"}}',
-      "```",
-    ].join("\n");
-
-    const blocks = parseStandalonePlainTextToolCallBlocks(raw, {
-      allowedToolNames: ["write", "exec"],
-    });
-
-    expect(blocks).toHaveLength(2);
-    expect(blocks?.[0]?.name).toBe("write");
-    expect(blocks?.[1]?.name).toBe("exec");
   });
 });

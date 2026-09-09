@@ -1,5 +1,6 @@
 /** Applies migration plans with backup, filtering, reporting, and progress output. */
 import fs from "node:fs/promises";
+import { exitCliAfterOutput } from "../../cli/one-shot-exit.js";
 import { withProgress } from "../../cli/progress.js";
 import type { ProgressReporter } from "../../cli/progress.js";
 import { resolveStateDir } from "../../config/paths.js";
@@ -22,9 +23,7 @@ function shouldTreatMissingBackupAsEmptyState(error: unknown): boolean {
 }
 
 /** Creates a verified pre-migration backup, treating absent local state as empty. */
-export async function createPreMigrationBackup(opts: {
-  output?: string;
-}): Promise<string | undefined> {
+async function createPreMigrationBackup(opts: { output?: string }): Promise<string | undefined> {
   try {
     const result = await backupCreateCommand(
       {
@@ -136,7 +135,16 @@ export async function runMigrationApply(params: {
       );
   writeApplyResult(params.runtime, params.opts, withBackup);
   if (!params.opts.allowPartialResult) {
-    assertApplySucceeded(withBackup);
+    try {
+      assertApplySucceeded(withBackup);
+    } catch (error) {
+      // The JSON result already describes partial failure; a generic error would
+      // append a second document and make stdout impossible to parse as JSON.
+      if (params.opts.json) {
+        exitCliAfterOutput(params.runtime, 1);
+      }
+      throw error;
+    }
   }
   return withBackup;
 }

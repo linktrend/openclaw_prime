@@ -1,10 +1,6 @@
 // Plugin validation and public errors wrap the host-owned SQLite lease engine.
-import { MAX_TIMER_TIMEOUT_MS } from "../shared/number-coercion.js";
-import {
-  OpenClawStateLeaseError,
-  type OpenClawStateLeaseErrorCode,
-  withOpenClawStateLease,
-} from "../state/openclaw-state-lease.js";
+import { MAX_TIMER_TIMEOUT_MS } from "@openclaw/normalization-core/number-coercion";
+import { OpenClawStateLeaseError, withOpenClawStateLease } from "../state/openclaw-state-lease.js";
 import {
   PluginStateLeaseError,
   type PluginStateLeaseContext,
@@ -87,18 +83,19 @@ function validateOptions(pluginId: string, options: PluginStateLeaseOptions) {
     if (typeof database.agentId !== "string" || !database.agentId.trim()) {
       throw invalidInput("plugin lease agent database requires a string agentId");
     }
+    throw invalidInput("agent-scoped plugin leases are unavailable in this state-store release");
   }
   return {
     scope: `plugin:${validatePluginId(pluginId)}:${namespace}`,
     key,
     leaseMs,
     waitMs,
-    database,
+    database: { scope: "shared" as const },
     signal: options.signal,
   };
 }
 
-function mapErrorCode(code: OpenClawStateLeaseErrorCode): PluginStateLeaseErrorCode {
+function mapErrorCode(code: string): PluginStateLeaseErrorCode {
   switch (code) {
     case "OPENCLAW_STATE_LEASE_INVALID_INPUT":
       return "PLUGIN_STATE_LEASE_INVALID_INPUT";

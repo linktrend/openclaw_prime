@@ -4,17 +4,17 @@ import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import {
   buildCodexUserMcpServersThreadConfigPatch,
   buildCodexUserMcpServersThreadConfigPatchForRuntime,
-  injectCodexMcpConfigArgs,
-  isMachineTokenMcpProjectionUnsupported,
-  machineTokenMcpProjectionUnsupportedError,
-  resolveCodexHostManagedMcpServerNames,
 } from "./bundle-mcp-codex.js";
 
 const authMocks = vi.hoisted(() => ({
+  loadExecApprovalsReadOnly: vi.fn(),
   loadAuthProfileStoreForSecretsRuntime: vi.fn(),
   resolveApiKeyForProfile: vi.fn(),
   resolveMcpOAuthAccessToken: vi.fn(),
-  resolveMachineTokenAccess: vi.fn(),
+}));
+
+vi.mock("../../infra/exec-approvals-store.js", () => ({
+  loadExecApprovalsReadOnly: authMocks.loadExecApprovalsReadOnly,
 }));
 
 vi.mock("../auth-profiles/store.js", () => ({
@@ -29,31 +29,71 @@ vi.mock("../mcp-oauth.js", () => ({
   resolveMcpOAuthAccessToken: authMocks.resolveMcpOAuthAccessToken,
 }));
 
-vi.mock("../machine-token.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../machine-token.js")>();
-  return {
-    ...actual,
-    resolveMachineTokenAccess: authMocks.resolveMachineTokenAccess,
-  };
-});
-
-function assertNoMachineTokenProjectionLeak(value: unknown): void {
-  const serialized = JSON.stringify(value);
-  expect(serialized).not.toMatch(/machineToken|machine_token/i);
-  expect(serialized).not.toContain("mt-must-never-project");
-  expect(serialized).not.toContain("BEGIN PRIVATE KEY");
-}
-
 describe("buildCodexUserMcpServersThreadConfigPatch", () => {
   beforeEach(() => {
+    authMocks.loadExecApprovalsReadOnly.mockReset().mockReturnValue({ version: 1, agents: {} });
     authMocks.loadAuthProfileStoreForSecretsRuntime.mockReset();
     authMocks.resolveApiKeyForProfile.mockReset();
     authMocks.resolveMcpOAuthAccessToken.mockReset();
-    authMocks.resolveMachineTokenAccess.mockReset();
-    authMocks.resolveMachineTokenAccess.mockRejectedValue(
-      new Error("machine-token resolve must not run during Codex projection"),
-    );
   });
+
+  it.each(["configured", "runtime"])(
+    "projects exact-agent durable grants with server policy precedence in %s preparation",
+    async (preparation) => {
+      const grants = ["auto", "unspecified", "prompt", "approve", "missing"].map((server) => ({
+        server,
+        tool: "write.raw_tool",
+        source: "allow-always",
+        addedAt: 1,
+      }));
+      authMocks.loadExecApprovalsReadOnly.mockReturnValue({
+        version: 1,
+        agents: {
+          main: { mcpTools: grants },
+          other: { mcpTools: [{ ...grants[0], tool: "other_tool" }] },
+          "*": { mcpTools: [{ ...grants[0], tool: "wildcard_tool" }] },
+        },
+      });
+      const cfg = {
+        mcp: {
+          servers: {
+            auto: { command: "mcp", codex: { defaultToolsApprovalMode: "auto" } },
+            unspecified: { command: "mcp", toolFilter: { exclude: ["write.raw_tool"] } },
+            prompt: { command: "mcp", codex: { defaultToolsApprovalMode: "prompt" } },
+            approve: { command: "mcp", codex: { defaultToolsApprovalMode: "approve" } },
+          },
+        },
+      } satisfies OpenClawConfig;
+      const prepare =
+        preparation === "runtime"
+          ? buildCodexUserMcpServersThreadConfigPatchForRuntime
+          : buildCodexUserMcpServersThreadConfigPatch;
+
+      const patch = await prepare(cfg, { agentId: "main" });
+
+      expect(patch?.mcp_servers.auto).toEqual({
+        command: "mcp",
+        default_tools_approval_mode: "auto",
+        tools: { "write.raw_tool": { approval_mode: "approve" } },
+      });
+      expect(patch?.mcp_servers.unspecified).toEqual({
+        command: "mcp",
+        disabled_tools: ["write.raw_tool"],
+        tools: { "write.raw_tool": { approval_mode: "approve" } },
+      });
+      expect(patch?.mcp_servers.prompt).toEqual({
+        command: "mcp",
+        default_tools_approval_mode: "prompt",
+      });
+      expect(patch?.mcp_servers.approve).toEqual({
+        command: "mcp",
+        default_tools_approval_mode: "approve",
+      });
+      expect(patch?.mcp_servers.missing).toBeUndefined();
+      expect(authMocks.loadExecApprovalsReadOnly).toHaveBeenCalledTimes(1);
+      expect((await prepare(cfg))?.mcp_servers.auto).not.toHaveProperty("tools");
+    },
+  );
 
   it("returns undefined when cfg has no mcp.servers (regression: #80814)", () => {
     expect(buildCodexUserMcpServersThreadConfigPatch(undefined)).toBeUndefined();
@@ -64,6 +104,44 @@ describe("buildCodexUserMcpServersThreadConfigPatch", () => {
     expect(
       buildCodexUserMcpServersThreadConfigPatch({ mcp: { servers: {} } } as OpenClawConfig),
     ).toBeUndefined();
+  });
+
+  it("projects session server and tool overrides into user MCP config", () => {
+    const cfg = {
+      mcp: {
+        servers: {
+          disabledDocs: {
+            enabled: false,
+            url: "https://disabled-docs.example.com/mcp",
+          },
+          constructor: {
+            url: "https://constructor.example.com/mcp",
+          },
+          search: {
+            url: "https://search.example.com/mcp",
+          },
+        },
+      },
+    } satisfies OpenClawConfig;
+
+    const patch = buildCodexUserMcpServersThreadConfigPatch(cfg, {
+      toolOverrides: {
+        mcpServers: { disabledDocs: true, search: false },
+        mcpToolsDeny: { disabledDocs: ["delete_page"] },
+      },
+    });
+
+    expect(patch).toEqual({
+      mcp_servers: {
+        constructor: {
+          url: "https://constructor.example.com/mcp",
+        },
+        disabledDocs: {
+          url: "https://disabled-docs.example.com/mcp",
+          disabled_tools: ["delete_page"],
+        },
+      },
+    });
   });
 
   it("projects a stdio user MCP server entry into mcp_servers (regression: #80814)", () => {
@@ -578,188 +656,5 @@ describe("buildCodexUserMcpServersThreadConfigPatch", () => {
       },
     });
     expect(JSON.stringify(patch)).not.toContain("refresh-token-must-not-project");
-  });
-
-  it("fail-closes machine_token servers from static Codex projection", () => {
-    const unavailable: Array<{ name: string; message: string }> = [];
-    const patch = buildCodexUserMcpServersThreadConfigPatch(
-      {
-        mcp: {
-          servers: {
-            brain: {
-              url: "https://brain.example.test/mcp",
-              auth: "machine_token",
-              machineToken: {
-                bindingId: "linkbrain-stage",
-                issuerUrl: "https://issuer.example.test",
-                clientId: "brain-client",
-                clientAssertionKeyRef: {
-                  source: "env",
-                  provider: "default",
-                  id: "BRAIN_ASSERTION",
-                },
-              },
-            },
-            notes: {
-              url: "https://notes.example.test/mcp",
-              headers: {
-                Authorization: "Bearer ${NOTES_TOKEN}",
-              },
-            },
-          },
-        },
-      } as unknown as OpenClawConfig,
-      {
-        onServerUnavailable: (name, error) => {
-          unavailable.push({
-            name,
-            message: error instanceof Error ? error.message : String(error),
-          });
-        },
-      },
-    );
-
-    expect(isMachineTokenMcpProjectionUnsupported({ auth: "machine_token" })).toBe(true);
-    expect(machineTokenMcpProjectionUnsupportedError("brain").message).toMatch(
-      /cannot be projected/,
-    );
-    expect(unavailable).toHaveLength(1);
-    expect(unavailable[0]?.name).toBe("brain");
-    expect(unavailable[0]?.message).toMatch(/machine-token auth/);
-    expect(patch?.mcp_servers).toHaveProperty("notes");
-    expect(patch?.mcp_servers).not.toHaveProperty("brain");
-    assertNoMachineTokenProjectionLeak(patch);
-    expect(authMocks.resolveMachineTokenAccess).not.toHaveBeenCalled();
-  });
-
-  it("selects only enabled agent-authorized machine-token servers for host execution", () => {
-    const cfg = {
-      mcp: {
-        servers: {
-          brain: {
-            url: "https://brain.example.test/mcp",
-            auth: "machine_token",
-            machineToken: { bindingId: "brain" },
-            codex: { agents: ["lisa"] },
-          },
-          skills: {
-            url: "https://skills.example.test/mcp",
-            auth: "machine_token",
-            machineToken: { bindingId: "skills" },
-          },
-          disabled: {
-            enabled: false,
-            auth: "machine_token",
-            machineToken: { bindingId: "disabled" },
-          },
-          otherAgent: {
-            auth: "machine_token",
-            machineToken: { bindingId: "other" },
-            codex: { agents: ["eric"] },
-          },
-          notes: { url: "https://notes.example.test/mcp" },
-          oauthWithInactiveMachineToken: {
-            url: "https://oauth.example.test/mcp",
-            auth: "oauth",
-            machineToken: { bindingId: "inactive" },
-          },
-        },
-      },
-    } as unknown as OpenClawConfig;
-
-    expect(resolveCodexHostManagedMcpServerNames(cfg, { agentId: "lisa" })).toEqual([
-      "brain",
-      "skills",
-    ]);
-    expect(resolveCodexHostManagedMcpServerNames(cfg, { agentId: "eric" })).toEqual([
-      "otherAgent",
-      "skills",
-    ]);
-  });
-
-  it("fail-closes machine_token servers from runtime Codex projection without minting", async () => {
-    const unavailable: Array<{ name: string; message: string }> = [];
-    authMocks.resolveMachineTokenAccess.mockResolvedValue({
-      bindingId: "linkbrain-stage",
-      accessToken: "mt-must-never-project",
-      expiresAt: Date.now() + 60_000,
-      tokenType: "Bearer",
-    });
-
-    const patch = await buildCodexUserMcpServersThreadConfigPatchForRuntime(
-      {
-        mcp: {
-          servers: {
-            brain: {
-              url: "https://brain.example.test/mcp",
-              auth: "machine_token",
-              machineToken: {
-                bindingId: "linkbrain-stage",
-                issuerUrl: "https://issuer.example.test",
-                clientId: "brain-client",
-                clientAssertionKeyRef: "literal-must-not-project",
-              },
-            },
-          },
-        },
-      } as unknown as OpenClawConfig,
-      {
-        onServerUnavailable: (name, error) => {
-          unavailable.push({
-            name,
-            message: error instanceof Error ? error.message : String(error),
-          });
-        },
-      },
-    );
-
-    expect(patch).toBeUndefined();
-    expect(unavailable).toEqual([
-      expect.objectContaining({
-        name: "brain",
-        message: expect.stringMatching(/cannot be projected/),
-      }),
-    ]);
-    assertNoMachineTokenProjectionLeak({ unavailable, patch });
-    expect(authMocks.resolveMachineTokenAccess).not.toHaveBeenCalled();
-  });
-
-  it("omits machine_token servers from Codex CLI TOML injection", () => {
-    const unavailable: string[] = [];
-    const args = injectCodexMcpConfigArgs(
-      ["exec"],
-      {
-        mcpServers: {
-          brain: {
-            url: "https://brain.example.test/mcp",
-            auth: "machine_token",
-            machineToken: {
-              bindingId: "linkbrain-stage",
-              issuerUrl: "https://issuer.example.test",
-              clientId: "brain-client",
-              clientAssertionKeyRef: {
-                source: "env",
-                provider: "default",
-                id: "BRAIN_ASSERTION",
-              },
-            },
-          },
-          notes: {
-            url: "https://notes.example.test/mcp",
-          },
-        },
-      } as never,
-      {
-        onServerUnavailable: (name) => {
-          unavailable.push(name);
-        },
-      },
-    );
-
-    expect(unavailable).toEqual(["brain"]);
-    const joined = args.join(" ");
-    expect(joined).toContain("notes");
-    expect(joined).not.toMatch(/machineToken|machine_token|linkbrain-stage/i);
-    expect(authMocks.resolveMachineTokenAccess).not.toHaveBeenCalled();
   });
 });

@@ -6,15 +6,9 @@
  */
 import { isIP } from "node:net";
 import {
-  GovernedBrowserUrlError,
-  resolveGovernedBrowserUrl,
-  type GovernedBrowserUrlBinding,
-} from "openclaw/plugin-sdk/browser-policy";
-import {
-  SsrFBlockedError,
   isPrivateNetworkAllowedByPolicy,
+  resolvePinnedHostnameWithPolicy,
   type LookupFn,
-  type PinnedHostname,
   type SsrFPolicy,
 } from "../infra/net/ssrf.js";
 import { matchesHostnameAllowlist, normalizeHostname } from "../sdk-security-runtime.js";
@@ -62,12 +56,7 @@ export function parseBrowserNavigationUrl(url: string): URL {
 export type BrowserNavigationPolicyOptions = {
   ssrfPolicy?: SsrFPolicy;
   browserProxyMode?: BrowserNavigationProxyMode;
-  lookupFn?: LookupFn;
-  fetchImpl?: typeof fetch;
 };
-
-/** DNS result retained from policy admission and reused by request guards. */
-export type BrowserNavigationBinding = GovernedBrowserUrlBinding;
 
 /** Describes whether the browser itself is routing page traffic through a proxy. */
 export type BrowserNavigationProxyMode = "direct" | "explicit-browser-proxy";
@@ -81,16 +70,10 @@ type BrowserNavigationRequestLike = {
 /** Build a navigation-policy object while omitting default direct proxy mode. */
 export function withBrowserNavigationPolicy(
   ssrfPolicy?: SsrFPolicy,
-  opts?: {
-    browserProxyMode?: BrowserNavigationProxyMode;
-    lookupFn?: LookupFn;
-    fetchImpl?: typeof fetch;
-  },
+  opts?: { browserProxyMode?: BrowserNavigationProxyMode },
 ): BrowserNavigationPolicyOptions {
   return {
     ...(ssrfPolicy ? { ssrfPolicy } : {}),
-    ...(opts?.lookupFn ? { lookupFn: opts.lookupFn } : {}),
-    ...(opts?.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
     ...(opts?.browserProxyMode && opts.browserProxyMode !== "direct"
       ? { browserProxyMode: opts.browserProxyMode }
       : {}),
@@ -124,31 +107,26 @@ function isIpLiteralHostname(hostname: string): boolean {
 
 function isExplicitlyAllowedBrowserHostname(hostname: string, ssrfPolicy?: SsrFPolicy): boolean {
   const normalizedHostname = normalizeHostname(hostname);
-  const exactMatches = ssrfPolicy?.allowedHostnames ?? [];
-  if (exactMatches.some((value) => normalizeHostname(value) === normalizedHostname)) {
-    return true;
-  }
-  const hostnameAllowlist = (ssrfPolicy?.hostnameAllowlist ?? [])
+  const allowedHostnames = (ssrfPolicy?.allowedHostnames ?? [])
     .map((pattern) => normalizeHostname(pattern))
     .filter(Boolean);
-  return hostnameAllowlist.length > 0
-    ? matchesHostnameAllowlist(normalizedHostname, hostnameAllowlist)
+  return allowedHostnames.length > 0
+    ? matchesHostnameAllowlist(normalizedHostname, allowedHostnames)
     : false;
 }
 
 /** Assert that a requested browser navigation URL is policy-allowed. */
-export async function admitBrowserNavigationAllowed(
+export async function assertBrowserNavigationAllowed(
   opts: {
     url: string;
     lookupFn?: LookupFn;
-    pinnedHostname?: PinnedHostname;
   } & BrowserNavigationPolicyOptions,
-): Promise<BrowserNavigationBinding | undefined> {
+): Promise<void> {
   const parsed = parseBrowserNavigationUrl(opts.url);
 
   if (!NETWORK_NAVIGATION_PROTOCOLS.has(parsed.protocol)) {
     if (isAllowedNonNetworkNavigationUrl(parsed)) {
-      return undefined;
+      return;
     }
     throw new InvalidBrowserNavigationUrlError(
       `Navigation blocked: unsupported protocol "${parsed.protocol}"`,
@@ -167,9 +145,10 @@ export async function admitBrowserNavigationAllowed(
     );
   }
 
-  // Strict hostname navigation is admitted only for explicitly trusted names.
-  // The Playwright route boundary then fetches HTTP(S) requests through the
-  // retained Node dispatcher; direct browser-proxy paths remain fail-closed.
+  // Browser navigations happen in Chromium's network stack, not Node's. In
+  // strict mode, a hostname-based URL would be resolved twice by different
+  // resolvers, so Node-side pinning cannot guarantee the browser connects to
+  // the same address that passed policy checks.
   if (
     opts.ssrfPolicy &&
     opts.ssrfPolicy.dangerouslyAllowPrivateNetwork === false &&
@@ -182,60 +161,10 @@ export async function admitBrowserNavigationAllowed(
     );
   }
 
-  let binding: BrowserNavigationBinding;
-  try {
-    binding = await resolveGovernedBrowserUrl(opts.url, {
-      policy: opts.ssrfPolicy,
-      lookupFn: opts.lookupFn,
-      pinnedHostname: opts.pinnedHostname,
-    });
-  } catch (error) {
-    if (error instanceof GovernedBrowserUrlError) {
-      throw new SsrFBlockedError(error.message);
-    }
-    throw error;
-  }
-  if (opts.pinnedHostname) {
-    if (
-      !binding.pinnedHostname ||
-      binding.pinnedHostname.hostname !== opts.pinnedHostname.hostname
-    ) {
-      throw new InvalidBrowserNavigationUrlError(
-        "Navigation blocked: DNS answer changed during the guarded browser navigation",
-      );
-    }
-    return { url: parsed, pinnedHostname: opts.pinnedHostname };
-  }
-  return binding;
-}
-
-/** Backward-compatible void assertion for callers that only need admission. */
-export function assertBrowserNavigationAllowed(
-  opts: {
-    url: string;
-    lookupFn?: LookupFn;
-    pinnedHostname?: PinnedHostname;
-    returnBinding: true;
-  } & BrowserNavigationPolicyOptions,
-): Promise<BrowserNavigationBinding | undefined>;
-export function assertBrowserNavigationAllowed(
-  opts: {
-    url: string;
-    lookupFn?: LookupFn;
-    pinnedHostname?: PinnedHostname;
-    returnBinding?: false;
-  } & BrowserNavigationPolicyOptions,
-): Promise<void>;
-export async function assertBrowserNavigationAllowed(
-  opts: {
-    url: string;
-    lookupFn?: LookupFn;
-    pinnedHostname?: PinnedHostname;
-    returnBinding?: boolean;
-  } & BrowserNavigationPolicyOptions,
-): Promise<void | BrowserNavigationBinding> {
-  const binding = await admitBrowserNavigationAllowed(opts);
-  return opts.returnBinding ? binding : undefined;
+  await resolvePinnedHostnameWithPolicy(parsed.hostname, {
+    lookupFn: opts.lookupFn,
+    policy: opts.ssrfPolicy,
+  });
 }
 
 /**
@@ -248,7 +177,6 @@ export async function assertBrowserNavigationResultAllowed(
   opts: {
     url: string;
     lookupFn?: LookupFn;
-    pinnedHostname?: PinnedHostname;
   } & BrowserNavigationPolicyOptions,
 ): Promise<void> {
   const rawUrl = opts.url.trim();

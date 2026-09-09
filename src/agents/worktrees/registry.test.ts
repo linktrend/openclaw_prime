@@ -10,15 +10,15 @@ import {
 import {
   deleteRegistryWorktree,
   getRegistryWorktreeProvisionedChunk,
-  findRegistryWorktreeByPath,
   findLiveRegistryWorktreeByPath,
   getRegistryWorktree,
-  getRegistryWorktreeProvisionedLedger,
   getRegistryWorktreeProvisionedPaths,
   getRegistryWorktreeProvisionedState,
   insertRegistryWorktreeProvisionedChunk,
   insertRegistryWorktree,
   listRegistryWorktrees,
+  listRegistryWorktreesForMigration,
+  hasLegacyRegistryWorktrees,
   updateRegistryWorktree,
 } from "./registry.js";
 import type { ManagedWorktreeRecord } from "./types.js";
@@ -36,6 +36,12 @@ describe("managed worktree registry", () => {
   afterEach(async () => {
     closeOpenClawStateDatabaseForTest();
     await fs.rm(root, { recursive: true, force: true });
+  });
+
+  it("inspects absent legacy worktrees without creating the state database", async () => {
+    expect(hasLegacyRegistryWorktrees(env)).toBe(false);
+    expect(listRegistryWorktreesForMigration(env)).toEqual([]);
+    await expect(fs.stat(env.OPENCLAW_STATE_DIR!)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("persists, orders, updates, and deletes worktree rows through Kysely", () => {
@@ -62,7 +68,9 @@ describe("managed worktree registry", () => {
       lastActiveAt: 20,
     });
 
+    expect(hasLegacyRegistryWorktrees(env)).toBe(true);
     expect(listRegistryWorktrees(env).map((entry) => entry.id)).toEqual(["second", "first"]);
+    expect(listRegistryWorktreesForMigration(env)).toEqual(listRegistryWorktrees(env));
     expect(findLiveRegistryWorktreeByPath(env, record.path)).toMatchObject({
       id: "first",
       ownerKind: "workboard",
@@ -70,29 +78,29 @@ describe("managed worktree registry", () => {
     });
     expect(getRegistryWorktreeProvisionedPaths(env, "first")).toEqual([".env.local"]);
     expect(getRegistryWorktreeProvisionedPaths(env, "second")).toBeUndefined();
-    expect(getRegistryWorktreeProvisionedLedger(env, "second")).toEqual({ status: "legacy" });
 
     updateRegistryWorktree(env, "first", {
+      repositoryIdentity: {
+        repoRoot: path.join(root, "rebound-repo"),
+        repoFingerprint: "fedcba9876543210",
+      },
       lastActiveAt: 30,
       removedAt: 40,
       snapshotRef: "refs/openclaw/snapshots/first",
       provisionedState: [{ path: ".env.local", mode: 0o600, chunks: 1 }],
     });
     expect(getRegistryWorktree(env, "first")).toMatchObject({
+      repoRoot: path.join(root, "rebound-repo"),
+      repoFingerprint: "fedcba9876543210",
       lastActiveAt: 30,
       removedAt: 40,
       snapshotRef: "refs/openclaw/snapshots/first",
     });
     expect(findLiveRegistryWorktreeByPath(env, record.path)).toBeUndefined();
-    expect(findRegistryWorktreeByPath(env, record.path)?.id).toBe("first");
     expect(getRegistryWorktreeProvisionedPaths(env, "first")).toEqual([".env.local"]);
     expect(getRegistryWorktreeProvisionedState(env, "first")).toEqual([
       { path: ".env.local", mode: 0o600, chunks: 1 },
     ]);
-    expect(getRegistryWorktreeProvisionedLedger(env, "first")).toEqual({
-      status: "valid",
-      paths: [".env.local"],
-    });
     insertRegistryWorktreeProvisionedChunk(env, {
       worktreeId: "first",
       path: ".env.local",
@@ -122,7 +130,7 @@ describe("managed worktree registry", () => {
     openOpenClawStateDatabase({ env })
       .db.prepare("UPDATE worktrees SET provisioned_paths_json = ? WHERE id = ?")
       .run("not-json", "second");
-    expect(getRegistryWorktreeProvisionedLedger(env, "second")).toEqual({ status: "invalid" });
+    expect(getRegistryWorktreeProvisionedPaths(env, "second")).toBeUndefined();
   });
 
   it("adds the provisioned-path ledger to an existing worktree registry", () => {
@@ -130,7 +138,11 @@ describe("managed worktree registry", () => {
     closeOpenClawStateDatabaseForTest();
     const { DatabaseSync } = requireNodeSqlite();
     const legacy = new DatabaseSync(databasePath);
-    legacy.exec("ALTER TABLE worktrees DROP COLUMN provisioned_paths_json");
+    legacy.exec(`
+      ALTER TABLE worktrees DROP COLUMN provisioned_paths_json;
+      PRAGMA user_version = 5;
+      UPDATE schema_meta SET schema_version = 5 WHERE meta_key = 'primary';
+    `);
     legacy.close();
 
     expect(getRegistryWorktreeProvisionedPaths(env, "missing")).toBeUndefined();

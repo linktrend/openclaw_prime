@@ -6,8 +6,12 @@ import Testing
 @testable import OpenClaw
 
 struct MacGatewayChatTransportMappingTests {
-    @Test func `mac chat advertises inline widgets`() {
-        #expect(GatewayConnection.operatorClientCaps == [OpenClawGatewayClientCapability.inlineWidgets])
+    @Test func `mac chat advertises typed agent rosters and inline widgets`() {
+        #expect(GatewayConnection.operatorClientCaps == [
+            OpenClawGatewayClientCapability.agentKind,
+            OpenClawGatewayClientCapability.inlineWidgets,
+            OpenClawGatewayClientCapability.usageRefreshing,
+        ])
     }
 
     @Test func `bare global session target carries normalized selected agent`() {
@@ -36,6 +40,34 @@ struct MacGatewayChatTransportMappingTests {
         #expect(transport.sessionTarget(for: "global") == .init(
             sessionKey: "global",
             agentID: nil))
+    }
+
+    @Test func `session list request follows the current routing agent`() {
+        let transport = MacGatewayChatTransport(defaultGlobalAgentID: "  Agent-A  ")
+
+        let first = transport.sessionsListRequest(limit: 50, search: nil, archived: false)
+        #expect(first.params["agentId"]?.value as? String == "agent-a")
+
+        transport.updateDefaultGlobalAgentID("Agent-B")
+        let second = transport.sessionsListRequest(limit: nil, search: "recent", archived: true)
+        #expect(second.params["agentId"]?.value as? String == "agent-b")
+
+        let unowned = MacGatewayChatTransport()
+            .sessionsListRequest(limit: nil, search: nil, archived: false)
+        #expect(unowned.params["agentId"] == nil)
+    }
+
+    @Test func `fixed connection does not inherit app wide cache routing`() async throws {
+        let url = try #require(URL(string: "wss://fixed.example"))
+        let connection = GatewayConnection(configProvider: {
+            (url: url, token: nil, password: nil)
+        })
+        let transport = MacGatewayChatTransport(
+            connection: connection,
+            outboxGatewayID: "manual-fixed")
+
+        #expect(await transport.currentOutboxGatewayMatchesConnection())
+        await connection.shutdown()
     }
 
     @Test func `session settings request preserves verbosity patch`() {

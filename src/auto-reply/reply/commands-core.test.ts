@@ -38,7 +38,12 @@ function firstBeforeResetCall() {
 }
 
 describe("emitResetCommandHooks", () => {
-  async function runBeforeResetContext(sessionKey?: string) {
+  async function runBeforeResetContext(
+    sessionKey?: string,
+    cfg: HandleCommandsParams["cfg"] = {
+      agents: { entries: { main: { default: true } } },
+    },
+  ) {
     const command = {
       surface: "discord",
       senderId: "rai",
@@ -51,7 +56,7 @@ describe("emitResetCommandHooks", () => {
     await emitResetCommandHooks({
       action: "new",
       ctx: {} as HandleCommandsParams["ctx"],
-      cfg: {} as HandleCommandsParams["cfg"],
+      cfg,
       command,
       sessionKey,
       previousSessionEntry: {
@@ -87,9 +92,11 @@ describe("emitResetCommandHooks", () => {
     expect(ctx?.workspaceDir).toBe("/tmp/openclaw-workspace");
   });
 
-  it("falls back to main when the reset hook has no session key", async () => {
-    const ctx = await runBeforeResetContext(undefined);
-    expect(ctx?.agentId).toBe("main");
+  it("uses the configured default when the reset hook has no session key", async () => {
+    const ctx = await runBeforeResetContext(undefined, {
+      agents: { entries: { ops: { default: true } } },
+    });
+    expect(ctx?.agentId).toBe("ops");
     expect(ctx?.sessionKey).toBeUndefined();
     expect(ctx?.sessionId).toBe("prev-session");
     expect(ctx?.workspaceDir).toBe("/tmp/openclaw-workspace");
@@ -213,8 +220,8 @@ describe("emitResetCommandHooks", () => {
 
 // Tests command send policy behavior for visible replies and message-tool routing.
 
-const loadCommandHandlersMock = vi.hoisted(
-  (): ReturnType<typeof vi.fn<() => CommandHandler[]>> => vi.fn<() => CommandHandler[]>(() => []),
+const loadCommandHandlersMock = vi.hoisted((): ReturnType<typeof vi.fn<() => CommandHandler[]>> =>
+  vi.fn<() => CommandHandler[]>(() => []),
 );
 
 vi.mock("./commands-handlers.runtime.js", () => ({
@@ -261,6 +268,7 @@ function makeParams(): HandleCommandsParams {
     directives: {},
     elevated: { enabled: true, allowed: true, failures: [] },
     sessionKey: "agent:target:main",
+    agentId: "target",
     sessionEntry: {
       sessionId: "wrapper-session",
       updatedAt: Date.now(),
@@ -328,4 +336,49 @@ describe("handleCommands send policy", () => {
       },
     });
   });
+
+  it.each([
+    { sessionKey: "agent:target:main", expectedAgentId: "target" },
+    { sessionKey: "global", expectedAgentId: "caller" },
+  ])("dispatches $sessionKey with its selected owner", async ({ sessionKey, expectedAgentId }) => {
+    const { handleCommands } = await import("./commands-core.js");
+    const handler = vi.fn<CommandHandler>(async (params) => ({
+      shouldContinue: false,
+      reply: { text: params.agentId },
+    }));
+    loadCommandHandlersMock.mockReturnValue([handler]);
+    const params = makeParams();
+    params.cfg.agents = {
+      ownership: "explicit",
+      entries: { caller: {}, target: { agentDir: "/tmp/target-agent" } },
+    };
+    params.agentId = "caller";
+    params.agentDir = "/tmp/caller-agent";
+    params.sessionKey = sessionKey;
+
+    expect((await handleCommands(params)).reply?.text).toBe(expectedAgentId);
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ agentDir: `/tmp/${expectedAgentId}-agent` }),
+      true,
+    );
+  });
+
+  it.each([true, false])(
+    "preserves literal input when command interpretation is suppressed (%s)",
+    async (suppressed) => {
+      const { handleCommands } = await import("./commands-core.js");
+      const { maybeHandleResetCommand } = await import("./commands-reset.js");
+      const handler = vi.fn<CommandHandler>(async () => ({ shouldContinue: false }));
+      loadCommandHandlersMock.mockReturnValue([handler]);
+      const params = makeParams();
+      params.ctx.CommandInterpretationSuppressed = suppressed;
+      params.command.commandBodyNormalized = "/stop";
+      params.command.rawBodyNormalized = "/stop";
+
+      expect(await handleCommands(params)).toEqual({ shouldContinue: suppressed });
+      expect(maybeHandleResetCommand).toHaveBeenCalledTimes(suppressed ? 0 : 1);
+      expect(handler).toHaveBeenCalledTimes(suppressed ? 0 : 1);
+      expect(params.command.commandBodyNormalized).toBe("/stop");
+    },
+  );
 });

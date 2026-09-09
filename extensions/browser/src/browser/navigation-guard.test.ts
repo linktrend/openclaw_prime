@@ -6,7 +6,6 @@ import {
   assertBrowserNavigationRedirectChainAllowed,
   assertBrowserNavigationResultAllowed,
   InvalidBrowserNavigationUrlError,
-  admitBrowserNavigationAllowed,
 } from "./navigation-guard.js";
 
 function createLookupFn(address: string): LookupFn {
@@ -48,42 +47,6 @@ describe("browser navigation guard", () => {
         url: "about:blank",
       }),
     ).resolves.toBeUndefined();
-  });
-
-  it("returns and reuses the admitted DNS binding at the navigation boundary", async () => {
-    const firstLookup = createLookupFn("93.184.216.34");
-    const admitted = await admitBrowserNavigationAllowed({
-      url: "https://public.example",
-      lookupFn: firstLookup,
-    });
-    expect(admitted?.pinnedHostname).toMatchObject({
-      hostname: "public.example",
-      addresses: ["93.184.216.34"],
-    });
-
-    const rebindingLookup = createLookupFn("127.0.0.1");
-    await expect(
-      admitBrowserNavigationAllowed({
-        url: "https://public.example/next",
-        lookupFn: rebindingLookup,
-        pinnedHostname: admitted?.pinnedHostname,
-      }),
-    ).resolves.toMatchObject({ pinnedHostname: admitted?.pinnedHostname });
-    expect(rebindingLookup).not.toHaveBeenCalled();
-  });
-
-  it("rejects a DNS binding carried over to a different hostname", async () => {
-    const admitted = await admitBrowserNavigationAllowed({
-      url: "https://public.example",
-      lookupFn: createLookupFn("93.184.216.34"),
-    });
-    await expect(
-      admitBrowserNavigationAllowed({
-        url: "https://other.example",
-        pinnedHostname: admitted?.pinnedHostname,
-        lookupFn: createLookupFn("93.184.216.35"),
-      }),
-    ).rejects.toThrow("DNS binding does not match");
   });
 
   it("blocks file URLs", async () => {
@@ -199,7 +162,7 @@ describe("browser navigation guard", () => {
         lookupFn,
         ssrfPolicy: {
           dangerouslyAllowPrivateNetwork: false,
-          hostnameAllowlist: ["*.example.com"],
+          allowedHostnames: ["*.example.com"],
         },
       }),
     ).resolves.toBeUndefined();
@@ -213,7 +176,7 @@ describe("browser navigation guard", () => {
         lookupFn,
         ssrfPolicy: {
           dangerouslyAllowPrivateNetwork: false,
-          hostnameAllowlist: ["*.example.com"],
+          allowedHostnames: ["*.example.com"],
         },
       }),
     ).rejects.toThrow(/dns rebinding protections are unavailable/i);
@@ -228,7 +191,7 @@ describe("browser navigation guard", () => {
         lookupFn,
         ssrfPolicy: {
           dangerouslyAllowPrivateNetwork: false,
-          hostnameAllowlist: ["*.example.com"],
+          allowedHostnames: ["*.example.com"],
         },
       }),
     ).rejects.toThrow(/dns rebinding protections are unavailable/i);

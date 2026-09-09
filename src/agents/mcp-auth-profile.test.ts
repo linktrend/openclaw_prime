@@ -1,12 +1,7 @@
 /** Tests auth-profile backed MCP bearer projection. */
 import { expectDefined } from "@openclaw/normalization-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as machineToken from "./machine-token.js";
-import {
-  requiresMcpBearerProjection,
-  resolveMcpBearerBundleConfig,
-  withMcpAuthProfileBearer,
-} from "./mcp-auth-profile.js";
+import { resolveMcpBearerBundleConfig, withMcpAuthProfileBearer } from "./mcp-auth-profile.js";
 import * as mcpHttpFetch from "./mcp-http-fetch.js";
 
 const authMocks = vi.hoisted(() => ({
@@ -36,77 +31,6 @@ describe("mcp auth profile bearer projection", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("does not mint or project machine_token servers into env or literal headers", async () => {
-    const resolveMachineTokenAccess = vi.spyOn(machineToken, "resolveMachineTokenAccess");
-    const onServerUnavailable = vi.fn();
-
-    await expect(
-      resolveMcpBearerBundleConfig({
-        config: {
-          mcpServers: {
-            brain: {
-              url: "https://brain.example.test/mcp",
-              type: "http",
-              auth: "machine_token",
-              machineToken: {
-                bindingId: "linkbrain-stage",
-                issuerUrl: "https://issuer.example.test",
-                clientId: "brain-client",
-                clientAssertionKeyRef: {
-                  source: "env",
-                  provider: "default",
-                  id: "BRAIN_ASSERTION",
-                },
-              },
-            },
-          },
-        },
-        tokenProjection: "literal",
-      }),
-    ).rejects.toThrow(/machine-token projection is unsupported/);
-
-    expect(requiresMcpBearerProjection({ auth: "machine_token", url: "https://x.test/mcp" })).toBe(
-      false,
-    );
-
-    const omitted = await resolveMcpBearerBundleConfig({
-      config: {
-        mcpServers: {
-          brain: {
-            url: "https://brain.example.test/mcp",
-            type: "http",
-            auth: "machine_token",
-            machineToken: {
-              bindingId: "linkbrain-stage",
-              issuerUrl: "https://issuer.example.test",
-              clientId: "brain-client",
-              clientAssertionKeyRef: "literal-must-not-project",
-            },
-          },
-          localTools: { command: "local-tools" },
-        },
-      },
-      omitUnavailableOAuthServers: true,
-      onServerUnavailable,
-      tokenProjection: "env",
-    });
-
-    expect(omitted.config.mcpServers).toStrictEqual({
-      localTools: { command: "local-tools" },
-    });
-    expect(omitted.env).toBeUndefined();
-    expect(JSON.stringify(omitted)).not.toMatch(
-      /Bearer |mt-|literal-must-not-project|accessToken/i,
-    );
-    expect(onServerUnavailable).toHaveBeenCalledWith(
-      "brain",
-      expect.objectContaining({
-        message: expect.stringMatching(/machine-token projection is unsupported/),
-      }),
-    );
-    expect(resolveMachineTokenAccess).not.toHaveBeenCalled();
   });
 
   it("projects existing MCP-native OAuth credentials without an auth profile", async () => {
@@ -144,8 +68,10 @@ describe("mcp auth profile bearer projection", () => {
     );
     expect(authMocks.resolveMcpOAuthAccessToken).toHaveBeenCalledWith(
       expect.objectContaining({
-        serverName: "docs",
-        serverUrl: "https://mcp.example.com/mcp",
+        identity: expect.objectContaining({
+          serverName: "docs",
+          serverUrl: "https://mcp.example.com/mcp",
+        }),
         config: { scope: "docs.read" },
         fetchFn: expect.any(Function),
       }),

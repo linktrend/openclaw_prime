@@ -31,10 +31,11 @@ const MANAGED_NPM_PROJECT_QUARANTINE_DIR = "_openclaw-quarantined-npm-projects";
 const MANAGED_NPM_PROJECT_REBUILD_ARTIFACTS = [
   "node_modules",
   "package-lock.json",
+  // Pre-migration projects may retain a root shrinkwrap that npm 11 prefers.
   "npm-shrinkwrap.json",
 ] as const;
 
-export function isNpmAliasOverrideComparatorError(result: {
+export function isNpmAliasOverrideCompatibilityError(result: {
   stdout: string;
   stderr: string;
 }): boolean {
@@ -432,10 +433,6 @@ export async function cleanupManagedNpmPluginInstallRollbackSnapshot(params: {
       `Failed to remove temporary managed npm rollback snapshot ${params.snapshot.tempDir}: ${String(error)}`,
     );
   }
-}
-
-export function formatNpmCommandFailureOutput(result: { stdout: string; stderr: string }): string {
-  return result.stderr.trim() || result.stdout.trim();
 }
 
 export function isManagedNpmProjectCorruptionInstallFailure(result: {

@@ -1,0 +1,64 @@
+name: linktrend-openclaw-lisa
+
+services:
+  lisa:
+    profiles: ["production"]
+    image: ${OPENCLAW_PARITY_IMAGE:?set an immutable candidate image digest}
+    container_name: linktrend-openclaw-lisa
+    user: "1000:1000"
+    command:
+      - node
+      - /opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs
+      - --profile
+      - lisa
+      - gateway
+      - run
+      - --bind
+      - lan
+      - --port
+      - "18791"
+    env_file:
+      - env/lisa.env
+    environment:
+      HOME: /var/lib/openclaw/lisa
+      OPENCLAW_CONFIG_PATH: /var/lib/openclaw/lisa/.openclaw-lisa/openclaw.json
+      OPENCLAW_GATEWAY_PORT: "18791"
+      OPENCLAW_NO_RESPAWN: "1"
+      OPENCLAW_PROFILE: lisa
+      OPENCLAW_STATE_DIR: /var/lib/openclaw/lisa/.openclaw-lisa
+    volumes:
+      - /srv/linktrend/runtime/openclaw/lisa:/var/lib/openclaw/lisa:rw
+      - /etc/linktrend/runtime-tools/linktrend-gsm-secret-ref.py:/usr/local/libexec/linktrend-gsm-secret-ref.py:ro
+      - /etc/linktrend/runtime-secrets/openclaw-lisa/gcp/lisa-runtime-prod:/etc/linktrend/gcp/lisa-runtime-prod:ro
+      - /etc/linktrend/runtime-secrets/openclaw-lisa/paci-assertion-keys.json:/etc/linktrend/paci-assertion-keys.json:ro
+      - /srv/linktrend/deploy/helpers/openclaw-gateway-with-buzz-proxy.mjs:/opt/linktrend/openclaw-gateway-with-buzz-proxy.mjs:ro
+      - /etc/linktrend/runtime-secrets/buzz/tls:/run/linktrend/buzz-tls:ro
+      - /srv/linktrend/deploy/helpers/buzz-room-membership-tailnet.js:/var/lib/openclaw/lisa/.openclaw-lisa/npm/projects/openclaw-buzz-8413d3ef60/node_modules/@openclaw/buzz/dist/room-membership-a8IHfdgL.js:ro
+    extra_hosts:
+      - "linkserver-01.tailf7e13a.ts.net:172.18.0.250"
+    networks:
+      core: {ipv4_address: 172.18.0.250}
+    ports:
+      - 127.0.0.1:18791:18791
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"Promise.all([18788,18789,18791].map(p=>fetch('http://127.0.0.1:'+p+'/health'))).then(rs=>process.exit(rs.every(r=>r.ok)?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=512m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 8g
+    cpus: 4.0
+    restart: unless-stopped
+
+networks:
+  core:
+    external: true
+    name: linktrend-core-services_default

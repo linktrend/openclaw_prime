@@ -55,7 +55,6 @@ private struct AppearanceSettingsRow: View {
 private struct AppearanceSettingsScreen: View {
     @Environment(AppAppearanceModel.self) private var appearanceModel
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(RootSidebar.visibleAgentCountKey) private var sidebarVisibleAgentCount: Int = 1
 
     var body: some View {
         List {
@@ -85,23 +84,6 @@ private struct AppearanceSettingsScreen: View {
                 }
             } footer: {
                 Text("System follows this device’s appearance setting.")
-                    .font(OpenClawType.footnote)
-            }
-
-            Section {
-                Stepper(value: self.$sidebarVisibleAgentCount, in: 1...3) {
-                    HStack {
-                        Text("Sidebar Agents")
-                            .font(OpenClawType.body)
-                        Spacer()
-                        Text(verbatim: self.sidebarVisibleAgentCount.formatted())
-                            .font(OpenClawType.body)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .accessibilityIdentifier("settings-appearance-sidebar-agents")
-            } footer: {
-                Text("How many agents the sidebar lists before the switcher menu.")
                     .font(OpenClawType.footnote)
             }
         }
@@ -158,6 +140,12 @@ extension SettingsProTab {
 
     @ViewBuilder var settingsListSection: some View {
         Section {
+            self.settingsListRow(
+                icon: "sparkles.square.filled.on.square",
+                iconColor: OpenClawBrand.accent,
+                title: "OpenClaw",
+                route: .systemAgent)
+                .accessibilityIdentifier("settings-system-agent-row")
             self.settingsListRow(
                 icon: "checkmark.shield.fill",
                 iconColor: self.pendingApproval == nil ? .green : .orange,
@@ -245,6 +233,8 @@ extension SettingsProTab {
     @ViewBuilder
     func destination(for route: SettingsRoute) -> some View {
         switch route {
+        case .systemAgent:
+            SettingsSystemAgentChatScreen(model: self.systemAgentChatStore.model(for: self.appModel))
         case .channels:
             SettingsChannelsDestination()
                 .navigationTitle(title(for: route))
@@ -258,6 +248,8 @@ extension SettingsProTab {
                 switch route {
                 case .gateway:
                     self.gatewayDestination
+                case .systemAgent:
+                    EmptyView()
                 case .appleWatch:
                     self.appleWatchDestination
                 case .approvals:
@@ -308,9 +300,9 @@ extension SettingsProTab {
                     }
                 }
                 if let headerSidebarAction {
-                    ToolbarItem(placement: .topBarLeading) {
-                        OpenClawSidebarHeaderLeadingSlot(action: headerSidebarAction)
-                    }
+                    OpenClawSidebarToolbarItem(
+                        action: headerSidebarAction,
+                        placement: .topBarLeading)
                 }
             }
         }
@@ -337,6 +329,8 @@ extension SettingsProTab {
                         .font(OpenClawType.body)
                 }
                 .disabled(self.isRefreshingGateway)
+            } footer: {
+                self.gatewayActionStatusView
             }
 
             self.gatewaySetupCard
@@ -488,11 +482,36 @@ extension SettingsProTab {
                 color: watchStatus.appInstalled ? OpenClawBrand.ok : OpenClawBrand.warn)
 
             Section {
+                NavigationLink {
+                    WatchMessageJournalView()
+                } label: {
+                    Label("Message Delivery", systemImage: "bubble.left.and.text.bubble.right")
+                        .font(OpenClawType.body)
+                }
+            }
+
+            Section {
                 Button {
                     Task { await self.sendDirectWatchSetup() }
                 } label: {
                     Label("Enable Direct Gateway Connection", systemImage: "point.3.connected.trianglepath.dotted")
                         .font(OpenClawType.body)
+                }
+                .disabled(
+                    self.isSendingWatchDirectSetup
+                        || !self.appModel.isOperatorGatewayConnected
+                        || !self.appModel.hasOperatorAdminScope
+                        || !watchStatus.appInstalled)
+
+                Button {
+                    Task { await self.sendDirectWatchSetup(includeVoice: true) }
+                } label: {
+                    Label {
+                        Text("Enable Standalone Voice")
+                            .font(OpenClawType.body)
+                    } icon: {
+                        Image(systemName: "waveform")
+                    }
                 }
                 .disabled(
                     self.isSendingWatchDirectSetup
@@ -510,6 +529,7 @@ extension SettingsProTab {
                 Text(
                     """
                     The watch receives a one-time pairing code and stores its own device token. \
+                    Standalone voice also grants read and Talk access, without admin access. \
                     A reachable secure Gateway URL is required away from the iPhone.
                     """)
                     .font(OpenClawType.footnote)
@@ -532,13 +552,11 @@ extension SettingsProTab {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if self.directRoute == nil {
-                Button {
-                    self.openNotificationsRouteFromApprovals()
-                } label: {
-                    Label("Open Notifications", systemImage: "bell.badge")
-                        .font(OpenClawType.body)
-                }
+            Button {
+                self.openNotificationsRouteFromApprovals()
+            } label: {
+                Label("Open Notifications", systemImage: "bell.badge")
+                    .font(OpenClawType.body)
             }
         }
     }
@@ -821,6 +839,17 @@ extension SettingsProTab {
             {
                 Task { await self.runDiagnostics() }
             }
+
+            self.gatewayActionStatusView
+        }
+    }
+
+    @ViewBuilder
+    var gatewayActionStatusView: some View {
+        if let gatewayActionStatusText {
+            Text(verbatim: gatewayActionStatusText)
+                .font(OpenClawType.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -1006,8 +1035,19 @@ extension SettingsProTab {
                    let accessLevelText = self.locationSettingsPresentation.accessLevelText
                 {
                     Divider()
-                    Button {
-                        self.showLocationAccessDialog = true
+                    Menu {
+                        Button {
+                            self.selectLocationAccessLevel(.whileUsing)
+                        } label: {
+                            Text("While Using the App")
+                                .font(OpenClawType.subheadSemiBold)
+                        }
+                        Button {
+                            self.selectLocationAccessLevel(.always)
+                        } label: {
+                            Text("Always")
+                                .font(OpenClawType.subheadSemiBold)
+                        }
                     } label: {
                         HStack(alignment: .firstTextBaseline) {
                             Text("Access Level")
@@ -1056,7 +1096,10 @@ extension SettingsProTab {
                 Text("Default").font(OpenClawType.body).tag("")
                 let defaultId = (self.appModel.gatewayDefaultAgentId ?? "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                ForEach(self.appModel.gatewayAgents.filter { $0.id != defaultId }, id: \.id) { agent in
+                ForEach(
+                    self.appModel.gatewayAgents.filter(\.isSelectableAgent).filter { $0.id != defaultId },
+                    id: \.id)
+                { agent in
                     let name = (agent.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                     Text(name.isEmpty ? agent.id : name).font(OpenClawType.body).tag(agent.id)
                 }
@@ -1132,7 +1175,7 @@ extension SettingsProTab {
             Text("Paired Gateways")
                 .font(OpenClawType.subheadSemiBold)
         } footer: {
-            Text("Switch gateways without pairing again.")
+            Text("Keep multiple gateways connected and switch which one is in focus.")
                 .font(OpenClawType.footnote)
         }
     }
@@ -1141,11 +1184,14 @@ extension SettingsProTab {
         let isActive = GatewayStableIdentifier.matches(
             entry.stableID,
             self.gatewayRegistry.activeStableID)
-        return Button {
-            guard !isActive else { return }
-            Task { await self.switchGateway(to: entry) }
-        } label: {
-            HStack(spacing: 12) {
+        let keepsConnected = self.gatewayRegistry.connectedStableIDs.contains {
+            GatewayStableIdentifier.matches($0, entry.stableID)
+        }
+        return HStack(spacing: 12) {
+            Button {
+                guard !isActive else { return }
+                Task { await self.switchGateway(to: entry) }
+            } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(entry.name)
                         .font(OpenClawType.subheadSemiBold)
@@ -1155,20 +1201,36 @@ extension SettingsProTab {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                if self.connectingGateway == .gateway(entry.id) {
-                    ProgressView()
-                        .controlSize(.small)
-                } else if isActive {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(OpenClawType.subheadSemiBold)
-                        .foregroundStyle(OpenClawBrand.accent)
-                        .accessibilityLabel("Active Gateway")
-                }
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .disabled(self.connectingGateway != nil)
+
+            if self.connectingGateway == .gateway(entry.id) {
+                ProgressView()
+                    .controlSize(.small)
+            } else if isActive {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(OpenClawType.subheadSemiBold)
+                    .foregroundStyle(OpenClawBrand.accent)
+                    .accessibilityLabel("Focused Gateway")
+            } else {
+                Button {
+                    if self.gatewayController.setGatewayConnectionEnabled(
+                        stableID: entry.stableID,
+                        enabled: !keepsConnected)
+                    {
+                        self.refreshGatewayRegistry()
+                    }
+                } label: {
+                    Image(systemName: keepsConnected ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
+                        .font(OpenClawType.subheadSemiBold)
+                        .foregroundStyle(keepsConnected ? OpenClawBrand.accent : .secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(keepsConnected ? "Disconnect Gateway" : "Keep Gateway Connected")
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(self.connectingGateway != nil)
+        .contentShape(Rectangle())
         .swipeActions {
             Button(role: .destructive) {
                 self.pendingForgetGateway = entry
@@ -1291,6 +1353,7 @@ extension SettingsProTab {
             get: { self.manualGatewayTransport.effectiveTLS },
             set: { enabled in
                 guard !self.manualGatewayTransport.requiresTLS else { return }
+                self.manualGatewayContextPath = nil
                 self.manualGatewayTLS = enabled
             })
     }
@@ -1458,7 +1521,6 @@ extension SettingsProTab {
             self.settingsToggle("Discovery Debug Logs", isOn: self.$discoveryDebugLogsEnabled) { enabled in
                 self.gatewayController.setDiscoveryDebugLoggingEnabled(enabled)
             }
-            self.settingsToggle("Debug Screen Status", isOn: self.$canvasDebugStatusEnabled)
             NavigationLink {
                 GatewayDiscoveryDebugLogView()
             } label: {
