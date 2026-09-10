@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import unittest
+from pathlib import Path
 
 from scripts.gitops.secret_scan import (
     RULE_FORMAT_CLOUD,
@@ -137,6 +138,28 @@ class ChangeScopedSecretScanAcceptanceTests(unittest.TestCase):
                 any(row["rule"] == expected_rule for row in findings),
                 expected_rule,
             )
+
+    def test_customization_gate_does_not_use_this_fixture_as_a_scan(self) -> None:
+        from importlib.util import module_from_spec, spec_from_file_location
+
+        from scripts.gitops.secret_scan import scan_repository
+
+        module_path = Path(__file__).resolve().parents[2] / ".github" / "openclaw_progressive_validation.py"
+        spec = spec_from_file_location("openclaw_progressive_validation_acceptance", module_path)
+        assert spec and spec.loader
+        module = module_from_spec(spec)
+        spec.loader.exec_module(module)
+        root = Path(__file__).resolve().parents[2]
+        admitted = [".github/linktrend-gitops-consumer.json"]
+        scoped = scan_repository(root, paths=admitted)
+        self.assertTrue(set(admitted).issubset(set(scoped.get("scannedPaths") or admitted)))
+        self.assertNotIn("src/index.ts", scoped.get("scannedPaths") or [])
+        result = module.validate_phase(root=root, profile="fast", changed=["src/index.ts"])
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["excludedPaths"], ["src/index.ts"])
+        names = module.consumer_workflow_names(root)
+        self.assertEqual(names["ciWorkflowName"], "Linktrend Full Suite")
+        self.assertNotEqual(names["ciWorkflowName"], "CI")
 
 
 if __name__ == "__main__":

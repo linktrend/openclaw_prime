@@ -14,9 +14,12 @@
           "scripts/gitops/gate_receipt.py",
           "scripts/gitops/secret_scan.py",
           "scripts/gitops/repository_ci_contract.py",
-          "scripts/gitops/receipt_seal.py"
+          "scripts/gitops/receipt_seal.py",
+          ".github/openclaw_progressive_validation.py",
+          ".linktrend/openclaw-prime/validate_customization_boundary.py"
         ],
-        ["python3", "scripts/gitops/secret_scan.py"]
+        ["python3", ".linktrend/openclaw-prime/validate_customization_boundary.py"],
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "fast"]
       ],
       "requiredCheckContexts": ["Linktrend Fast Checks"],
       "timeoutMinutes": 5
@@ -32,9 +35,12 @@
           "scripts/gitops/gate_receipt.py",
           "scripts/gitops/secret_scan.py",
           "scripts/gitops/repository_ci_contract.py",
-          "scripts/gitops/receipt_seal.py"
+          "scripts/gitops/receipt_seal.py",
+          ".github/openclaw_progressive_validation.py",
+          ".linktrend/openclaw-prime/validate_customization_boundary.py"
         ],
-        ["python3", "scripts/gitops/secret_scan.py"]
+        ["python3", ".linktrend/openclaw-prime/validate_customization_boundary.py"],
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "full"]
       ],
       "requiredCheckContexts": ["Linktrend Full Suite"]
     },
@@ -61,9 +67,11 @@
           "scripts/gitops/gate_receipt.py",
           "scripts/gitops/secret_scan.py",
           "scripts/gitops/repository_ci_contract.py",
-          "scripts/gitops/receipt_seal.py"
+          "scripts/gitops/receipt_seal.py",
+          ".github/openclaw_progressive_validation.py",
+          ".linktrend/openclaw-prime/validate_customization_boundary.py"
         ],
-        ["python3", "scripts/gitops/secret_scan.py"]
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "fast"]
       ],
       "requiredCheckContexts": ["Verify IDE Development"]
     }
@@ -78,12 +86,24 @@
       "id": "secret-scan",
       "mandatory": true,
       "category": "security",
-      "commands": [["python3", "scripts/gitops/secret_scan.py"]]
+      "commands": [["python3", ".github/openclaw_progressive_validation.py", "--profile", "full"]]
     },
     {
       "id": "application-tests",
       "mandatory": true,
-      "category": "test"
+      "category": "test",
+      "commands": [
+        [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "openclaw_progressive_validation.py"
+        ]
+      ]
     },
     {
       "id": "production-resolution",

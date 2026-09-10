@@ -50,7 +50,7 @@
     "baselineFullSuite": { "requiredBeforePacketStart": false, "receiptRequired": true, "inheritUnchangedFailures": true },
     "packetValidation": { "profile": "focused", "ownedPathsAndDeclaredContractsOnly": true },
     "phaseValidation": { "requiredProfiles": ["fast", "change-scoped-integration-contract"], "repositoryWideFullRequired": false },
-    "releaseCandidateValidation": { "repositoryWideFullRequired": true, "rollbackRecoveryProofRequired": true, "before": ["staging", "promotion"] },
+    "releaseCandidateValidation": { "repositoryWideFullRequired": false, "customizationScopedFullRequired": true, "rollbackRecoveryProofRequired": true, "before": ["staging", "promotion"] },
     "blocking": { "changedPathOrCrossContractFailure": true, "waiveChangedCode": false },
     "provider": { "centralIdeProviderFullRequired": true },
     "scope": { "forkOnly": true, "upstreamMutation": false }

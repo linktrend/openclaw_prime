@@ -121,16 +121,8 @@ jobs:
         run: |
           set -euo pipefail
           git diff --check
-          # OpenClaw is a large upstream fork, so its secret check remains
-          # change-scoped rather than scanning untouched upstream history.
-          # Admission itself is now the same for ordinary Phase work as peers.
-          python3 -m py_compile \
-            scripts/gitops/run_delivery_profile.py \
-            scripts/gitops/gate_receipt.py \
-            scripts/gitops/secret_scan.py \
-            scripts/gitops/repository_ci_contract.py \
-            scripts/gitops/receipt_seal.py
-          PYTHONPATH=. python3 .ide-development/tests/test_change_scoped_secret_scan_acceptance.py
+          python3 scripts/gitops/run_delivery_profile.py fast
+          PYTHONPATH=. python3 -m unittest discover -s .ide-development/tests -p 'test_change_scoped_secret_scan_acceptance.py'
 
       - name: Retain fast-check evidence
         if: always()

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "ciWorkflowName": "CI",
+  "ciWorkflowName": "Linktrend Full Suite",
   "branchPolicyWorkflowName": "Linktrend Branch Source Policy",
   "bugbotCheckName": "Linktrend Review Gate",
   "runnerType": "github-hosted",

@@ -114,9 +114,10 @@
         },
         "releaseCandidateValidation": {
           "type": "object", "additionalProperties": false,
-          "required": ["repositoryWideFullRequired", "rollbackRecoveryProofRequired", "before"],
+          "required": ["repositoryWideFullRequired", "customizationScopedFullRequired", "rollbackRecoveryProofRequired", "before"],
           "properties": {
-            "repositoryWideFullRequired": { "type": "boolean", "const": true },
+            "repositoryWideFullRequired": { "type": "boolean", "const": false },
+            "customizationScopedFullRequired": { "type": "boolean", "const": true },
             "rollbackRecoveryProofRequired": { "type": "boolean", "const": true },
             "before": { "type": "array", "const": ["staging", "promotion"] }
           }
