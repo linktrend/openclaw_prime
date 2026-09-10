@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "ciWorkflowName": "CI",
+  "branchPolicyWorkflowName": "Linktrend Branch Source Policy",
+  "bugbotCheckName": "Linktrend Review Gate",
+  "runnerType": "github-hosted",
+  "fastWorkflowName": "Linktrend Fast Checks",
+  "reviewGateCheckName": "Linktrend Review Gate",
+  "bugbotProviderCheckName": "Cursor Bugbot"
+}
