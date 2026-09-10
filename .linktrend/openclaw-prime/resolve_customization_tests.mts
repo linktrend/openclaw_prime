@@ -12,6 +12,36 @@ const REPO_REL =
   /^(?!\/|\\)(?!.*\.\.(?:\/|\\|$))(?!.*:)[A-Za-z0-9._@+, \-]+(?:\/[A-Za-z0-9._@+, \-]+)*$/;
 const CODE_SUFFIX = /\.(?:[cm]?[jt]sx?)$/;
 const BROAD_MARKERS = ["broad local run will start", "buildFullSuiteVitestRunPlans", '"mode":"broad"'];
+const NON_VITEST_VALIDATION = new Map<string, string>([
+  [".linktrend/openclaw-prime/customization-boundary.json", "customization-boundary-validator"],
+  [".linktrend/openclaw-prime/resolve_customization_tests.mts", "progressive-validation-tests"],
+  ["docs/execution/openclaw-prime-lisa/BASELINE-CI-RECEIPT.md", "phase-diff-check"],
+  ["docs/execution/openclaw-prime-lisa/IMPLEMENTATION-ROADMAP.md", "phase-diff-check"],
+  ["docs/execution/openclaw-prime-lisa/dispatch-authority.json", "execution-approval-tests"],
+  ["docs/execution/openclaw-prime-lisa/dispatch-authority.schema.json", "execution-approval-tests"],
+  [
+    "docs/execution/openclaw-prime-lisa/linkautowork-skill-watcher.execution-manifest.json",
+    "execution-approval-tests",
+  ],
+  [
+    "docs/execution/openclaw-prime-lisa/linkplatform-agent-foundation.execution-manifest.json",
+    "execution-approval-tests",
+  ],
+  [
+    "docs/execution/openclaw-prime-lisa/openclaw-prime-lisa.execution-manifest.json",
+    "execution-approval-tests",
+  ],
+  [
+    "docs/execution/openclaw-prime-lisa/tests/test_execution_approval_snapshot.py",
+    "execution-approval-tests",
+  ],
+  [
+    "docs/execution/openclaw-prime-lisa/validate_execution_approval_snapshot.py",
+    "execution-approval-tests",
+  ],
+  ["test/openclaw_progressive_validation.py", "progressive-validation-tests"],
+  ["test/packager_coordinator_phase_history.py", "phase-packager-history-tests"],
+]);
 
 function fail(reason: string, extra: Record<string, unknown> = {}): never {
   process.stderr.write(`${JSON.stringify({ ok: false, reason, ...extra })}\n`);
@@ -82,12 +112,18 @@ function main(): void {
   const plan = resolveChangedTestTargetPlan(changedPaths, { cwd: root, broad: false });
   const targets = [...new Set(plan.targets ?? [])];
   const skipped = plan.skippedBroadFallbackPaths ?? [];
+  const nonVitestValidations = skipped.flatMap((path) => {
+    const validation = NON_VITEST_VALIDATION.get(path);
+    return validation ? [{ path, validation }] : [];
+  });
+  const unresolvedSkipped = skipped.filter((path) => !NON_VITEST_VALIDATION.has(path));
   const payload = {
     schemaVersion: 1,
     kind: "customization-test-target-plan",
     mode: plan.mode,
     targets,
-    skippedBroadFallbackPaths: skipped,
+    skippedBroadFallbackPaths: unresolvedSkipped,
+    nonVitestValidations,
     changedPaths,
     changedPathsDigest: canonicalDigest(changedPaths),
     baselineCommit: baseline,
@@ -100,7 +136,7 @@ function main(): void {
   if (plan.mode !== "targets") {
     fail("relevant_tests_broadened", { plan: payload });
   }
-  if (skipped.length > 0) {
+  if (unresolvedSkipped.length > 0) {
     fail("relevant_tests_broadened", { plan: payload });
   }
   for (const target of targets) {

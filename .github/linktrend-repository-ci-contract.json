@@ -15,6 +15,7 @@
           "scripts/gitops/secret_scan.py",
           "scripts/gitops/repository_ci_contract.py",
           "scripts/gitops/receipt_seal.py",
+          "scripts/gitops/packager_coordinator.py",
           ".github/openclaw_progressive_validation.py",
           ".linktrend/openclaw-prime/validate_customization_boundary.py"
         ],
@@ -43,6 +44,14 @@
           "docs/execution/openclaw-prime-lisa/tests",
           "-p",
           "test_execution_approval_snapshot.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "test/packager_coordinator_phase_history.py"
         ]
       ],
       "requiredCheckContexts": ["Linktrend Fast Checks"],
@@ -60,10 +69,43 @@
           "scripts/gitops/secret_scan.py",
           "scripts/gitops/repository_ci_contract.py",
           "scripts/gitops/receipt_seal.py",
+          "scripts/gitops/packager_coordinator.py",
           ".github/openclaw_progressive_validation.py",
           ".linktrend/openclaw-prime/validate_customization_boundary.py"
         ],
         ["python3", ".linktrend/openclaw-prime/validate_customization_boundary.py"],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "openclaw_progressive_validation.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "docs/execution/openclaw-prime-lisa/tests",
+          "-p",
+          "test_execution_approval_snapshot.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "test/packager_coordinator_phase_history.py"
+        ],
         ["python3", ".github/openclaw_progressive_validation.py", "--profile", "full"]
       ],
       "requiredCheckContexts": ["Linktrend Full Suite"]

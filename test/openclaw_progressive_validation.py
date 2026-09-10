@@ -79,6 +79,16 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertNotIn(["python3", "scripts/gitops/secret_scan.py"], contract["profiles"]["full"]["commands"])
         consumer = json.loads((ROOT / ".github/linktrend-gitops-consumer.json").read_text(encoding="utf-8"))
         self.assertEqual(consumer["ciWorkflowName"], "Linktrend Full Suite")
+        delivery = json.loads((ROOT / ".github/linktrend-delivery-mode.json").read_text(encoding="utf-8"))
+        self.assertEqual(delivery["profiles"]["full"]["commands"], contract["profiles"]["full"]["commands"])
+        full_commands = json.dumps(delivery["profiles"]["full"]["commands"])
+        for required in (
+            ".linktrend/openclaw-prime/validate_customization_boundary.py",
+            "openclaw_progressive_validation.py",
+            "test_execution_approval_snapshot.py",
+            "test/packager_coordinator_phase_history.py",
+        ):
+            self.assertIn(required, full_commands)
 
     def test_clean_shell_direct_invocation_imports_scanner(self) -> None:
         env = os.environ.copy()
@@ -439,6 +449,7 @@ class ProgressiveValidationTests(unittest.TestCase):
             "changedPathsDigest": MODULE.canonical_digest(list(OCP01_PATHS)),
             "baselineCommit": OCP01_BASE,
             "headCommit": OCP01_HEAD,
+            "nonVitestValidations": [],
         }
         cases = [
             (
@@ -526,6 +537,7 @@ class ProgressiveValidationTests(unittest.TestCase):
             "changedPathsDigest": MODULE.canonical_digest(list(OCP01_PATHS)),
             "baselineCommit": OCP01_BASE,
             "headCommit": OCP01_HEAD,
+            "nonVitestValidations": [],
         }
         recorded: list[list[str]] = []
 
@@ -572,6 +584,7 @@ class ProgressiveValidationTests(unittest.TestCase):
             "changedPathsDigest": MODULE.canonical_digest(list(OCP01_PATHS)),
             "baselineCommit": OCP01_BASE,
             "headCommit": OCP01_HEAD,
+            "nonVitestValidations": [],
         }
         cases = []
         wrong_identity = dict(valid, baselineCommit="0" * 40, headCommit="1" * 40)
@@ -597,6 +610,43 @@ class ProgressiveValidationTests(unittest.TestCase):
             )
             self.assertFalse(result["ok"], result)
             self.assertEqual(test_calls, [])
+
+    def test_non_vitest_validation_map_is_exact(self) -> None:
+        changed = [".linktrend/openclaw-prime/customization-boundary.json"]
+        payload = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "mode": "targets",
+            "targets": [],
+            "skippedBroadFallbackPaths": [],
+            "changedPaths": changed,
+            "changedPathsDigest": MODULE.canonical_digest(changed),
+            "baselineCommit": OCP01_BASE,
+            "headCommit": OCP01_HEAD,
+            "nonVitestValidations": [
+                {
+                    "path": changed[0],
+                    "validation": "customization-boundary-validator",
+                }
+            ],
+        }
+        accepted = MODULE.validate_planner_payload(
+            payload,
+            changed,
+            OCP01_BASE,
+            OCP01_HEAD,
+            ROOT,
+        )
+        self.assertEqual(accepted["nonVitestValidations"], payload["nonVitestValidations"])
+        broken = dict(payload, nonVitestValidations=[])
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
+            MODULE.validate_planner_payload(
+                broken,
+                changed,
+                OCP01_BASE,
+                OCP01_HEAD,
+                ROOT,
+            )
 
     def test_fast_workflow_fetches_only_the_exact_historical_snapshot_commit(self) -> None:
         workflow = (ROOT / ".github/workflows/linktrend-review-packager.yml").read_text(

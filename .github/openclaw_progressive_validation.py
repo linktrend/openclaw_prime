@@ -37,6 +37,21 @@ BROAD_TEST_MARKERS = (
     "broad local run will start",
     "buildFullSuiteVitestRunPlans",
 )
+NON_VITEST_VALIDATION = {
+    ".linktrend/openclaw-prime/customization-boundary.json": "customization-boundary-validator",
+    ".linktrend/openclaw-prime/resolve_customization_tests.mts": "progressive-validation-tests",
+    "docs/execution/openclaw-prime-lisa/BASELINE-CI-RECEIPT.md": "phase-diff-check",
+    "docs/execution/openclaw-prime-lisa/IMPLEMENTATION-ROADMAP.md": "phase-diff-check",
+    "docs/execution/openclaw-prime-lisa/dispatch-authority.json": "execution-approval-tests",
+    "docs/execution/openclaw-prime-lisa/dispatch-authority.schema.json": "execution-approval-tests",
+    "docs/execution/openclaw-prime-lisa/linkautowork-skill-watcher.execution-manifest.json": "execution-approval-tests",
+    "docs/execution/openclaw-prime-lisa/linkplatform-agent-foundation.execution-manifest.json": "execution-approval-tests",
+    "docs/execution/openclaw-prime-lisa/openclaw-prime-lisa.execution-manifest.json": "execution-approval-tests",
+    "docs/execution/openclaw-prime-lisa/tests/test_execution_approval_snapshot.py": "execution-approval-tests",
+    "docs/execution/openclaw-prime-lisa/validate_execution_approval_snapshot.py": "execution-approval-tests",
+    "test/openclaw_progressive_validation.py": "progressive-validation-tests",
+    "test/packager_coordinator_phase_history.py": "phase-packager-history-tests",
+}
 TEST_PROJECTS = (
     "node",
     "--import",
@@ -356,6 +371,13 @@ def validate_planner_payload(
         raise RuntimeError("relevant_tests_identity_mismatch")
     if payload.get("changedPathsDigest") != canonical_digest(expected_paths):
         raise RuntimeError("relevant_tests_identity_mismatch")
+    expected_non_vitest = [
+        {"path": path, "validation": NON_VITEST_VALIDATION[path]}
+        for path in expected_paths
+        if path in NON_VITEST_VALIDATION
+    ]
+    if payload.get("nonVitestValidations") != expected_non_vitest:
+        raise RuntimeError("relevant_tests_unresolved")
     skipped = payload.get("skippedBroadFallbackPaths")
     if skipped:
         raise RuntimeError("relevant_tests_broadened")
