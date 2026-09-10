@@ -364,6 +364,7 @@ class ProgressiveValidationTests(unittest.TestCase):
             "requestedPaths",
             "scannedExistingPaths",
             "deletedPaths",
+            "approvedTestPlan",
             "selectedTestPlan",
             "selectedTestResults",
             "workflow",
@@ -375,6 +376,8 @@ class ProgressiveValidationTests(unittest.TestCase):
             self.assertIn(key, evidence)
         self.assertFalse(evidence["untouchedUpstreamEvaluated"])
         self.assertEqual(evidence["requestedPaths"], list(OCP01_PATHS))
+        self.assertIsNone(evidence.get("approvedTestPlan"))
+        self.assertEqual(evidence["selectedTestResults"]["mode"], "not-run")
 
     def test_real_path_scoped_scan_of_admitted_consumer_map(self) -> None:
         from scripts.gitops.secret_scan import scan_repository
@@ -403,6 +406,146 @@ class ProgressiveValidationTests(unittest.TestCase):
         )
         self.assertFalse(result["ok"])
         self.assertIn("scanner-error", result["errors"])
+
+    def _completed(self, code: int, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=[], returncode=code, stdout=stdout, stderr=stderr)
+
+    def test_broad_unresolved_and_empty_code_plans_are_rejected_before_tests(self) -> None:
+        cases = [
+            (
+                '{"mode":"broad","targets":[],"skippedBroadFallbackPaths":[]}',
+                "relevant_tests_broadened",
+            ),
+            (
+                '{"mode":"targets","targets":[],"skippedBroadFallbackPaths":["src/index.ts"]}',
+                "relevant_tests_broadened",
+            ),
+            (
+                '{"mode":"targets","targets":[],"skippedBroadFallbackPaths":[]}',
+                "relevant_tests_unresolved",
+            ),
+        ]
+        for stdout, error in cases:
+            test_calls: list[list[str]] = []
+
+            def planner(_cmd: list[str], payload: str = stdout) -> subprocess.CompletedProcess[str]:
+                return self._completed(0, payload)
+
+            def tests(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+                test_calls.append(list(cmd))
+                return self._completed(0, "full suite")
+
+            result = MODULE.validate_phase(
+                root=ROOT,
+                profile="full",
+                baseline=OCP01_BASE,
+                head=OCP01_HEAD,
+                scanner=_ok_scan,
+                execute_tests=True,
+                write_evidence_file=False,
+                planner_runner=planner,
+                test_runner=tests,
+            )
+            self.assertFalse(result["ok"], result)
+            self.assertEqual(result["hold"], MODULE.HOLD_TESTS)
+            self.assertIn(error, result["errors"])
+            self.assertEqual(test_calls, [])
+
+        failed_calls: list[list[str]] = []
+
+        def failing_planner(_cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            return self._completed(1, "", "relevant_tests_broadened")
+
+        def tests_after_fail(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            failed_calls.append(list(cmd))
+            return self._completed(0)
+
+        failed = MODULE.validate_phase(
+            root=ROOT,
+            profile="full",
+            baseline=OCP01_BASE,
+            head=OCP01_HEAD,
+            scanner=_ok_scan,
+            execute_tests=True,
+            write_evidence_file=False,
+            planner_runner=failing_planner,
+            test_runner=tests_after_fail,
+        )
+        self.assertFalse(failed["ok"])
+        self.assertIn("relevant_tests_broadened", failed["errors"])
+        self.assertEqual(failed_calls, [])
+
+    def test_explicit_target_execution_cannot_become_full_suite(self) -> None:
+        plan = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "mode": "targets",
+            "targets": [
+                "src/plugin-sdk/agent-harness-runtime.test.ts",
+                "src/agents/failover/classify.test.ts",
+            ],
+            "skippedBroadFallbackPaths": [],
+        }
+        recorded: list[list[str]] = []
+
+        def planner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            self.assertEqual(cmd[:4], list(MODULE.PLANNER))
+            self.assertEqual(cmd[4:], ["--base", OCP01_BASE, "--head", OCP01_HEAD])
+            self.assertNotIn("--changed", cmd)
+            return self._completed(0, json.dumps(plan))
+
+        def tests(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            recorded.append(list(cmd))
+            self.assertEqual(cmd[:4], list(MODULE.TEST_PROJECTS))
+            self.assertEqual(cmd[4:], plan["targets"])
+            self.assertNotIn("--changed", cmd)
+            self.assertGreater(len(cmd), len(MODULE.TEST_PROJECTS))
+            return self._completed(0, "\n".join(plan["targets"]))
+
+        result = MODULE.validate_phase(
+            root=ROOT,
+            profile="full",
+            baseline=OCP01_BASE,
+            head=OCP01_HEAD,
+            scanner=_ok_scan,
+            execute_tests=True,
+            write_evidence_file=False,
+            planner_runner=planner,
+            test_runner=tests,
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(result["evidence"]["approvedTestPlan"]["targets"], plan["targets"])
+        self.assertEqual(result["evidence"]["selectedTestResults"]["command"], recorded[0])
+        self.assertFalse(result["evidence"]["selectedTestResults"]["broadFallback"])
+        self.assertIsNotNone(result["evidence"]["selectedTestResults"]["runOutputDigest"])
+
+    def test_fast_does_not_invoke_node_planner_or_test_runner(self) -> None:
+        planner_calls: list[list[str]] = []
+        test_calls: list[list[str]] = []
+
+        def planner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            planner_calls.append(list(cmd))
+            return self._completed(0, "{}")
+
+        def tests(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            test_calls.append(list(cmd))
+            return self._completed(0)
+
+        result = MODULE.validate_phase(
+            root=ROOT,
+            profile="fast",
+            baseline=OCP01_BASE,
+            head=OCP01_HEAD,
+            scanner=_ok_scan,
+            execute_tests=False,
+            write_evidence_file=False,
+            planner_runner=planner,
+            test_runner=tests,
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(planner_calls, [])
+        self.assertEqual(test_calls, [])
 
 
 if __name__ == "__main__":

@@ -16,11 +16,17 @@ if str(DOCS) not in sys.path:
 from validate_execution_approval_snapshot import (  # noqa: E402
     AUTHORIZED_DEVELOPMENT_COMMIT,
     AUTHORIZED_DEVELOPMENT_TREE,
-    FROZEN_AUTHORITY_SHA256,
+    CURRENT_AUTHORITY_SHA256,
+    CURRENT_MANIFEST_SHA256,
+    HISTORICAL_AUTHORITY_SHA256,
+    HISTORICAL_RECEIPT_SHA256,
     VALIDATION_POLICY_DIGEST,
     SnapshotError,
+    load_authority_bytes_at_protected_identity,
     load_json,
+    sha256_bytes,
     sha256_file,
+    validate_current_policy,
     validate_files,
     validate_snapshot,
 )
@@ -70,12 +76,19 @@ class ExecutionApprovalSnapshotTests(unittest.TestCase):
             self.assertFalse(state["receiptPresent"])
             self.assertEqual(state["checkpointState"], "PENDING_RUNTIME_EVIDENCE")
 
-    def test_frozen_authority_digest_matches_bytes(self) -> None:
+    def test_frozen_authority_digest_matches_protected_identity_bytes(self) -> None:
         path = DOCS / "dispatch-authority.json"
+        historical = load_authority_bytes_at_protected_identity(self.snapshot, DOCS.parents[2])
         self.assertEqual(
             self.snapshot["frozenDispatchAuthority"]["sha256"],
-            sha256_file(path),
+            sha256_bytes(historical),
         )
+        self.assertEqual(
+            self.snapshot["frozenDispatchAuthority"]["sha256"],
+            HISTORICAL_AUTHORITY_SHA256,
+        )
+        self.assertNotEqual(sha256_file(path), HISTORICAL_AUTHORITY_SHA256)
+        self.assertEqual(sha256_file(path), CURRENT_AUTHORITY_SHA256)
         self.assertFalse(self.snapshot["frozenDispatchAuthority"]["rewrittenByThisSnapshot"])
 
     def test_schema_kind_is_closed(self) -> None:
@@ -99,8 +112,22 @@ class ExecutionApprovalSnapshotTests(unittest.TestCase):
             "exact-normalized-protected-base-to-phase-diff",
         )
         self.assertFalse(policy["phaseValidation"]["staticProvenanceExcludesProvenPhasePath"])
-        self.assertEqual(self.snapshot["frozenDispatchAuthority"]["sha256"], FROZEN_AUTHORITY_SHA256)
-        self.assertEqual(self.snapshot["frozenDispatchAuthority"]["sha256"], sha256_file(DOCS / "dispatch-authority.json"))
+        self.assertEqual(self.snapshot["frozenDispatchAuthority"]["sha256"], HISTORICAL_AUTHORITY_SHA256)
+        self.assertEqual(sha256_file(DOCS / "dispatch-authority.json"), CURRENT_AUTHORITY_SHA256)
+        validate_current_policy(DOCS.parents[2])
+
+    def test_current_manifests_match_authority_bindings(self) -> None:
+        authority = load_json(DOCS / "dispatch-authority.json")
+        for key, expected in CURRENT_MANIFEST_SHA256.items():
+            path = DOCS.parents[2] / authority["manifests"][key]["path"]
+            self.assertEqual(sha256_file(path), expected)
+            self.assertEqual(authority["manifests"][key]["sha256"], expected)
+            manifest = load_json(path)
+            self.assertEqual(manifest["controls"]["validationPolicyDigest"], VALIDATION_POLICY_DIGEST)
+
+    def test_historical_receipts_are_byte_immutable(self) -> None:
+        for name, expected in HISTORICAL_RECEIPT_SHA256.items():
+            self.assertEqual(sha256_file(DOCS / name), expected)
 
     def test_reject_authorizing_non_customization_packet(self) -> None:
         broken = copy.deepcopy(self.snapshot)

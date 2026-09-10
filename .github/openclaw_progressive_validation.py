@@ -43,6 +43,15 @@ TEST_PROJECTS = (
     "./scripts/tsx.mjs",
     "scripts/test-projects.mts",
 )
+PLANNER = (
+    "node",
+    "--import",
+    "./scripts/tsx.mjs",
+    ".linktrend/openclaw-prime/resolve_customization_tests.mts",
+)
+CODE_SUFFIXES = (".ts", ".mts", ".tsx", ".cts", ".js", ".mjs", ".cjs", ".jsx")
+PlannerRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
+TestRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 HOLD_BOUNDARY = "HOLD: customization_boundary_unavailable"
 HOLD_IDENTITY = "HOLD: phase_identity_invalid"
 HOLD_SCAN = "HOLD: customization_secret_scan_blocked"
@@ -306,6 +315,68 @@ def parse_test_list(output: str) -> list[str]:
     return sorted(set(tests))
 
 
+def code_changes_require_tests(paths: Sequence[str]) -> bool:
+    return any(path.endswith(CODE_SUFFIXES) for path in paths)
+
+
+def _unsafe_target(path: str) -> bool:
+    return _unsafe_path(path) or path.startswith("-") or path == "--changed"
+
+
+def validate_planner_payload(
+    payload: Any,
+    existing_paths: Sequence[str],
+) -> dict[str, Any]:
+    if not isinstance(payload, Mapping):
+        raise RuntimeError("relevant_tests_unresolved")
+    if payload.get("mode") != "targets":
+        raise RuntimeError("relevant_tests_broadened")
+    skipped = payload.get("skippedBroadFallbackPaths")
+    if skipped:
+        raise RuntimeError("relevant_tests_broadened")
+    targets = payload.get("targets")
+    if not isinstance(targets, list) or any(not isinstance(item, str) for item in targets):
+        raise RuntimeError("relevant_tests_unresolved")
+    if any(_unsafe_target(item) for item in targets):
+        raise RuntimeError("relevant_tests_unresolved")
+    serialized = json.dumps(payload, sort_keys=True)
+    if any(marker in serialized for marker in BROAD_TEST_MARKERS):
+        raise RuntimeError("relevant_tests_broadened")
+    if '"mode": "broad"' in serialized or '"mode":"broad"' in serialized.replace(" ", ""):
+        raise RuntimeError("relevant_tests_broadened")
+    if code_changes_require_tests(existing_paths) and not targets:
+        raise RuntimeError("relevant_tests_unresolved")
+    return dict(payload)
+
+
+def invoke_planner(
+    root: Path,
+    baseline: str,
+    head: str,
+    existing_paths: Sequence[str],
+    runner: PlannerRunner | None = None,
+) -> dict[str, Any]:
+    command = list(PLANNER) + ["--base", baseline, "--head", head]
+    executed = (runner or (lambda cmd: _run_captured(cmd, root)))(command)
+    stdout = executed.stdout or ""
+    if executed.returncode != 0:
+        combined = stdout + "\n" + (executed.stderr or "")
+        if "relevant_tests_broadened" in combined or any(
+            marker in combined for marker in BROAD_TEST_MARKERS
+        ):
+            raise RuntimeError("relevant_tests_broadened")
+        raise RuntimeError("relevant_tests_unresolved")
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("relevant_tests_unresolved") from exc
+    return validate_planner_payload(payload, existing_paths)
+
+
+def _run_captured(command: Sequence[str], root: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(list(command), cwd=root, capture_output=True, text=True, check=False)
+
+
 def test_plan_is_broad(output: str, existing_paths: Sequence[str]) -> bool:
     lowered = output.lower()
     if any(marker in output for marker in BROAD_TEST_MARKERS):
@@ -331,16 +402,19 @@ def test_plan_is_broad(output: str, existing_paths: Sequence[str]) -> bool:
 def run_relevant_tests(
     root: Path,
     baseline: str,
+    head: str,
     existing_paths: Sequence[str],
     *,
     execute: bool,
+    planner_runner: PlannerRunner | None = None,
+    test_runner: TestRunner | None = None,
 ) -> dict[str, Any]:
-    run_cmd = list(TEST_PROJECTS) + ["--changed", baseline]
     if not existing_paths:
         return {
-            "command": run_cmd,
+            "command": None,
             "mode": "empty-diff",
             "selectedTests": [],
+            "approvedTestPlan": None,
             "broadFallback": False,
             "skippedChangedPaths": False,
             "ok": True,
@@ -348,26 +422,42 @@ def run_relevant_tests(
         }
     if not execute:
         return {
-            "command": run_cmd,
+            "command": None,
             "mode": "deferred-hosted",
             "selectedTests": [],
+            "approvedTestPlan": None,
             "broadFallback": False,
             "skippedChangedPaths": False,
             "ok": True,
         }
-    executed = subprocess.run(run_cmd, cwd=root, capture_output=True, text=True, check=False)
+    approved = invoke_planner(root, baseline, head, existing_paths, planner_runner)
+    targets = list(approved["targets"])
+    if not targets:
+        return {
+            "command": None,
+            "mode": "execute",
+            "selectedTests": [],
+            "approvedTestPlan": approved,
+            "broadFallback": False,
+            "skippedChangedPaths": False,
+            "ok": True,
+            "runOutputDigest": None,
+        }
+    run_cmd = list(TEST_PROJECTS) + targets
+    if "--changed" in run_cmd or len(run_cmd) <= len(TEST_PROJECTS):
+        raise RuntimeError("relevant_tests_broadened")
+    executed = (test_runner or (lambda command: _run_captured(command, root)))(run_cmd)
     run_output = (executed.stdout or "") + "\n" + (executed.stderr or "")
     if test_plan_is_broad(run_output, existing_paths):
         raise RuntimeError("relevant_tests_broadened")
     if executed.returncode != 0:
         raise RuntimeError("relevant_tests_failed")
-    selected = parse_test_list(run_output)
-    if not selected and any(path.endswith((".ts", ".mts", ".tsx", ".js")) for path in existing_paths):
-        raise RuntimeError("relevant_tests_unresolved")
+    selected = parse_test_list(run_output) or list(targets)
     return {
         "command": run_cmd,
         "mode": "execute",
         "selectedTests": selected,
+        "approvedTestPlan": approved,
         "broadFallback": False,
         "skippedChangedPaths": False,
         "ok": True,
@@ -403,6 +493,8 @@ def validate_phase(
     changed: Sequence[str] | None = None,
     execute_tests: bool | None = None,
     write_evidence_file: bool = True,
+    planner_runner: PlannerRunner | None = None,
+    test_runner: TestRunner | None = None,
 ) -> dict[str, Any]:
     errors: list[str] = []
     hold: str | None = None
@@ -500,8 +592,11 @@ def validate_phase(
             test_result = run_relevant_tests(
                 root,
                 identity["baselineCommit"],
+                identity["headCommit"],
                 existing,
                 execute=should_execute,
+                planner_runner=planner_runner,
+                test_runner=test_runner,
             )
         except RuntimeError as exc:
             errors.append(str(exc))
@@ -522,11 +617,14 @@ def validate_phase(
         "deletedPaths": deleted,
         "pathDigests": {} if identity is None else identity["pathDigests"],
         "staticClassifications": classifications,
+        "approvedTestPlan": test_result.get("approvedTestPlan"),
         "selectedTestPlan": test_result.get("selectedTests"),
         "selectedTestResults": {
             "ok": test_result.get("ok"),
             "mode": test_result.get("mode"),
             "broadFallback": test_result.get("broadFallback"),
+            "command": test_result.get("command"),
+            "runOutputDigest": test_result.get("runOutputDigest"),
         },
         "workflow": os.environ.get("GITHUB_WORKFLOW"),
         "run": os.environ.get("GITHUB_RUN_ID"),
