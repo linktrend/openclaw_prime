@@ -272,13 +272,15 @@ def scan_existing(
     if not isinstance(result, Mapping):
         raise RuntimeError("scanner-error")
     scanned = result.get("scannedPaths")
-    if scanned is None:
-        scanned = admitted
     if not isinstance(scanned, list) or any(not isinstance(item, str) for item in scanned):
         raise RuntimeError("scanner-error")
-    extra = sorted(set(scanned) - set(admitted))
+    admitted_set = set(admitted)
+    scanned_set = set(scanned)
+    extra = sorted(scanned_set - admitted_set)
     if extra:
         raise RuntimeError("scanner_escaped_scope")
+    if scanned_set != admitted_set or len(scanned) != len(scanned_set):
+        raise RuntimeError("scanner_incomplete_scope")
     findings = result.get("findings")
     if not isinstance(findings, list):
         raise RuntimeError("scanner-error")
@@ -325,26 +327,59 @@ def _unsafe_target(path: str) -> bool:
 
 def validate_planner_payload(
     payload: Any,
-    existing_paths: Sequence[str],
+    changed_paths: Sequence[str],
+    baseline_commit: str,
+    head_commit: str,
+    root: Path,
 ) -> dict[str, Any]:
     if not isinstance(payload, Mapping):
         raise RuntimeError("relevant_tests_unresolved")
     if payload.get("mode") != "targets":
         raise RuntimeError("relevant_tests_broadened")
+    if (
+        payload.get("schemaVersion") != 1
+        or payload.get("kind") != "customization-test-target-plan"
+    ):
+        raise RuntimeError("relevant_tests_unresolved")
+    if (
+        payload.get("baselineCommit") != baseline_commit
+        or payload.get("headCommit") != head_commit
+    ):
+        raise RuntimeError("relevant_tests_identity_mismatch")
+    planned_paths = payload.get("changedPaths")
+    expected_paths = sorted(set(changed_paths))
+    if (
+        not isinstance(planned_paths, list)
+        or any(not isinstance(item, str) for item in planned_paths)
+        or planned_paths != expected_paths
+    ):
+        raise RuntimeError("relevant_tests_identity_mismatch")
+    if payload.get("changedPathsDigest") != canonical_digest(expected_paths):
+        raise RuntimeError("relevant_tests_identity_mismatch")
     skipped = payload.get("skippedBroadFallbackPaths")
     if skipped:
         raise RuntimeError("relevant_tests_broadened")
     targets = payload.get("targets")
     if not isinstance(targets, list) or any(not isinstance(item, str) for item in targets):
         raise RuntimeError("relevant_tests_unresolved")
-    if any(_unsafe_target(item) for item in targets):
+    if any(_unsafe_target(item) for item in targets) or len(targets) != len(set(targets)):
         raise RuntimeError("relevant_tests_unresolved")
+    for target in targets:
+        probe = subprocess.run(
+            ["git", "cat-file", "-e", f"{head_commit}:{target}"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if probe.returncode:
+            raise RuntimeError("relevant_tests_unresolved")
     serialized = json.dumps(payload, sort_keys=True)
     if any(marker in serialized for marker in BROAD_TEST_MARKERS):
         raise RuntimeError("relevant_tests_broadened")
     if '"mode": "broad"' in serialized or '"mode":"broad"' in serialized.replace(" ", ""):
         raise RuntimeError("relevant_tests_broadened")
-    if code_changes_require_tests(existing_paths) and not targets:
+    if code_changes_require_tests(changed_paths) and not targets:
         raise RuntimeError("relevant_tests_unresolved")
     return dict(payload)
 
@@ -353,7 +388,7 @@ def invoke_planner(
     root: Path,
     baseline: str,
     head: str,
-    existing_paths: Sequence[str],
+    changed_paths: Sequence[str],
     runner: PlannerRunner | None = None,
 ) -> dict[str, Any]:
     command = list(PLANNER) + ["--base", baseline, "--head", head]
@@ -370,7 +405,7 @@ def invoke_planner(
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError("relevant_tests_unresolved") from exc
-    return validate_planner_payload(payload, existing_paths)
+    return validate_planner_payload(payload, changed_paths, baseline, head, root)
 
 
 def _run_captured(command: Sequence[str], root: Path) -> subprocess.CompletedProcess[str]:
@@ -403,13 +438,13 @@ def run_relevant_tests(
     root: Path,
     baseline: str,
     head: str,
-    existing_paths: Sequence[str],
+    changed_paths: Sequence[str],
     *,
     execute: bool,
     planner_runner: PlannerRunner | None = None,
     test_runner: TestRunner | None = None,
 ) -> dict[str, Any]:
-    if not existing_paths:
+    if not changed_paths:
         return {
             "command": None,
             "mode": "empty-diff",
@@ -430,7 +465,7 @@ def run_relevant_tests(
             "skippedChangedPaths": False,
             "ok": True,
         }
-    approved = invoke_planner(root, baseline, head, existing_paths, planner_runner)
+    approved = invoke_planner(root, baseline, head, changed_paths, planner_runner)
     targets = list(approved["targets"])
     if not targets:
         return {
@@ -448,7 +483,7 @@ def run_relevant_tests(
         raise RuntimeError("relevant_tests_broadened")
     executed = (test_runner or (lambda command: _run_captured(command, root)))(run_cmd)
     run_output = (executed.stdout or "") + "\n" + (executed.stderr or "")
-    if test_plan_is_broad(run_output, existing_paths):
+    if test_plan_is_broad(run_output, changed_paths):
         raise RuntimeError("relevant_tests_broadened")
     if executed.returncode != 0:
         raise RuntimeError("relevant_tests_failed")
@@ -593,7 +628,7 @@ def validate_phase(
                 root,
                 identity["baselineCommit"],
                 identity["headCommit"],
-                existing,
+                existing + deleted,
                 execute=should_execute,
                 planner_runner=planner_runner,
                 test_runner=test_runner,

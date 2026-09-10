@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -216,6 +217,20 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertFalse(escaped["ok"])
         self.assertIn("scanner_escaped_scope", escaped["errors"])
 
+        incomplete = MODULE.validate_phase(
+            root=ROOT,
+            profile="fast",
+            changed=[".github/linktrend-gitops-consumer.json"],
+            scanner=lambda _root, _paths: {
+                "ok": True,
+                "findings": [],
+                "scannedPaths": [],
+            },
+            write_evidence_file=False,
+        )
+        self.assertFalse(incomplete["ok"])
+        self.assertIn("scanner_incomplete_scope", incomplete["errors"])
+
     def test_upstream_untouched_files_absent_from_scan_and_test_evidence(self) -> None:
         recorded: list[str] = []
 
@@ -380,10 +395,16 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertEqual(evidence["selectedTestResults"]["mode"], "not-run")
 
     def test_real_path_scoped_scan_of_admitted_consumer_map(self) -> None:
-        from scripts.gitops.secret_scan import scan_repository
+        from scripts.gitops import secret_scan
 
         admitted = [".github/linktrend-gitops-consumer.json"]
-        result = scan_repository(ROOT, paths=admitted)
+        with patch.object(
+            secret_scan,
+            "_run_repository_scanners",
+            side_effect=AssertionError("scoped scan launched repository hook"),
+        ) as hook:
+            result = secret_scan.scan_repository(ROOT, paths=admitted)
+        hook.assert_not_called()
         self.assertNotIn("src/index.ts", result.get("scannedPaths") or admitted)
         findings = [row for row in result["findings"] if row.get("path") not in admitted]
         self.assertEqual(findings, [])
@@ -411,25 +432,41 @@ class ProgressiveValidationTests(unittest.TestCase):
         return subprocess.CompletedProcess(args=[], returncode=code, stdout=stdout, stderr=stderr)
 
     def test_broad_unresolved_and_empty_code_plans_are_rejected_before_tests(self) -> None:
+        common = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "changedPaths": list(OCP01_PATHS),
+            "changedPathsDigest": MODULE.canonical_digest(list(OCP01_PATHS)),
+            "baselineCommit": OCP01_BASE,
+            "headCommit": OCP01_HEAD,
+        }
         cases = [
             (
-                '{"mode":"broad","targets":[],"skippedBroadFallbackPaths":[]}',
+                {**common, "mode": "broad", "targets": [], "skippedBroadFallbackPaths": []},
                 "relevant_tests_broadened",
             ),
             (
-                '{"mode":"targets","targets":[],"skippedBroadFallbackPaths":["src/index.ts"]}',
+                {
+                    **common,
+                    "mode": "targets",
+                    "targets": [],
+                    "skippedBroadFallbackPaths": ["src/index.ts"],
+                },
                 "relevant_tests_broadened",
             ),
             (
-                '{"mode":"targets","targets":[],"skippedBroadFallbackPaths":[]}',
+                {**common, "mode": "targets", "targets": [], "skippedBroadFallbackPaths": []},
                 "relevant_tests_unresolved",
             ),
         ]
-        for stdout, error in cases:
+        for payload, error in cases:
             test_calls: list[list[str]] = []
 
-            def planner(_cmd: list[str], payload: str = stdout) -> subprocess.CompletedProcess[str]:
-                return self._completed(0, payload)
+            def planner(
+                _cmd: list[str],
+                body: dict[str, object] = payload,
+            ) -> subprocess.CompletedProcess[str]:
+                return self._completed(0, json.dumps(body))
 
             def tests(cmd: list[str]) -> subprocess.CompletedProcess[str]:
                 test_calls.append(list(cmd))
@@ -485,6 +522,10 @@ class ProgressiveValidationTests(unittest.TestCase):
                 "src/agents/failover/classify.test.ts",
             ],
             "skippedBroadFallbackPaths": [],
+            "changedPaths": list(OCP01_PATHS),
+            "changedPathsDigest": MODULE.canonical_digest(list(OCP01_PATHS)),
+            "baselineCommit": OCP01_BASE,
+            "headCommit": OCP01_HEAD,
         }
         recorded: list[list[str]] = []
 
@@ -519,6 +560,56 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertEqual(result["evidence"]["selectedTestResults"]["command"], recorded[0])
         self.assertFalse(result["evidence"]["selectedTestResults"]["broadFallback"])
         self.assertIsNotNone(result["evidence"]["selectedTestResults"]["runOutputDigest"])
+
+    def test_planner_identity_and_changed_paths_are_bound_before_tests(self) -> None:
+        valid = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "mode": "targets",
+            "targets": ["src/plugin-sdk/agent-harness-runtime.test.ts"],
+            "skippedBroadFallbackPaths": [],
+            "changedPaths": list(OCP01_PATHS),
+            "changedPathsDigest": MODULE.canonical_digest(list(OCP01_PATHS)),
+            "baselineCommit": OCP01_BASE,
+            "headCommit": OCP01_HEAD,
+        }
+        cases = []
+        wrong_identity = dict(valid, baselineCommit="0" * 40, headCommit="1" * 40)
+        cases.append(wrong_identity)
+        wrong_paths = dict(valid, changedPaths=["src/index.ts"])
+        wrong_paths["changedPathsDigest"] = MODULE.canonical_digest(wrong_paths["changedPaths"])
+        cases.append(wrong_paths)
+        missing_target = dict(valid, targets=["src/does-not-exist.test.ts"])
+        cases.append(missing_target)
+
+        for payload in cases:
+            test_calls: list[list[str]] = []
+            result = MODULE.validate_phase(
+                root=ROOT,
+                profile="full",
+                baseline=OCP01_BASE,
+                head=OCP01_HEAD,
+                scanner=_ok_scan,
+                execute_tests=True,
+                write_evidence_file=False,
+                planner_runner=lambda _cmd, body=payload: self._completed(0, json.dumps(body)),
+                test_runner=lambda cmd: test_calls.append(list(cmd)) or self._completed(0),
+            )
+            self.assertFalse(result["ok"], result)
+            self.assertEqual(test_calls, [])
+
+    def test_fast_workflow_fetches_only_the_exact_historical_snapshot_commit(self) -> None:
+        workflow = (ROOT / ".github/workflows/linktrend-review-packager.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "HISTORICAL_APPROVAL_COMMIT: 452a7f1f31b1d1947d4bb992f91457e5a238ea31",
+            workflow,
+        )
+        self.assertIn(
+            'git fetch --no-tags --depth=1 origin "${HISTORICAL_APPROVAL_COMMIT}"',
+            workflow,
+        )
 
     def test_fast_does_not_invoke_node_planner_or_test_runner(self) -> None:
         planner_calls: list[list[str]] = []

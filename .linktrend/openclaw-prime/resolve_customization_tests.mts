@@ -4,6 +4,7 @@
  * Refuses broad/unresolved plans before any test runner starts.
  */
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { resolveChangedTestTargetPlan } from "../../scripts/test-projects.test-support.mts";
 
 const HEX40 = /^[0-9a-f]{40}$/;
@@ -67,6 +68,11 @@ function codeChangesRequireTests(paths: string[]): boolean {
   return paths.some((path) => CODE_SUFFIX.test(path));
 }
 
+function canonicalDigest(value: unknown): string {
+  const serialized = JSON.stringify(value);
+  return `sha256:${createHash("sha256").update(serialized).digest("hex")}`;
+}
+
 function main(): void {
   const args = process.argv.slice(2);
   const root = process.cwd();
@@ -83,6 +89,7 @@ function main(): void {
     targets,
     skippedBroadFallbackPaths: skipped,
     changedPaths,
+    changedPathsDigest: canonicalDigest(changedPaths),
     baselineCommit: baseline,
     headCommit: head,
   };

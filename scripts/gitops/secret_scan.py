@@ -1648,8 +1648,19 @@ def _scan_repository(
             inherited_fixture_ids=inherited_fixture_ids,
         )
     )
-    findings.extend(_run_repository_scanners(root))
+    # Repository-owned hooks have no path-scoping contract. Run them only for
+    # an explicitly unscoped scan so a customization gate cannot launch a
+    # child that inspects untouched upstream files.
+    if scope is None and requested_paths is None:
+        findings.extend(_run_repository_scanners(root))
     if scope is None:
+        if requested_paths is not None:
+            return make_result(
+                content_tree=content_tree,
+                findings=findings,
+                scan_mode="path-scoped",
+                scanned_paths=sorted(requested_paths),
+            )
         return make_result(content_tree=content_tree, findings=findings)
     return make_result(
         content_tree=content_tree,

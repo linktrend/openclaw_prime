@@ -68,6 +68,7 @@ jobs:
 
       - name: Fetch bounded baseline history
         env:
+          HISTORICAL_APPROVAL_COMMIT: 452a7f1f31b1d1947d4bb992f91457e5a238ea31
           BASELINE_REFSPEC: ${{ format('+refs/heads/{0}:refs/remotes/origin/{0}', github.event.pull_request.base.ref) }}
           PHASE_REFSPEC: ${{ format('+refs/heads/{0}:refs/remotes/origin/{0}', github.event.pull_request.head.ref) }}
         run: |
@@ -92,6 +93,9 @@ jobs:
           }
           trap cleanup_checkout_credentials EXIT
           git fetch --no-tags --depth=64 origin "${BASELINE_REFSPEC}" "${PHASE_REFSPEC}"
+          # Snapshot validation needs one old authority object. Fetch that
+          # exact commit only; do not deepen or scan upstream history.
+          git fetch --no-tags --depth=1 origin "${HISTORICAL_APPROVAL_COMMIT}"
           cleanup_checkout_credentials
           trap - EXIT
 
