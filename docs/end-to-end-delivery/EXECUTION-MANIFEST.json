@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "protocol": {
+    "id": "coding-execution-protocol",
+    "version": "1.0.1",
+    "amendment": "V25_BOOTSTRAP_LEAN"
+  },
+  "program": {
+    "id": "openclaw-prime-five-agent-server01",
+    "name": "OpenClawPrime Five Executive Agent Server01 Delivery",
+    "targetRelease": "openclaw-prime-five-agent-server01-v1"
+  },
+  "baseline": {
+    "repository": "linktrend/openclaw_prime",
+    "commit": "7aee52d52695ab50bfa13dd275a68d28a5cbbe6b",
+    "tree": "243027a77caba32a9365e0dbd7cd448596fb660b",
+    "ref": "refs/heads/development"
+  },
+  "packets": [
+    {
+      "id": "OCP-00",
+      "title": "Approval, ownership, and exact-baseline intake",
+      "issues": ["ISS-00"],
+      "ownedPaths": ["docs/end-to-end-delivery"],
+      "verificationCommands": [["git", "diff", "--check"]],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-01",
+      "title": "Govern the issue-312 fallback repair",
+      "issues": ["ISS-01"],
+      "ownedPaths": [
+        "extensions/codex/src/app-server",
+        "scripts/plugin-sdk-surface-report.mts",
+        "src/agents/auth-profiles",
+        "src/agents/embedded-agent-runner",
+        "src/agents/failover",
+        "src/agents/model-fallback.run-embedded.e2e.test-support.ts",
+        "src/agents/model-fallback.run-embedded.e2e.test.ts",
+        "src/plugin-sdk/agent-harness-runtime.test.ts",
+        "src/plugin-sdk/agent-harness-runtime.ts"
+      ],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "extensions/codex/src/app-server/event-projector.terminal-errors.test.ts"],
+        ["node", "scripts/run-vitest.mjs", "extensions/codex/src/app-server/outcome-fallback-runtime-contract.test.ts"],
+        ["node", "scripts/run-vitest.mjs", "src/agents/model-fallback.run-embedded.e2e.test.ts"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-00"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-02",
+      "title": "Common coding-delegation parity",
+      "issues": ["ISS-02"],
+      "ownedPaths": [
+        "src/agents",
+        "src/plugin-sdk",
+        "linkbots/lisa/ops/model-routing-contract.ts",
+        "linkbots/lisa/ops/model-routing.contract.json"
+      ],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "src/agents"],
+        ["pnpm", "plugin-sdk:surface:check"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-01"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-03",
+      "title": "Preserve and complete five profile contracts",
+      "issues": ["ISS-03"],
+      "ownedPaths": [
+        "linkbots/blueprints",
+        "linkbots/lisa/ops/lisa-profile-manifest.json",
+        "linkbots/lisa/Personality files"
+      ],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "linkbots/blueprints"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-00"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-04",
+      "title": "Reproducible image, deployment, backup, and rollback package",
+      "issues": ["ISS-04"],
+      "ownedPaths": ["linkbots/parity", "docs/runbooks/openclaw-prime-server01"],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "linkbots/parity"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-00", "OCP-01", "OCP-02", "OCP-03"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-05",
+      "title": "Five distinct Platform identities and SecretRefs",
+      "issues": ["ISS-05"],
+      "ownedPaths": ["linkbots/parity/runtime-config", "extensions/linkplatform"],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "extensions/linkplatform"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-04"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-06",
+      "title": "Five Brain and Skills consumer bindings",
+      "issues": ["ISS-06"],
+      "ownedPaths": ["extensions/linkbrain", "extensions/linkskills", "linkbots/parity/runtime-config"],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "extensions/linkbrain"],
+        ["node", "scripts/run-vitest.mjs", "extensions/linkskills"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-05"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-07",
+      "title": "Reconcile and finish Buzz without rebuilding it",
+      "issues": ["ISS-07"],
+      "ownedPaths": ["extensions/buzz", "linkbots/parity/runtime-config", "docs/runbooks/openclaw-prime-server01"],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "extensions/buzz"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-04"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-08",
+      "title": "Serial five-agent fleet canary",
+      "issues": ["ISS-08"],
+      "ownedPaths": ["docs/runbooks/openclaw-prime-server01", "linkbots/parity/evidence"],
+      "verificationCommands": [["git", "diff", "--check"]],
+      "dependencies": ["OCP-04", "OCP-05", "OCP-06", "OCP-07"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-09",
+      "title": "Role-specific business functions and accepted automations",
+      "issues": ["ISS-09"],
+      "ownedPaths": ["linkbots/blueprints", "extensions/linkautowork"],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "extensions/linkautowork"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-08"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-10",
+      "title": "Google Chat channel rollout",
+      "issues": ["ISS-10"],
+      "ownedPaths": ["extensions/googlechat", "linkbots/parity/runtime-config", "docs/runbooks/openclaw-prime-server01"],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "extensions/googlechat"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-08"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-11",
+      "title": "Recovery and reboot proof",
+      "issues": ["ISS-11"],
+      "ownedPaths": ["docs/runbooks/openclaw-prime-server01", "linkbots/parity/evidence"],
+      "verificationCommands": [["git", "diff", "--check"]],
+      "dependencies": ["OCP-09", "OCP-10"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-12",
+      "title": "Founder acceptance and closeout",
+      "issues": ["ISS-12"],
+      "ownedPaths": ["docs/end-to-end-delivery", "docs/handoffs"],
+      "verificationCommands": [["git", "diff", "--check"]],
+      "dependencies": ["OCP-11"],
+      "executionState": "PLAN"
+    }
+  ],
+  "issues": [
+    {"id": "ISS-00", "packetId": "OCP-00", "title": "Approval and authority intake"},
+    {"id": "ISS-01", "packetId": "OCP-01", "title": "Fallback repair governed integration"},
+    {"id": "ISS-02", "packetId": "OCP-02", "title": "Common coding delegation"},
+    {"id": "ISS-03", "packetId": "OCP-03", "title": "Five profile contracts"},
+    {"id": "ISS-04", "packetId": "OCP-04", "title": "Deployment and recovery package"},
+    {"id": "ISS-05", "packetId": "OCP-05", "title": "Five Platform identities"},
+    {"id": "ISS-06", "packetId": "OCP-06", "title": "Brain and Skills consumers"},
+    {"id": "ISS-07", "packetId": "OCP-07", "title": "Buzz completion"},
+    {"id": "ISS-08", "packetId": "OCP-08", "title": "Fleet canary"},
+    {"id": "ISS-09", "packetId": "OCP-09", "title": "Role functions and automations"},
+    {"id": "ISS-10", "packetId": "OCP-10", "title": "Google Chat rollout"},
+    {"id": "ISS-11", "packetId": "OCP-11", "title": "Recovery proof"},
+    {"id": "ISS-12", "packetId": "OCP-12", "title": "Founder acceptance"}
+  ],
+  "controls": {
+    "exactCandidateInvalidation": {"enabled": true, "identityFields": ["repository", "commit", "tree"]},
+    "boundedRetry": {"ordinarySourceRepairs": 3, "infrastructureAttemptsPerCandidate": 2, "codeFailureRetries": 0},
+    "orchestrationLease": {"required": true, "scope": "packet-repository", "ttlSeconds": 3600},
+    "resourceUncertainty": {"failClosed": true, "unknownIsBlocking": true},
+    "automaticApproval": {
+      "checkpoint": "automatic",
+      "stagingPromote": "automatic-on-receipt-identity",
+      "reservedActions": ["main_promote", "publish_release", "deploy_production", "github_protection_change", "provider_live_mutation"],
+      "forbiddenActors": ["self_review", "self_merge", "prefer_incoming"]
+    },
+    "gitAuthority": {
+      "workBranchPattern": "issue/<n>-<slug>",
+      "protectedRefs": ["development", "staging", "main"],
+      "implementerMayOpenPr": false,
+      "implementerMayMerge": false,
+      "nestedSelfInstall": false
+    },
+    "publisherAuthority": {
+      "canonicalForV25": "none",
+      "legacyPublishers": ["linktrend-review-ready-publisher", "mark-review-ready.sh-as-publisher", "review-ready.json", "user-pat-publisher"],
+      "missingOrFailedClassification": "WAIVED_LEGACY_GATE"
+    },
+    "autoworkDiscovery": {"requiredWhenCallable": true, "unavailableIsHold": true},
+    "issueCheckpoint": {
+      "acceptWithoutReviewReady": true,
+      "acceptWithoutToken": true,
+      "requiredEvidence": ["exact_pushed_commit_tree", "scoped_diff", "focused_tests", "independent_narrow_review", "manifest_evidence"]
+    },
+    "administratorRecovery": {
+      "namedExceptionOnly": true,
+      "afterReplacementProof": true,
+      "allowedOperations": ["protection_snapshot", "restore", "readback"]
+    },
+    "durableHeartbeat": {"writeReadbackRequired": true, "persistBeforeMutation": true},
+    "checkoutBoundVerification": {"bindToCheckout": true, "forbidMergeRefIdentity": true},
+    "retryExhaustion": {
+      "diagnoseBeforeRecovery": true,
+      "forbidSilentRetry": true,
+      "ordinaryRecovery": "new_identity",
+      "infrastructureRecovery": "hold",
+      "codeFailureRecovery": "new_identity"
+    },
+    "hostedCapacityScheduler": {
+      "requireCompleteSnapshot": true,
+      "busyIsNotDiagnosis": true,
+      "unknownIsBlocking": true,
+      "hostedConcurrencyAuthority": "execution-protocol",
+      "maxAdmittedSlots": {"local": 1},
+      "adaptiveConcurrency": {
+        "mode": "minimum_of_live_evidence",
+        "capacityEvidence": "authenticated_cursor_account",
+        "identityFields": ["accountId", "apiKeyName", "teamId", "programRunId"],
+        "spendCeilingEvidence": "required",
+        "safetyConstraintEvidence": "required",
+        "evidenceMaxAgeSeconds": 3600
+      },
+      "unknownProbeSeconds": 600,
+      "backstopSeconds": 600,
+      "prioritization": ["priority", "dependencyReady", "fifo"],
+      "utilizationGapEvent": "UTILIZATION_GAP",
+      "recomputeOnEvents": ["admission", "completion", "invalidation", "probe_timeout", "api_rejection", "utilization_gap_repair"]
+    }
+  }
+}

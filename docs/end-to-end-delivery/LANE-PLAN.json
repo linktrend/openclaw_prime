@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "planId": "openclaw-prime-five-agent-server01",
+  "owner": "01a089cc-56b6-7f11-ba8c-e78c62172e1f",
+  "repository": "linktrend/openclaw_prime",
+  "baseline": {
+    "ref": "refs/heads/development",
+    "commit": "7aee52d52695ab50bfa13dd275a68d28a5cbbe6b",
+    "tree": "243027a77caba32a9365e0dbd7cd448596fb660b"
+  },
+  "dispatcher": {
+    "model": "grok-4.6",
+    "effort": "medium",
+    "fast": false,
+    "explicitRepositories": true,
+    "savedEnvironmentsAllowed": false
+  },
+  "maxHostedWorkers": 2,
+  "waves": [
+    {
+      "id": "WAVE-00",
+      "mode": "serial",
+      "packets": ["OCP-00", "OCP-01", "OCP-02"]
+    },
+    {
+      "id": "WAVE-01",
+      "mode": "parallel-if-disjoint",
+      "packets": ["OCP-03", "OCP-04"],
+      "lanes": ["PROFILE", "DEPLOY"]
+    },
+    {
+      "id": "WAVE-02",
+      "mode": "serial-runtime",
+      "packets": ["OCP-05", "OCP-06", "OCP-07", "OCP-08"]
+    },
+    {
+      "id": "WAVE-03",
+      "mode": "serial-runtime",
+      "packets": ["OCP-09", "OCP-10", "OCP-11", "OCP-12"]
+    }
+  ],
+  "lanes": [
+    {
+      "id": "PROFILE",
+      "packetId": "OCP-03",
+      "allowedPaths": [
+        "linkbots/blueprints/",
+        "linkbots/lisa/ops/lisa-profile-manifest.json",
+        "linkbots/lisa/Personality files/"
+      ],
+      "acceptanceCommands": [
+        ["node", "scripts/run-vitest.mjs", "linkbots/blueprints"],
+        ["git", "diff", "--check"]
+      ]
+    },
+    {
+      "id": "DEPLOY",
+      "packetId": "OCP-04",
+      "allowedPaths": [
+        "linkbots/parity/",
+        "docs/runbooks/openclaw-prime-server01/"
+      ],
+      "acceptanceCommands": [
+        ["node", "scripts/run-vitest.mjs", "linkbots/parity"],
+        ["git", "diff", "--check"]
+      ]
+    }
+  ],
+  "exclusivePackets": ["OCP-00", "OCP-01", "OCP-02"],
+  "runtimeSerialization": {
+    "required": true,
+    "packets": ["OCP-05", "OCP-06", "OCP-07", "OCP-08", "OCP-09", "OCP-10", "OCP-11", "OCP-12"],
+    "sharedSurfaces": ["Server01", "Platform database", "secret references", "Buzz storage", "channel bindings"]
+  },
+  "approvalGate": "No packet may enter RUNNING before the founder posts literal APPROVE in the planning task."
+}
