@@ -739,6 +739,21 @@ def _unique_phase_commits(
     phase_sha: str,
     accepted_shas: set[str],
 ) -> list[str]:
+    accepted_history: set[str] = set()
+    for accepted_sha in sorted(accepted_shas):
+        if not _is_ancestor(repo, development_sha, accepted_sha):
+            continue
+        history = _git(
+            repo,
+            "rev-list",
+            f"{development_sha}..{accepted_sha}",
+            check=False,
+        )
+        accepted_history.update(
+            normalize_sha(line)
+            for line in history.splitlines()
+            if is_valid_sha(normalize_sha(line))
+        )
     output = _git(repo, "rev-list", "--parents", f"{development_sha}..{phase_sha}", check=False)
     unique: list[str] = []
     for line in output.splitlines():
@@ -747,7 +762,10 @@ def _unique_phase_commits(
             continue
         commit = normalize_sha(parts[0])
         parents = [normalize_sha(item) for item in parts[1:]]
-        if commit in accepted_shas:
+        # An accepted exact tip authorizes its complete post-development
+        # ancestry. Otherwise revising a Phase falsely treats a multi-commit
+        # accepted issue as unrelated Phase work.
+        if commit in accepted_history:
             continue
         if len(parents) == 2 and parents[1] in accepted_shas:
             continue
