@@ -235,6 +235,65 @@ describe("CodexAppServerEventProjector terminal errors", () => {
     expect(result.lastAssistant).toBeUndefined();
   });
 
+  it("materializes Codex mapped auth-refresh failures as structured prompt errors", async () => {
+    const projector = await createProjector();
+
+    await projector.handleNotification(
+      appServerError({ message: "auth refresh request failed: code=-32603", willRetry: false }),
+    );
+
+    const result = projector.buildResult(buildEmptyToolTelemetry());
+    const promptError = readAttemptTerminal(result).promptError;
+    expect(promptError).toBeInstanceOf(Error);
+    expect(promptError).toMatchObject({
+      name: "OAuthRefreshFailureError",
+      message: "auth refresh request failed: code=-32603",
+      errorType: "codex_app_server_external_auth_refresh",
+      provider: "openai",
+      reason: null,
+    });
+    expect(result.agentHarnessResultClassification).toBeUndefined();
+    expect(result.assistantTexts).toEqual([]);
+  });
+
+  it("keeps Codex refresh timeout and cancellation distinct from refresh-failed", async () => {
+    const timeoutProjector = await createProjector();
+    await timeoutProjector.handleNotification(
+      appServerError({ message: "auth refresh request timed out after 10s", willRetry: false }),
+    );
+    expect(
+      readAttemptTerminal(timeoutProjector.buildResult(buildEmptyToolTelemetry())).promptError,
+    ).toMatchObject({
+      message: "auth refresh request timed out after 10s",
+      oauthRefreshFailure: { errorType: "codex_app_server_external_auth_refresh_timeout" },
+    });
+
+    const canceledProjector = await createProjector();
+    await canceledProjector.handleNotification(
+      appServerError({
+        message: "auth refresh request canceled: operator abort",
+        willRetry: false,
+      }),
+    );
+    expect(
+      readAttemptTerminal(canceledProjector.buildResult(buildEmptyToolTelemetry())).promptError,
+    ).toMatchObject({
+      message: "auth refresh request canceled: operator abort",
+      oauthRefreshFailure: { errorType: "codex_app_server_external_auth_refresh_canceled" },
+    });
+  });
+
+  it("does not wrap unrelated JSON-RPC -32603 prompt errors as auth refresh", async () => {
+    const projector = await createProjector();
+    await projector.handleNotification(
+      appServerError({ message: "Internal error (-32603): store hiccup", willRetry: false }),
+    );
+    expect(readAttemptTerminal(projector.buildResult(buildEmptyToolTelemetry()))).toMatchObject({
+      promptError: "Internal error (-32603): store hiccup",
+      promptErrorSource: "prompt",
+    });
+  });
+
   it.each([
     {
       label: "biological-risk",

@@ -273,6 +273,147 @@ export function classifyOAuthRefreshFailure(message: string): OAuthRefreshFailur
 }
 
 /** Classify provider/reason from the structured OAuth refresh failure error. */
+/** Codex app-server maps failed `account/chatgptAuthTokens/refresh` JSON-RPC to this exact phrase. */
+const CODEX_APP_SERVER_AUTH_REFRESH_FAILED_RE = /^auth refresh request failed: code=(-?\d+)$/;
+/** Codex app-server native external-auth refresh deadline (duration is Codex-owned). */
+const CODEX_APP_SERVER_AUTH_REFRESH_TIMEOUT_RE = /^auth refresh request timed out after \d+s$/;
+const CODEX_APP_SERVER_AUTH_REFRESH_CANCELED_PREFIX = "auth refresh request canceled:";
+
+export const CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_ERROR_TYPE =
+  "codex_app_server_external_auth_refresh";
+export const CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_TIMEOUT_ERROR_TYPE =
+  "codex_app_server_external_auth_refresh_timeout";
+export const CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_CANCELED_ERROR_TYPE =
+  "codex_app_server_external_auth_refresh_canceled";
+
+export type ExternalAuthRefreshTerminalKind = "refresh_failed" | "timeout" | "canceled";
+
+export type ExternalAuthRefreshTerminalFailure = {
+  kind: ExternalAuthRefreshTerminalKind;
+  jsonRpcCode?: number;
+};
+
+function readUnknownErrorMessage(error: unknown): string {
+  if (typeof error === "string") {
+    return error.trim();
+  }
+  if (error instanceof Error) {
+    return error.message.trim();
+  }
+  return "";
+}
+
+function errorTypeForExternalAuthRefreshKind(kind: ExternalAuthRefreshTerminalKind): string {
+  switch (kind) {
+    case "timeout":
+      return CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_TIMEOUT_ERROR_TYPE;
+    case "canceled":
+      return CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_CANCELED_ERROR_TYPE;
+    default:
+      return CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_ERROR_TYPE;
+  }
+}
+
+function classifyExternalAuthRefreshErrorType(
+  errorType: string | undefined,
+): ExternalAuthRefreshTerminalKind | null {
+  switch (errorType) {
+    case CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_ERROR_TYPE:
+      return "refresh_failed";
+    case CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_TIMEOUT_ERROR_TYPE:
+      return "timeout";
+    case CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_CANCELED_ERROR_TYPE:
+      return "canceled";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Classify Codex app-server external-auth refresh terminal copy.
+ * Numeric JSON-RPC -32603 alone is generic internal error and must not match.
+ */
+export function classifyExternalAuthRefreshTerminalFailure(
+  error: unknown,
+): ExternalAuthRefreshTerminalFailure | null {
+  const typedKind = classifyExternalAuthRefreshErrorType(
+    readProviderOAuthRefreshFailure(error)?.errorType ??
+      (error instanceof OAuthRefreshFailureError ? error.errorType : undefined),
+  );
+  if (typedKind) {
+    return { kind: typedKind };
+  }
+  const message = readUnknownErrorMessage(error);
+  const failed = message.match(CODEX_APP_SERVER_AUTH_REFRESH_FAILED_RE);
+  if (failed) {
+    const jsonRpcCode = Number(failed[1]);
+    return {
+      kind: "refresh_failed",
+      ...(Number.isFinite(jsonRpcCode) ? { jsonRpcCode } : {}),
+    };
+  }
+  if (CODEX_APP_SERVER_AUTH_REFRESH_TIMEOUT_RE.test(message)) {
+    return { kind: "timeout" };
+  }
+  if (message.startsWith(CODEX_APP_SERVER_AUTH_REFRESH_CANCELED_PREFIX)) {
+    return { kind: "canceled" };
+  }
+  return null;
+}
+
+/** Map typed Codex external-auth refresh failures onto OpenClaw failover reasons. */
+export function failoverReasonForExternalAuthRefreshTerminalFailure(
+  error: unknown,
+): "auth_permanent" | "timeout" | null {
+  const classified = classifyExternalAuthRefreshTerminalFailure(error);
+  if (classified?.kind === "refresh_failed") {
+    // ChatGPT refresh already failed for this turn. Skip same-model runtime
+    // auth retry (`auth` only); -32603 is not itself the permanence signal.
+    return "auth_permanent";
+  }
+  if (classified?.kind === "timeout") {
+    return "timeout";
+  }
+  return null;
+}
+
+export function isExternalAuthRefreshFallbackEligible(error: unknown): boolean {
+  return failoverReasonForExternalAuthRefreshTerminalFailure(error) !== null;
+}
+
+/** Attach bounded Codex external-auth refresh provenance for OpenClaw failover. */
+export function materializeExternalAuthRefreshPromptError(params: {
+  message: string;
+  cause?: unknown;
+}): Error | null {
+  const classified = classifyExternalAuthRefreshTerminalFailure(params.message);
+  if (!classified) {
+    return null;
+  }
+  const errorType = errorTypeForExternalAuthRefreshKind(classified.kind);
+  if (classified.kind === "refresh_failed") {
+    return new OAuthRefreshFailureError({
+      provider: "openai",
+      message: params.message,
+      cause: params.cause,
+      errorType,
+      reason: null,
+      summary: params.message,
+    });
+  }
+  const error = new Error(
+    params.message,
+    params.cause !== undefined ? { cause: params.cause } : undefined,
+  );
+  Object.assign(error, {
+    oauthRefreshFailure: {
+      errorType,
+      summary: params.message,
+    },
+  });
+  return error;
+}
+
 export function classifyOAuthRefreshFailureError(err: unknown): OAuthRefreshFailure | null {
   const seen = new Set<object>();
   let rawFallback: OAuthRefreshFailure | null = null;
