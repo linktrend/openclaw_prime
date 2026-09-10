@@ -85,7 +85,7 @@
       "required": ["id", "digest", "mode", "baselineFullSuite", "packetValidation", "phaseValidation", "releaseCandidateValidation", "blocking", "provider", "scope"],
       "properties": {
         "id": { "type": "string", "const": "openclaw-fork-progressive-validation-v1" },
-        "digest": { "type": "string", "const": "sha256:fa3f448e33fbc05e4b9676628a8be1f67bb020cc0baf58da6dd8fe720d0c26f0" },
+        "digest": { "type": "string", "const": "sha256:445953e776fa6594bc96f047794616164ec75b213a07c0e9300630db1ec24a17" },
         "mode": { "type": "string", "const": "fork-progressive" },
         "baselineFullSuite": {
           "type": "object", "additionalProperties": false,
@@ -106,10 +106,21 @@
         },
         "phaseValidation": {
           "type": "object", "additionalProperties": false,
-          "required": ["requiredProfiles", "repositoryWideFullRequired"],
+          "required": [
+            "requiredProfiles",
+            "repositoryWideFullRequired",
+            "customizationScope",
+            "staticProvenanceMayDescribeInventory",
+            "staticProvenanceExcludesProvenPhasePath",
+            "untouchedUpstream"
+          ],
           "properties": {
             "requiredProfiles": { "type": "array", "const": ["fast", "change-scoped-integration-contract"] },
-            "repositoryWideFullRequired": { "type": "boolean", "const": false }
+            "repositoryWideFullRequired": { "type": "boolean", "const": false },
+            "customizationScope": { "type": "string", "const": "exact-normalized-protected-base-to-phase-diff" },
+            "staticProvenanceMayDescribeInventory": { "type": "boolean", "const": true },
+            "staticProvenanceExcludesProvenPhasePath": { "type": "boolean", "const": false },
+            "untouchedUpstream": { "type": "string", "const": "files-outside-exact-diff" }
           }
         },
         "releaseCandidateValidation": {

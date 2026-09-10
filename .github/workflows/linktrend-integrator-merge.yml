@@ -149,12 +149,19 @@ jobs:
             "${live_branch}" "${live}" "${derived}" "${live_base}" >> "$GITHUB_ENV"
           echo "exact dispatch-time seal accepted"
 
+      - name: Setup Node with frozen dependencies
+        uses: ./.github/actions/setup-node-env
+        with:
+          frozen-lockfile: "true"
+          install-deps: "true"
+          cache-mode: restore
+
       - name: Run full profile
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git diff --check
+          git diff --check "${BASELINE_SHA}" "${EXPECTED_HEAD}"
           python3 scripts/gitops/run_delivery_profile.py full
           # Exact-head Fast remains required. Do not require the Full
           # workflow's own in-progress result, even when ciWorkflowName is
@@ -209,8 +216,10 @@ jobs:
               "runner=ubuntu-24.04-arm\n",
               encoding="utf-8",
           )
+          evidence_path = Path("customization-validation-evidence.json")
           evidence = {
-              "full-suite-summary.txt": "sha256:" + hashlib.sha256(summary.read_bytes()).hexdigest()
+              "full-suite-summary.txt": "sha256:" + hashlib.sha256(summary.read_bytes()).hexdigest(),
+              "customization-validation-evidence.json": "sha256:" + hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
           }
           result = {
               "schemaVersion": 2,
@@ -236,6 +245,7 @@ jobs:
           path: |
             full-suite-receipt.json
             full-suite-summary.txt
+            customization-validation-evidence.json
           retention-days: 30
 
   bugbot:

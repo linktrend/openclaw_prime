@@ -40,7 +40,10 @@ PREREQUISITES = (
 AUTHORIZED_DEVELOPMENT_COMMIT = "452a7f1f31b1d1947d4bb992f91457e5a238ea31"
 AUTHORIZED_DEVELOPMENT_TREE = "56c96716ede75bdc896791ec2098cf1bf2594bb6"
 FROZEN_AUTHORITY_SHA256 = (
-    "sha256:38f08a689f570d176dd8ce3e643472ebde5d4aa8038c36e6294575ac9734c62e"
+    "sha256:427385ae17832261e74cf64fddc1f8b0d16f74563c431e320c3afe03ed7c9c6d"
+)
+VALIDATION_POLICY_DIGEST = (
+    "sha256:445953e776fa6594bc96f047794616164ec75b213a07c0e9300630db1ec24a17"
 )
 
 REQUIRED_TOP = (
@@ -134,6 +137,22 @@ def validate_snapshot(snapshot: Mapping[str, Any], *, checkout: Path | None = No
     frozen = snapshot["frozenDispatchAuthority"]
     _require(frozen["sha256"] == digest, "frozen authority digest does not match bytes")
     _require(frozen["sha256"] == FROZEN_AUTHORITY_SHA256, "frozen authority digest drifted")
+    validation_policy = load_json(authority_path)["validationPolicy"]
+    policy_payload = {key: value for key, value in validation_policy.items() if key != "digest"}
+    computed_policy = "sha256:" + hashlib.sha256(
+        json.dumps(policy_payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    _require(validation_policy["digest"] == VALIDATION_POLICY_DIGEST, "validation policy digest drifted")
+    _require(computed_policy == VALIDATION_POLICY_DIGEST, "validation policy digest is not canonical")
+    _require(
+        validation_policy["phaseValidation"]["customizationScope"]
+        == "exact-normalized-protected-base-to-phase-diff",
+        "phase customization scope drifted",
+    )
+    _require(
+        validation_policy["phaseValidation"]["staticProvenanceExcludesProvenPhasePath"] is False,
+        "static provenance must not exclude a proven Phase path",
+    )
     _require(frozen["rewrittenByThisSnapshot"] is False, "must not rewrite frozen authority")
     _require(frozen["executionAuthorizedAtCheckpoint"] is False, "v4 checkpoint remains unauthorized")
 

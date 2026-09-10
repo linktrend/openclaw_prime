@@ -120,9 +120,8 @@ jobs:
       - name: Run fast profile
         run: |
           set -euo pipefail
-          git diff --check
+          git diff --check "${BASELINE_SHA}" "${EXPECTED_HEAD}"
           python3 scripts/gitops/run_delivery_profile.py fast
-          PYTHONPATH=. python3 -m unittest discover -s .ide-development/tests -p 'test_change_scoped_secret_scan_acceptance.py'
 
       - name: Retain fast-check evidence
         if: always()
@@ -141,6 +140,14 @@ jobs:
         with:
           name: linktrend-fast-check-${{ github.run_id }}
           path: fast-check-summary.txt
+          retention-days: 30
+
+      - name: Upload customization-validation evidence
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linktrend-fast-customization-evidence-${{ github.run_id }}
+          path: customization-validation-evidence.json
           retention-days: 30
 
   reconciled-fast:

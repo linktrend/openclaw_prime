@@ -19,7 +19,31 @@
           ".linktrend/openclaw-prime/validate_customization_boundary.py"
         ],
         ["python3", ".linktrend/openclaw-prime/validate_customization_boundary.py"],
-        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "fast"]
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "fast"],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "openclaw_progressive_validation.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "docs/execution/openclaw-prime-lisa/tests",
+          "-p",
+          "test_execution_approval_snapshot.py"
+        ]
       ],
       "requiredCheckContexts": ["Linktrend Fast Checks"],
       "timeoutMinutes": 5

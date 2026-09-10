@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -14,6 +16,8 @@ if str(DOCS) not in sys.path:
 from validate_execution_approval_snapshot import (  # noqa: E402
     AUTHORIZED_DEVELOPMENT_COMMIT,
     AUTHORIZED_DEVELOPMENT_TREE,
+    FROZEN_AUTHORITY_SHA256,
+    VALIDATION_POLICY_DIGEST,
     SnapshotError,
     load_json,
     sha256_file,
@@ -80,6 +84,23 @@ class ExecutionApprovalSnapshotTests(unittest.TestCase):
             schema["properties"]["kind"]["const"],
             "openclaw-prime-lisa-execution-approval-snapshot",
         )
+
+    def test_validation_policy_digest_is_canonical(self) -> None:
+        authority = load_json(DOCS / "dispatch-authority.json")
+        policy = authority["validationPolicy"]
+        payload = {key: value for key, value in policy.items() if key != "digest"}
+        computed = "sha256:" + hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        self.assertEqual(policy["digest"], VALIDATION_POLICY_DIGEST)
+        self.assertEqual(computed, VALIDATION_POLICY_DIGEST)
+        self.assertEqual(
+            policy["phaseValidation"]["customizationScope"],
+            "exact-normalized-protected-base-to-phase-diff",
+        )
+        self.assertFalse(policy["phaseValidation"]["staticProvenanceExcludesProvenPhasePath"])
+        self.assertEqual(self.snapshot["frozenDispatchAuthority"]["sha256"], FROZEN_AUTHORITY_SHA256)
+        self.assertEqual(self.snapshot["frozenDispatchAuthority"]["sha256"], sha256_file(DOCS / "dispatch-authority.json"))
 
     def test_reject_authorizing_non_customization_packet(self) -> None:
         broken = copy.deepcopy(self.snapshot)

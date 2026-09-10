@@ -14,7 +14,7 @@
   "frozenDispatchAuthority": {
     "path": "docs/execution/openclaw-prime-lisa/dispatch-authority.json",
     "authorityId": "openclaw-prime-lisa-dispatch-authority-v4",
-    "sha256": "sha256:38f08a689f570d176dd8ce3e643472ebde5d4aa8038c36e6294575ac9734c62e",
+    "sha256": "sha256:427385ae17832261e74cf64fddc1f8b0d16f74563c431e320c3afe03ed7c9c6d",
     "executionAuthorizedAtCheckpoint": false,
     "rewrittenByThisSnapshot": false
   },
