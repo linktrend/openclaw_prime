@@ -41,9 +41,14 @@ identity/provider/acceptance facts without replacing that shape.
    authorization-filtered results. Neither grants execution.
 5. OpenClaw applies the agent's role/tool policy and the Program's independent
    permission before any action.
-6. The primary Sol Low attempt runs. Only a classified qualifying failure may
+6. Executive coding requests target the configured `development-orchestrator`
+   through `sessions_spawn`. The generic direct-coding policy blocks the parent
+   executive's `apply_patch`/`edit`/`exec`/`process`/`write` execution after
+   preserving the effective authorized tool names for the delegated child's ACP
+   tool inheritance; read-only inspection remains available.
+7. The primary Sol Low attempt runs. Only a classified qualifying failure may
    advance to the single Luna High fallback.
-7. Delivery returns through the originating channel or an explicitly authorized
+8. Delivery returns through the originating channel or an explicitly authorized
    proactive destination, with body-free operational telemetry and a redacted
    receipt.
 
@@ -59,6 +64,11 @@ identity/provider/acceptance facts without replacing that shape.
 | Buzz | Existing dedicated bot keys; authorized rooms; mention and loop controls | Disconnect only affected Buzz account; preserve identity and rooms |
 | Google Chat | Authenticated HTTP webhook, exact audience, per-agent app identity | Keep plugin disabled for affected agent |
 | Deployment | Immutable image, backup/restore, one-agent serial canary | Roll back affected service before continuing |
+
+Cloud implementation lanes consume only the committed sanitized input at
+`docs/end-to-end-delivery/inputs/server01-structural-snapshot.json`. The local
+coordinator owns live readback and refreshes that input before dispatch; cloud
+workers receive no Server01 credentials or access.
 
 ## Model-fallback dependency contract
 
@@ -86,5 +96,6 @@ Source, provider, consumer, image, live deployment, canary, and production
 acceptance are separate gates. A packet may pass one without implying the next.
 Server01 mutation uses one exclusive lease shared with the active Platform
 recovery owner. Database migrations, secret rotation, Buzz maintenance, agent
-config writes, image replacement, and reboot must never overlap.
-
+config writes, image replacement, and reboot must never overlap. Core fleet
+acceptance is durable without Google Chat; Google Chat is the final separate
+channel track and only full-channel closure depends on it.

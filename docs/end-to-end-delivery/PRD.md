@@ -100,7 +100,8 @@ must not be smuggled into an agent as a skill.
   externally managed agents but must not start, stop, or rewrite Server01 agents.
 - Missing photos/descriptions are completed against the existing identities
   after the founder supplies or accepts canonical assets and copy. They are not
-  grounds to rebuild the integration.
+  grounds to rebuild the integration and do not block core fleet or Buzz
+  transport acceptance.
 - The empty external-agent Channels display and the iOS community-label mismatch
   are upstream Buzz product defects/cosmetic gaps. Track them separately; do not
   maintain a permanent OpenClaw fork to mask them.
@@ -141,7 +142,7 @@ must not be smuggled into an agent as a skill.
 
 ## 7. Release and acceptance definition
 
-Completion requires all of the following at one current identity:
+Core fleet acceptance requires all of the following at one current identity:
 
 - exact source commit/tree protected through the governed development → staging
   → main path;
@@ -151,13 +152,21 @@ Completion requires all of the following at one current identity:
 - Sol Low primary and a real or safe injected qualifying-failure Luna High
   fallback proof for every agent;
 - role, personality, and responsibility checks for all five;
-- Brain, Skills, Buzz, Telegram, and—after its own gate—Google Chat acceptance;
+- Brain, Skills, Buzz transport, and Telegram acceptance;
 - verified backup, isolated restore, per-agent restart, and host reboot receipts;
 - founder live acceptance of representative conversations and exact role
   behavior;
 - rollback rehearsed and documented; and
-- no required packet, secret reference, migration, review, or runtime claim left
-  in HOLD.
+- no core-required packet, secret reference, migration, review, or runtime claim
+  left in HOLD.
+
+Google Chat remains part of the end-to-end delivery but is a separate last-stage
+acceptance track after core fleet acceptance. Missing Google Chat apps,
+credentials, or public webhook prerequisites leave Google Chat in `HOLD` without
+revoking a valid core fleet acceptance. Full-channel closure requires both the
+accepted core ledger and Google Chat acceptance for all five. Portraits,
+descriptions, and further personality refinements are separately recorded
+founder inputs and do not block core or full-channel technical acceptance.
 
 Healthy containers, source tests, provider health, or historical message tests
 alone do not satisfy this definition.
@@ -169,4 +178,3 @@ legal commitments, external publication, outreach, purchases, new standing
 orders, new business workflows, or self-approval. It does not activate draft
 Libraries releases, copy Lisa's private data, redesign Buzz, replace Platform,
 or merge directly to a protected branch.
-

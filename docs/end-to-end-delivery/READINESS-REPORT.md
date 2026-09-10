@@ -1,6 +1,6 @@
 # Readiness report
 
-Observed: 2026-09-10, Asia/Taipei. Status: **READY FOR FOUNDER APPROVAL;
+Observed: 2026-09-10, Asia/Taipei. Status: **TARGETED ADVISOR RE-REVIEW HOLD;
 EXECUTION HOLD**.
 
 ## Verified current facts
@@ -52,7 +52,7 @@ EXECUTION HOLD**.
 | Buzz core | READY | Existing plugin, services, identities, and prior message evidence; current preservation/maintenance receipt still needed. |
 | Buzz persistence/profile completion | HOLD | Prior connection-attribution uncertainty and missing canonical portrait/description decisions. |
 | Google Chat | HOLD | Installed but intentionally disabled for all five; five app/credential/webhook gates absent. |
-| Role/personality refinement | HOLD | Technical role manifests exist; founder-deferred detailed refinement remains OCP-09. |
+| Role/personality refinement | HOLD | Technical role manifests exist; founder-deferred detailed refinement remains OCP-10. |
 | Backup/restore/reboot acceptance | HOLD | Current five-root, isolated-restore, new-image rollback, and cold-reboot receipts absent. |
 
 ## Launch blockers
@@ -62,38 +62,50 @@ EXECUTION HOLD**.
    OCP-00 must add only the narrow owner/repository grant after approval.
 3. The reviewed fallback repair is not protected-integrated or deployed, and its
    inherited Phase PR identity is incorrect.
-4. Lisa requires supported interactive OpenAI reauthentication; this is a
-   separate account/device security action requiring explicit founder presence
-   and approval. Reauthentication alone does not replace fallback proof.
+4. Lisa requires supported interactive OpenAI reauthentication. The task's
+   single `APPROVE` authorizes the routine attempt, but the actual account/device
+   login or consent interaction requires founder presence. Reauthentication
+   alone does not replace fallback proof.
 5. The active Platform recovery task must finish and release the Server01/
    Platform mutation boundary with accepted backup, restore, migration,
    credential, issuer/JWKS, actor-registration, and rollback receipts.
 6. Four distinct Platform/Brain/Skills activation packages and five-actor
    provider-scope acceptance do not yet exist.
-7. Generic coding-delegation parity remains a source HOLD.
-8. Buzz persistence maintenance requires an accepted quiescent window; remaining
-   profile assets/copy require just-in-time founder input.
+7. Generic coding-delegation parity has a concrete source contract in OCP-02 but
+   remains a source `HOLD` until implemented, independently reviewed by this
+   deployment task, and protected-integrated.
+8. Buzz persistence maintenance requires an accepted quiescent window. Optional
+   portraits/descriptions require exact founder-provided asset references and
+   copy but do not block core or Buzz transport acceptance.
 9. Google Chat remains intentionally deferred until core fleet acceptance.
 
-None of these requires changing the planning architecture. They are ordered
-execution gates, with account login, portraits/copy, and Google Chat app
-administration intentionally requested just in time.
+The package routes these as ordered execution gates. The only pre-execution
+planning blocker is targeted Advisor acceptance of the corrected exact identity.
+Interactive account login, optional portrait/copy input, and Google Chat
+app/public-endpoint inputs are requested only when their packets reach them; the
+latter two do not block core-fleet acceptance.
 
 ## Planning validation gaps
 
 - `pnpm docs:list` could not execute because the locally configured pinned pnpm
   binary returned `ENOEXEC`. The underlying `node scripts/docs-list.js` completed
   successfully. Planning-only scope did not authorize dependency/toolchain repair.
-- A live Cursor API refresh was not initiated by this task because the dispatcher
-  reads macOS Keychain and repository rules require explicit founder approval for
-  that security action. A same-day stored receipt was inspected instead.
+- A live Cursor API refresh was unnecessary during correction because a same-day
+  stored redacted receipt and the offline route tests were sufficient. The
+  founder's settled authority permits OCP-00 to perform the routine
+  Keychain-backed check after the package is accepted and `APPROVE` is posted.
 - No production request, credential, migration, image build, deployment, channel
   write, Buzz database query, or private-content read occurred in planning.
 
 ## Readiness conclusion
 
-The package is complete enough to approve as one route. Execution starts at
-OCP-00 and can continue without another architectural decision. Human actions
-are requested only at their actual just-in-time gates: account/device login,
-canonical portraits/descriptions or policy refinements, public Google Chat app
-administration, protected/main promotion, and final live acceptance.
+The corrected package is not labeled ready for `APPROVE` until targeted Advisor
+re-review accepts its exact commit/tree. After that acceptance and one founder
+`APPROVE`, execution starts at OCP-00 and routine documented work continues
+without repeated approvals. Exact later founder inputs are: an interactive
+OpenAI login/consent response if presented; optional portrait file references
+and final description strings; any requested personality/business-policy change
+beyond the PRD roles; Google Chat app identities, allowed users/spaces, and the
+approved public webhook hostname; and the OCP-12/OCP-14 observable acceptance
+decisions. Governed promotion and documented deployment are not additional
+approval gates.

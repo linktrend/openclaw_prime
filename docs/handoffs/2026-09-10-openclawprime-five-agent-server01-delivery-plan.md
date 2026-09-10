@@ -140,4 +140,46 @@ no execution packet has started.
 
 ## Amendments
 
-None.
+### 2026-09-10 16:40 Asia/Taipei — Targeted Advisor corrections
+
+The initial handoff incorrectly labeled planning `READY`, required a second
+Keychain authorization after task approval, described only OCP-00 through
+OCP-12, coupled Google Chat too closely to core acceptance, and retained an
+obsolete lane-plan digest. Deployment Advisor review correctly rejected that
+state.
+
+Corrected facts:
+
+- Planning is `TARGETED ADVISOR RE-REVIEW HOLD`; execution remains `HOLD` until
+  the Advisor accepts the exact corrected commit/tree and the founder then posts
+  literal `APPROVE` in the OpenClawPrime Deployment task.
+- That one `APPROVE` covers all routine documented actions, including the
+  established Keychain-backed Cursor check, credential provisioning, enumerated
+  migrations, independent execution reviews, protected promotion, image build,
+  and Server01 deployment. Only a real interactive login/consent prompt, an
+  enforced tool permission, materially changed scope, or unplanned destructive
+  action pauses for new authority.
+- OCP-03 profile work and OCP-04 deployment-source work are the only parallel
+  lanes. Both depend on OCP-02 and consume the committed sanitized Server01
+  input; OCP-05 alone assembles and admits the final image after both finish.
+- OCP-02 now specifies the config type, schema/help surfaces, tool-assembly
+  wrapper, child-inheritance ordering, target-policy enforcement, error
+  semantics, owned paths, and focused tests for common coding delegation.
+- OCP-04 now specifies the absolute Cursor dispatcher route, validate/submit/
+  watch/poll lifecycle, frozen Node 24 and pnpm 12.1.0 setup, task-local ENOEXEC
+  remedy, Server01 helper commands, immutable inputs, redacted receipt schema,
+  failure stops, and rollback commands.
+- Core fleet acceptance is OCP-12. Google Chat follows separately in OCP-13 and
+  full-channel closure in OCP-14. Portraits/descriptions and further refinement
+  are optional inputs and do not block technical core or full-channel closure.
+- Runtime packets reuse predecessor receipts. Unchanged Platform, Brain/Skills,
+  Buzz, core, and recovery proof is not replayed wholesale.
+
+The corrected `LANE-PLAN.json` SHA-256 is
+`8ed6786cfb57840a9da6423d59471fa4946f65dad6a4fdceb08b614c96deb810`.
+JSON/graph validation, installed execution-manifest schema validation, docs
+inventory, Markdown-link checks, and whitespace validation are required before
+the correction commit is pushed. The exact pushed commit/tree will be supplied
+to the same Advisor for targeted re-review. No implementation, dispatch,
+credential access, provider mutation, migration, image build, or Server01
+mutation occurred during this correction.

@@ -1,6 +1,6 @@
 # OpenClaw Prime five-agent Server01 delivery package
 
-Status: **PLAN — awaiting founder `APPROVE` in the OpenClawPrime Deployment task**
+Status: **PLAN — targeted Advisor re-review HOLD; execution HOLD**
 
 Date: 2026-09-10 (Asia/Taipei)
 
@@ -24,15 +24,25 @@ production proof.
 - [Current readiness and blockers](./READINESS-REPORT.md)
 - [Machine-readable lane plan](./LANE-PLAN.json)
 - [Schema-valid execution manifest](./EXECUTION-MANIFEST.json)
+- [Sanitized Server01 structural input](./inputs/server01-structural-snapshot.json)
 
 ## Approval boundary
 
-The package authorizes no implementation, worker dispatch, provider mutation,
-credential access, migration, image build, deployment, channel activation,
-profile rewrite, or protected promotion. Only the exact word `APPROVE` from the
-founder in the OpenClawPrime Deployment task releases Gate 0. Approval in a
+The package currently authorizes no implementation, worker dispatch, provider
+mutation, credential access, migration, image build, deployment, channel
+activation, profile rewrite, or protected promotion. Only the exact word
+`APPROVE` from the founder in the OpenClawPrime Deployment task releases Gate 0.
+That single approval covers the routine end-to-end actions documented in the
+accepted package, including the established Keychain-backed Cursor route,
+ordinary credential provisioning, already-enumerated migrations, governed
+promotion, and Server01 deployment. It is not replaced by approval in a
 historical task, an accepted provider plan, a passing review, or this committed
-plan is not execution authority.
+plan.
+
+No second routine approval may be invented after Gate 0. A real interactive
+account login/consent prompt, an enforced tool permission, or a materially
+changed scope still pauses for the founder because it is a new human action or
+new authority, not a replay of Gate 0.
 
 After approval, the coordinator must refresh all protected refs, live runtime
 identity, queue ownership, active session records, Cursor account/model/repo

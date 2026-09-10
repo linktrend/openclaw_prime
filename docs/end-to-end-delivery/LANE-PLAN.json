@@ -30,13 +30,18 @@
     },
     {
       "id": "WAVE-02",
-      "mode": "serial-runtime",
-      "packets": ["OCP-05", "OCP-06", "OCP-07", "OCP-08"]
+      "mode": "serial-image-and-runtime",
+      "packets": ["OCP-05", "OCP-06", "OCP-07", "OCP-08", "OCP-09"]
     },
     {
       "id": "WAVE-03",
       "mode": "serial-runtime",
-      "packets": ["OCP-09", "OCP-10", "OCP-11", "OCP-12"]
+      "packets": ["OCP-10", "OCP-11", "OCP-12"]
+    },
+    {
+      "id": "WAVE-04",
+      "mode": "serial-googlechat-closeout",
+      "packets": ["OCP-13", "OCP-14"]
     }
   ],
   "lanes": [
@@ -50,6 +55,7 @@
       ],
       "acceptanceCommands": [
         ["node", "scripts/run-vitest.mjs", "linkbots/blueprints"],
+        ["node", "linkbots/parity/validate.mjs"],
         ["git", "diff", "--check"]
       ]
     },
@@ -61,16 +67,18 @@
         "docs/runbooks/openclaw-prime-server01/"
       ],
       "acceptanceCommands": [
-        ["node", "scripts/run-vitest.mjs", "linkbots/parity"],
+        ["node", "scripts/run-vitest.mjs", "linkbots/parity/server01-delivery.test.mjs"],
+        ["node", "scripts/run-vitest.mjs", "linkbots/parity/deployment-guard.test.mjs"],
+        ["node", "linkbots/parity/validate.mjs"],
         ["git", "diff", "--check"]
       ]
     }
   ],
-  "exclusivePackets": ["OCP-00", "OCP-01", "OCP-02"],
+  "exclusivePackets": ["OCP-00", "OCP-01", "OCP-02", "OCP-05"],
   "runtimeSerialization": {
     "required": true,
-    "packets": ["OCP-05", "OCP-06", "OCP-07", "OCP-08", "OCP-09", "OCP-10", "OCP-11", "OCP-12"],
+    "packets": ["OCP-06", "OCP-07", "OCP-08", "OCP-09", "OCP-10", "OCP-11", "OCP-12", "OCP-13", "OCP-14"],
     "sharedSurfaces": ["Server01", "Platform database", "secret references", "Buzz storage", "channel bindings"]
   },
-  "approvalGate": "No packet may enter RUNNING before the founder posts literal APPROVE in the planning task."
+  "approvalGate": "No packet may enter RUNNING before the founder posts literal APPROVE in the planning task; that one approval covers the accepted package's routine end-to-end execution."
 }

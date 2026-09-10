@@ -54,13 +54,29 @@
       "title": "Common coding-delegation parity",
       "issues": ["ISS-02"],
       "ownedPaths": [
-        "src/agents",
-        "src/plugin-sdk",
-        "linkbots/lisa/ops/model-routing-contract.ts",
-        "linkbots/lisa/ops/model-routing.contract.json"
+        "src/config/types.agents.ts",
+        "src/config/zod-schema.agent-runtime.ts",
+        "src/config/schema.labels.ts",
+        "src/config/schema.help.core.ts",
+        "src/agents/direct-coding-delegation-policy.ts",
+        "src/agents/direct-coding-delegation-policy.test.ts",
+        "src/agents/agent-tools.ts",
+        "src/agents/agent-tools.create-openclaw-coding-tools.test.ts",
+        "src/agents/delegation-guidance.ts",
+        "src/agents/delegation-guidance.test.ts",
+        "src/agents/subagents/spawn/subagent-target-policy.ts",
+        "src/agents/subagents/spawn/subagent-target-policy.test.ts",
+        "src/agents/tools/sessions-spawn-tool.test.ts",
+        "linkbots/parity/profile-preservation.contract.json",
+        "linkbots/parity/openclaw.common.patch.json5",
+        "linkbots/parity/validate.mjs"
       ],
       "verificationCommands": [
-        ["node", "scripts/run-vitest.mjs", "src/agents"],
+        ["node", "scripts/run-vitest.mjs", "src/agents/direct-coding-delegation-policy.test.ts"],
+        ["node", "scripts/run-vitest.mjs", "src/agents/agent-tools.create-openclaw-coding-tools.test.ts"],
+        ["node", "scripts/run-vitest.mjs", "src/agents/tools/sessions-spawn-tool.test.ts"],
+        ["node", "scripts/run-vitest.mjs", "src/agents/subagents/spawn/subagent-target-policy.test.ts"],
+        ["node", "scripts/run-vitest.mjs", "src/config/config-misc.test.ts"],
         ["pnpm", "plugin-sdk:surface:check"],
         ["git", "diff", "--check"]
       ],
@@ -80,41 +96,51 @@
         ["node", "scripts/run-vitest.mjs", "linkbots/blueprints"],
         ["git", "diff", "--check"]
       ],
-      "dependencies": ["OCP-00"],
+      "dependencies": ["OCP-02"],
       "executionState": "PLAN"
     },
     {
       "id": "OCP-04",
-      "title": "Reproducible image, deployment, backup, and rollback package",
+      "title": "Deployment-source, backup, and acceptance package",
       "issues": ["ISS-04"],
       "ownedPaths": ["linkbots/parity", "docs/runbooks/openclaw-prime-server01"],
       "verificationCommands": [
-        ["node", "scripts/run-vitest.mjs", "linkbots/parity"],
+        ["node", "scripts/run-vitest.mjs", "linkbots/parity/server01-delivery.test.mjs"],
+        ["node", "scripts/run-vitest.mjs", "linkbots/parity/deployment-guard.test.mjs"],
+        ["node", "linkbots/parity/validate.mjs"],
         ["git", "diff", "--check"]
       ],
-      "dependencies": ["OCP-00", "OCP-01", "OCP-02", "OCP-03"],
+      "dependencies": ["OCP-02"],
       "executionState": "PLAN"
     },
     {
       "id": "OCP-05",
-      "title": "Five distinct Platform identities and SecretRefs",
+      "title": "Final image assembly and admission",
       "issues": ["ISS-05"],
-      "ownedPaths": ["linkbots/parity/runtime-config", "extensions/linkplatform"],
+      "ownedPaths": [
+        "linkbots/parity",
+        "docs/runbooks/openclaw-prime-server01",
+        "package.json",
+        "pnpm-lock.yaml"
+      ],
       "verificationCommands": [
-        ["node", "scripts/run-vitest.mjs", "extensions/linkplatform"],
+        ["node", "scripts/run-vitest.mjs", "linkbots/parity/server01-delivery.test.mjs"],
+        ["node", "scripts/run-vitest.mjs", "linkbots/parity/deployment-guard.test.mjs"],
+        ["node", "linkbots/parity/validate.mjs"],
+        ["pnpm", "build"],
         ["git", "diff", "--check"]
       ],
-      "dependencies": ["OCP-04"],
+      "dependencies": ["OCP-01", "OCP-02", "OCP-03", "OCP-04"],
       "executionState": "PLAN"
     },
     {
       "id": "OCP-06",
-      "title": "Five Brain and Skills consumer bindings",
+      "title": "Five distinct Platform identities and SecretRefs",
       "issues": ["ISS-06"],
-      "ownedPaths": ["extensions/linkbrain", "extensions/linkskills", "linkbots/parity/runtime-config"],
+      "ownedPaths": ["linkbots/parity/runtime-config", "extensions/linkplatform"],
       "verificationCommands": [
-        ["node", "scripts/run-vitest.mjs", "extensions/linkbrain"],
-        ["node", "scripts/run-vitest.mjs", "extensions/linkskills"],
+        ["node", "scripts/run-vitest.mjs", "extensions/linkplatform"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "accept", "--agent", "<lisa|eric|david|sara|jane>", "--suite", "platform", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
         ["git", "diff", "--check"]
       ],
       "dependencies": ["OCP-05"],
@@ -122,65 +148,109 @@
     },
     {
       "id": "OCP-07",
-      "title": "Reconcile and finish Buzz without rebuilding it",
+      "title": "Five Brain and Skills consumer bindings",
       "issues": ["ISS-07"],
-      "ownedPaths": ["extensions/buzz", "linkbots/parity/runtime-config", "docs/runbooks/openclaw-prime-server01"],
+      "ownedPaths": ["extensions/linkbrain", "extensions/linkskills", "linkbots/parity/runtime-config"],
       "verificationCommands": [
-        ["node", "scripts/run-vitest.mjs", "extensions/buzz"],
+        ["node", "scripts/run-vitest.mjs", "extensions/linkbrain"],
+        ["node", "scripts/run-vitest.mjs", "extensions/linkskills"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "accept", "--agent", "<lisa|eric|david|sara|jane>", "--suite", "brainskills", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
         ["git", "diff", "--check"]
       ],
-      "dependencies": ["OCP-04"],
+      "dependencies": ["OCP-06"],
       "executionState": "PLAN"
     },
     {
       "id": "OCP-08",
-      "title": "Serial five-agent fleet canary",
+      "title": "Reconcile and finish Buzz without rebuilding it",
       "issues": ["ISS-08"],
-      "ownedPaths": ["docs/runbooks/openclaw-prime-server01", "linkbots/parity/evidence"],
-      "verificationCommands": [["git", "diff", "--check"]],
-      "dependencies": ["OCP-04", "OCP-05", "OCP-06", "OCP-07"],
+      "ownedPaths": ["extensions/buzz", "linkbots/parity/runtime-config", "docs/runbooks/openclaw-prime-server01"],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "extensions/buzz"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "accept", "--agent", "<lisa|eric|david|sara|jane>", "--suite", "buzz", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-05"],
       "executionState": "PLAN"
     },
     {
       "id": "OCP-09",
-      "title": "Role-specific business functions and accepted automations",
+      "title": "Serial five-agent fleet canary",
       "issues": ["ISS-09"],
-      "ownedPaths": ["linkbots/blueprints", "extensions/linkautowork"],
+      "ownedPaths": ["docs/runbooks/openclaw-prime-server01", "linkbots/parity/evidence"],
       "verificationCommands": [
-        ["node", "scripts/run-vitest.mjs", "extensions/linkautowork"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "preflight", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "accept", "--agent", "<lisa|eric|david|sara|jane>", "--suite", "core", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
         ["git", "diff", "--check"]
       ],
-      "dependencies": ["OCP-08"],
+      "dependencies": ["OCP-05", "OCP-06", "OCP-07", "OCP-08"],
       "executionState": "PLAN"
     },
     {
       "id": "OCP-10",
-      "title": "Google Chat channel rollout",
+      "title": "Role-specific business functions and accepted automations",
       "issues": ["ISS-10"],
-      "ownedPaths": ["extensions/googlechat", "linkbots/parity/runtime-config", "docs/runbooks/openclaw-prime-server01"],
+      "ownedPaths": ["linkbots/blueprints", "extensions/linkautowork"],
       "verificationCommands": [
-        ["node", "scripts/run-vitest.mjs", "extensions/googlechat"],
+        ["node", "scripts/run-vitest.mjs", "extensions/linkautowork"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "accept", "--agent", "<lisa|eric|david|sara|jane>", "--suite", "roles", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
         ["git", "diff", "--check"]
       ],
-      "dependencies": ["OCP-08"],
+      "dependencies": ["OCP-09"],
       "executionState": "PLAN"
     },
     {
       "id": "OCP-11",
-      "title": "Recovery and reboot proof",
+      "title": "Fleet recovery, reboot, and production ledger",
       "issues": ["ISS-11"],
       "ownedPaths": ["docs/runbooks/openclaw-prime-server01", "linkbots/parity/evidence"],
-      "verificationCommands": [["git", "diff", "--check"]],
+      "verificationCommands": [
+        ["node", "linkbots/parity/server01-delivery.mjs", "backup", "--all-serial", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "restore-verify", "--all-serial", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "rollback", "--agent", "lisa", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "host-recovery", "--all-serial", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "summarize", "--include", "core,recovery", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["git", "diff", "--check"]
+      ],
       "dependencies": ["OCP-09", "OCP-10"],
       "executionState": "PLAN"
     },
     {
       "id": "OCP-12",
-      "title": "Founder acceptance and closeout",
+      "title": "Founder core-fleet acceptance",
       "issues": ["ISS-12"],
       "ownedPaths": ["docs/end-to-end-delivery", "docs/handoffs"],
-      "verificationCommands": [["git", "diff", "--check"]],
+      "verificationCommands": [
+        ["node", "linkbots/parity/server01-delivery.mjs", "accept", "--agent", "<lisa|eric|david|sara|jane>", "--suite", "founder-core", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "summarize", "--include", "core,recovery", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["git", "diff", "--check"]
+      ],
       "dependencies": ["OCP-11"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-13",
+      "title": "Five-agent Google Chat activation",
+      "issues": ["ISS-13"],
+      "ownedPaths": ["extensions/googlechat", "linkbots/parity/runtime-config", "docs/runbooks/openclaw-prime-server01"],
+      "verificationCommands": [
+        ["node", "scripts/run-vitest.mjs", "extensions/googlechat"],
+        ["node", "linkbots/parity/server01-delivery.mjs", "accept", "--agent", "<lisa|eric|david|sara|jane>", "--suite", "googlechat", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-12"],
+      "executionState": "PLAN"
+    },
+    {
+      "id": "OCP-14",
+      "title": "Full-channel ledger closure",
+      "issues": ["ISS-14"],
+      "ownedPaths": ["docs/end-to-end-delivery", "docs/handoffs", "linkbots/parity/evidence"],
+      "verificationCommands": [
+        ["node", "linkbots/parity/server01-delivery.mjs", "summarize", "--include", "core,recovery,googlechat", "--snapshot", "docs/end-to-end-delivery/inputs/server01-structural-snapshot.json", "--expected-source", "<40-char-sha>", "--expected-image", "<sha256-digest>", "--receipt-dir", "<server01-receipt-dir>"],
+        ["git", "diff", "--check"]
+      ],
+      "dependencies": ["OCP-12", "OCP-13"],
       "executionState": "PLAN"
     }
   ],
@@ -189,15 +259,17 @@
     {"id": "ISS-01", "packetId": "OCP-01", "title": "Fallback repair governed integration"},
     {"id": "ISS-02", "packetId": "OCP-02", "title": "Common coding delegation"},
     {"id": "ISS-03", "packetId": "OCP-03", "title": "Five profile contracts"},
-    {"id": "ISS-04", "packetId": "OCP-04", "title": "Deployment and recovery package"},
-    {"id": "ISS-05", "packetId": "OCP-05", "title": "Five Platform identities"},
-    {"id": "ISS-06", "packetId": "OCP-06", "title": "Brain and Skills consumers"},
-    {"id": "ISS-07", "packetId": "OCP-07", "title": "Buzz completion"},
-    {"id": "ISS-08", "packetId": "OCP-08", "title": "Fleet canary"},
-    {"id": "ISS-09", "packetId": "OCP-09", "title": "Role functions and automations"},
-    {"id": "ISS-10", "packetId": "OCP-10", "title": "Google Chat rollout"},
+    {"id": "ISS-04", "packetId": "OCP-04", "title": "Deployment-source and recovery package"},
+    {"id": "ISS-05", "packetId": "OCP-05", "title": "Final image assembly and admission"},
+    {"id": "ISS-06", "packetId": "OCP-06", "title": "Five Platform identities"},
+    {"id": "ISS-07", "packetId": "OCP-07", "title": "Brain and Skills consumers"},
+    {"id": "ISS-08", "packetId": "OCP-08", "title": "Buzz completion"},
+    {"id": "ISS-09", "packetId": "OCP-09", "title": "Fleet canary"},
+    {"id": "ISS-10", "packetId": "OCP-10", "title": "Role functions and automations"},
     {"id": "ISS-11", "packetId": "OCP-11", "title": "Recovery proof"},
-    {"id": "ISS-12", "packetId": "OCP-12", "title": "Founder acceptance"}
+    {"id": "ISS-12", "packetId": "OCP-12", "title": "Founder core acceptance"},
+    {"id": "ISS-13", "packetId": "OCP-13", "title": "Google Chat rollout"},
+    {"id": "ISS-14", "packetId": "OCP-14", "title": "Full-channel closure"}
   ],
   "controls": {
     "exactCandidateInvalidation": {"enabled": true, "identityFields": ["repository", "commit", "tree"]},
@@ -207,7 +279,7 @@
     "automaticApproval": {
       "checkpoint": "automatic",
       "stagingPromote": "automatic-on-receipt-identity",
-      "reservedActions": ["main_promote", "publish_release", "deploy_production", "github_protection_change", "provider_live_mutation"],
+      "reservedActions": ["github_protection_change"],
       "forbiddenActors": ["self_review", "self_merge", "prefer_incoming"]
     },
     "gitAuthority": {

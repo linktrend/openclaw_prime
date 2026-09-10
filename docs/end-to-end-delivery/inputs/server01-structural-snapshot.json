@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "classification": "sanitized-structural-input",
+  "observedDate": "2026-09-10",
+  "timezone": "Asia/Taipei",
+  "freshness": "planning-snapshot-replace-in-ocp-00-before-cloud-dispatch",
+  "target": "server01",
+  "source": {
+    "repository": "linktrend/openclaw_prime",
+    "planningCommit": "7aee52d52695ab50bfa13dd275a68d28a5cbbe6b",
+    "planningTree": "243027a77caba32a9365e0dbd7cd448596fb660b"
+  },
+  "runtime": {
+    "operatingSystem": "linux",
+    "kernelMajorMinor": "6.8",
+    "dockerVersion": "29.8.0",
+    "composeVersion": "5.5.1",
+    "imageDigest": "sha256:b8788516972af4210b35ebefd871f926173173e6bfaccb05ae568d5f37e4737d",
+    "containerUser": "1000:1000",
+    "readOnlyRootFilesystem": true,
+    "restartPolicy": "unless-stopped"
+  },
+  "agents": [
+    {"id": "lisa", "loopbackPort": 18791, "runtimeRootId": "openclaw/lisa", "separateWorkspace": true, "separateStateDatabase": true, "health": "healthy"},
+    {"id": "eric", "loopbackPort": 18792, "runtimeRootId": "openclaw/eric", "separateWorkspace": true, "separateStateDatabase": true, "health": "healthy"},
+    {"id": "david", "loopbackPort": 18793, "runtimeRootId": "openclaw/david", "separateWorkspace": true, "separateStateDatabase": true, "health": "healthy"},
+    {"id": "sara", "loopbackPort": 18794, "runtimeRootId": "openclaw/sara", "separateWorkspace": true, "separateStateDatabase": true, "health": "healthy"},
+    {"id": "jane", "loopbackPort": 18795, "runtimeRootId": "openclaw/jane", "separateWorkspace": true, "separateStateDatabase": true, "health": "healthy"}
+  ],
+  "commonConfiguration": {
+    "primaryModel": "openai/gpt-5.6-sol",
+    "primaryThinking": "low",
+    "fallbacks": ["openrouter/openai/gpt-5.6-luna"],
+    "fallbackThinking": "high",
+    "enabledPlugins": ["acpx", "buzz", "codex", "linkbrain", "linkskills", "openai", "openrouter", "telegram"],
+    "disabledPlugins": ["googlechat"],
+    "buzzPluginVersion": "2026.9.2"
+  },
+  "serviceHealth": {
+    "agentEndpoints": "healthy",
+    "brain": "healthy",
+    "brainMcp": "healthy",
+    "skills": "healthy",
+    "buzzCore": "healthy",
+    "buzzDatabase": "healthy",
+    "buzzObjectStore": "healthy",
+    "buzzCache": "healthy"
+  },
+  "capacity": {
+    "rootFreeGiBApprox": 31,
+    "srvFreeGiBApprox": 147,
+    "memoryAvailableGiBApprox": 243
+  },
+  "unknownUntilOcp00Refresh": [
+    "deployedComposeSha256",
+    "deploymentWrapperSha256",
+    "perAgentConfigSha256",
+    "perAgentProtectedProfileSha256",
+    "currentExclusiveRuntimeLease",
+    "currentProviderReceiptIdentities"
+  ],
+  "redactions": {
+    "credentialsIncluded": false,
+    "secretValuesIncluded": false,
+    "privateMessagesIncluded": false,
+    "privateMemoryIncluded": false,
+    "sqliteContentsIncluded": false,
+    "personalDataIncluded": false
+  }
+}
