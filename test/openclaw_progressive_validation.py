@@ -648,6 +648,31 @@ class ProgressiveValidationTests(unittest.TestCase):
                 ROOT,
             )
 
+    def test_focused_validation_can_cover_custom_code_without_upstream_test_targets(self) -> None:
+        changed = [".linktrend/openclaw-prime/resolve_customization_tests.mts"]
+        payload = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "mode": "targets",
+            "targets": [],
+            "skippedBroadFallbackPaths": [],
+            "changedPaths": changed,
+            "changedPathsDigest": MODULE.canonical_digest(changed),
+            "baselineCommit": OCP01_BASE,
+            "headCommit": OCP01_HEAD,
+            "nonVitestValidations": [
+                {"path": changed[0], "validation": "progressive-validation-tests"}
+            ],
+        }
+        accepted = MODULE.validate_planner_payload(
+            payload,
+            changed,
+            OCP01_BASE,
+            OCP01_HEAD,
+            ROOT,
+        )
+        self.assertEqual(accepted["targets"], [])
+
     def test_non_vitest_validations_execute_and_bind_each_declared_path(self) -> None:
         changed = sorted(
             [

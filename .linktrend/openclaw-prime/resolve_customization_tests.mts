@@ -13,6 +13,12 @@ const REPO_REL =
 const CODE_SUFFIX = /\.(?:[cm]?[jt]sx?)$/;
 const BROAD_MARKERS = ["broad local run will start", "buildFullSuiteVitestRunPlans", '"mode":"broad"'];
 const NON_VITEST_VALIDATION = new Map<string, string>([
+  [".github/linktrend-delivery-mode.json", "progressive-validation-tests"],
+  [".github/linktrend-gitops-consumer.json", "progressive-validation-tests"],
+  [".github/linktrend-repository-ci-contract.json", "progressive-validation-tests"],
+  [".github/openclaw_progressive_validation.py", "progressive-validation-tests"],
+  [".github/workflows/linktrend-integrator-merge.yml", "progressive-validation-tests"],
+  [".github/workflows/linktrend-review-packager.yml", "progressive-validation-tests"],
   [".linktrend/openclaw-prime/customization-boundary.json", "customization-boundary-validator"],
   [".linktrend/openclaw-prime/resolve_customization_tests.mts", "progressive-validation-tests"],
   ["docs/execution/openclaw-prime-lisa/BASELINE-CI-RECEIPT.md", "phase-diff-check"],
@@ -41,6 +47,8 @@ const NON_VITEST_VALIDATION = new Map<string, string>([
   ],
   ["test/openclaw_progressive_validation.py", "progressive-validation-tests"],
   ["test/packager_coordinator_phase_history.py", "phase-packager-history-tests"],
+  ["scripts/gitops/packager_coordinator.py", "phase-packager-history-tests"],
+  ["scripts/gitops/secret_scan.py", "progressive-validation-tests"],
 ]);
 
 function fail(reason: string, extra: Record<string, unknown> = {}): never {
@@ -110,7 +118,8 @@ function main(): void {
   const head = resolveCommit(root, parseRef("--head", args));
   const changedPaths = listNormalizedPaths(root, baseline, head);
   const plan = resolveChangedTestTargetPlan(changedPaths, { cwd: root, broad: false });
-  const targets = [...new Set(plan.targets ?? [])];
+  const allPathsHaveFocusedValidation = changedPaths.every((path) => NON_VITEST_VALIDATION.has(path));
+  const targets = allPathsHaveFocusedValidation ? [] : [...new Set(plan.targets ?? [])];
   const skipped = plan.skippedBroadFallbackPaths ?? [];
   const nonVitestValidations = skipped.flatMap((path) => {
     const validation = NON_VITEST_VALIDATION.get(path);
@@ -144,7 +153,7 @@ function main(): void {
       fail("relevant_tests_unresolved", { target, plan: payload });
     }
   }
-  if (codeChangesRequireTests(changedPaths) && targets.length === 0) {
+  if (codeChangesRequireTests(changedPaths) && targets.length === 0 && !allPathsHaveFocusedValidation) {
     fail("relevant_tests_unresolved", { plan: payload });
   }
   process.stdout.write(`${serialized}\n`);

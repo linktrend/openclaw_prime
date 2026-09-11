@@ -38,6 +38,12 @@ BROAD_TEST_MARKERS = (
     "buildFullSuiteVitestRunPlans",
 )
 NON_VITEST_VALIDATION = {
+    ".github/linktrend-delivery-mode.json": "progressive-validation-tests",
+    ".github/linktrend-gitops-consumer.json": "progressive-validation-tests",
+    ".github/linktrend-repository-ci-contract.json": "progressive-validation-tests",
+    ".github/openclaw_progressive_validation.py": "progressive-validation-tests",
+    ".github/workflows/linktrend-integrator-merge.yml": "progressive-validation-tests",
+    ".github/workflows/linktrend-review-packager.yml": "progressive-validation-tests",
     ".linktrend/openclaw-prime/customization-boundary.json": "customization-boundary-validator",
     ".linktrend/openclaw-prime/resolve_customization_tests.mts": "progressive-validation-tests",
     "docs/execution/openclaw-prime-lisa/BASELINE-CI-RECEIPT.md": "phase-diff-check",
@@ -51,6 +57,8 @@ NON_VITEST_VALIDATION = {
     "docs/execution/openclaw-prime-lisa/validate_execution_approval_snapshot.py": "execution-approval-tests",
     "test/openclaw_progressive_validation.py": "progressive-validation-tests",
     "test/packager_coordinator_phase_history.py": "phase-packager-history-tests",
+    "scripts/gitops/packager_coordinator.py": "phase-packager-history-tests",
+    "scripts/gitops/secret_scan.py": "progressive-validation-tests",
 }
 TEST_PROJECTS = (
     "node",
@@ -402,7 +410,8 @@ def validate_planner_payload(
         raise RuntimeError("relevant_tests_broadened")
     if '"mode": "broad"' in serialized or '"mode":"broad"' in serialized.replace(" ", ""):
         raise RuntimeError("relevant_tests_broadened")
-    if code_changes_require_tests(changed_paths) and not targets:
+    all_paths_have_focused_validation = all(path in NON_VITEST_VALIDATION for path in changed_paths)
+    if code_changes_require_tests(changed_paths) and not targets and not all_paths_have_focused_validation:
         raise RuntimeError("relevant_tests_unresolved")
     return dict(payload)
 
