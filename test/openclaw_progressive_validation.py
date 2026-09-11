@@ -698,29 +698,26 @@ class ProgressiveValidationTests(unittest.TestCase):
         )
         self.assertEqual(accepted["targets"], [])
 
-    def test_pkt04_source_only_planning_doc_stays_narrow_non_vitest(self) -> None:
-        pkt04 = "linkbots/lisa/docs/LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md"
-        planner_source = (ROOT / ".linktrend/openclaw-prime/resolve_customization_tests.mts").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(f'["{pkt04}", "phase-diff-check"]', planner_source)
-        self.assertNotIn('["linkbots/lisa/docs", "phase-diff-check"]', planner_source)
-        self.assertNotIn("LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md*", planner_source)
+    def _native_planner(self) -> list[str]:
+        return [
+            "node",
+            "--experimental-strip-types",
+            ".linktrend/openclaw-prime/resolve_customization_tests.mts",
+        ]
 
-        # GIT_DIR/GIT_WORK_TREE on a throwaway repo makes scripts/tsx.mjs resolve
-        # tsx/esm from /tmp via git-common-dir. A linked worktree keeps the real
-        # planner subprocess and temp diff while Node stays on this checkout.
-        repo = Path(tempfile.mkdtemp(prefix="pkt04-planner-"))
+    def _run_native_planner_for_paths(self, files: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        repo = Path(tempfile.mkdtemp(prefix="planner-native-"))
         repo.rmdir()
         try:
             _git(ROOT, "worktree", "add", "--detach", str(repo), "HEAD")
             _git(repo, "config", "user.email", "gate@example.invalid")
             _git(repo, "config", "user.name", "gate")
-            destination = repo / pkt04
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_text("# PKT-04 planning document\n", encoding="utf-8")
-            _git(repo, "add", pkt04)
-            _git(repo, "commit", "-m", "pkt04 source-only")
+            for rel, content in files.items():
+                destination = repo / rel
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_text(content, encoding="utf-8")
+                _git(repo, "add", rel)
+            _git(repo, "commit", "-m", "planner native probe")
             baseline = _git(repo, "rev-parse", "HEAD~1")
             head = _git(repo, "rev-parse", "HEAD")
             env = os.environ.copy()
@@ -731,10 +728,11 @@ class ProgressiveValidationTests(unittest.TestCase):
                 "GIT_OBJECT_DIRECTORY",
                 "GIT_ALTERNATE_OBJECT_DIRECTORIES",
                 "GIT_COMMON_DIR",
+                "NODE_OPTIONS",
             ):
                 env.pop(git_env, None)
-            executed = subprocess.run(
-                [*MODULE.PLANNER, "--base", baseline, "--head", head],
+            return subprocess.run(
+                [*self._native_planner(), "--base", baseline, "--head", head],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
@@ -749,6 +747,28 @@ class ProgressiveValidationTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
+
+    def test_pkt04_source_only_planning_doc_stays_narrow_non_vitest(self) -> None:
+        pkt04 = "linkbots/lisa/docs/LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md"
+        planner_source = (ROOT / ".linktrend/openclaw-prime/resolve_customization_tests.mts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(f'["{pkt04}", "phase-diff-check"]', planner_source)
+        self.assertNotIn('["linkbots/lisa/docs", "phase-diff-check"]', planner_source)
+        self.assertNotIn("LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md*", planner_source)
+        self.assertNotIn('from "../../scripts/test-projects.test-support.mts"', planner_source)
+        self.assertIn('await import(TARGET_PLAN_RESOLVER)', planner_source)
+        self.assertNotIn("tsx.mjs", planner_source)
+        self.assertNotIn("./scripts/tsx.mjs", self._native_planner())
+        self.assertEqual(self._native_planner()[0], "node")
+        self.assertEqual(
+            self._native_planner()[-1],
+            ".linktrend/openclaw-prime/resolve_customization_tests.mts",
+        )
+
+        executed = self._run_native_planner_for_paths({pkt04: "# PKT-04 planning document\n"})
+        self.assertNotIn("tsx/esm", executed.stderr)
+        self.assertNotIn("Cannot find module 'tsx/esm'", executed.stderr)
         self.assertNotIn("relevant_tests_broadened", executed.stderr)
         self.assertEqual(executed.returncode, 0, executed.stderr)
         payload = json.loads(executed.stdout)
@@ -773,6 +793,21 @@ class ProgressiveValidationTests(unittest.TestCase):
             accepted["nonVitestValidations"],
             [{"path": pkt04, "validation": "phase-diff-check"}],
         )
+
+    def test_unmapped_code_still_loads_or_fail_closes_test_targets(self) -> None:
+        unmapped = "unmapped-fast-ci-probe.ts"
+        self.assertNotIn(unmapped, MODULE.NON_VITEST_VALIDATION)
+        executed = self._run_native_planner_for_paths({unmapped: "export const probe = 1;\n"})
+        self.assertNotEqual(executed.returncode, 0, executed.stdout)
+        combined = executed.stdout + executed.stderr
+        self.assertIn('"ok":false', combined.replace(" ", ""))
+        self.assertTrue(
+            "relevant_tests_unresolved" in combined or "relevant_tests_broadened" in combined,
+            combined,
+        )
+        self.assertNotIn("tsx/esm", executed.stderr)
+        if "relevant_tests_broadened" in combined:
+            self.assertIn(unmapped, combined)
 
     def test_phase_packager_history_registry_uses_unittest_discovery(self) -> None:
         command = MODULE.non_vitest_command(

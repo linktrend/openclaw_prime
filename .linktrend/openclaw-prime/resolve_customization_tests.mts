@@ -2,17 +2,20 @@
 /**
  * Fork-owned planner: exact base-to-head paths through resolveChangedTestTargetPlan.
  * Refuses broad/unresolved plans before any test runner starts.
+ *
+ * Diffs whose every path is already in NON_VITEST_VALIDATION emit the same
+ * targets-mode payload without loading the TypeScript test-target resolver.
  */
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { resolveChangedTestTargetPlan } from "../../scripts/test-projects.test-support.mts";
 
 const HEX40 = /^[0-9a-f]{40}$/;
 const REPO_REL =
   /^(?!\/|\\)(?!.*\.\.(?:\/|\\|$))(?!.*:)[A-Za-z0-9._@+, \-]+(?:\/[A-Za-z0-9._@+, \-]+)*$/;
 const CODE_SUFFIX = /\.(?:[cm]?[jt]sx?)$/;
 const BROAD_MARKERS = ["broad local run will start", "buildFullSuiteVitestRunPlans", '"mode":"broad"'];
-const NON_VITEST_VALIDATION = new Map<string, string>([
+const TARGET_PLAN_RESOLVER = "../../scripts/test-projects.test-support.mts";
+const NON_VITEST_VALIDATION = new Map([
   [".github/linktrend-delivery-mode.json", "progressive-validation-tests"],
   [".github/linktrend-gitops-consumer.json", "progressive-validation-tests"],
   [".github/linktrend-repository-ci-contract.json", "progressive-validation-tests"],
@@ -52,12 +55,12 @@ const NON_VITEST_VALIDATION = new Map<string, string>([
   ["scripts/gitops/secret_scan.py", "progressive-validation-tests"],
 ]);
 
-function fail(reason: string, extra: Record<string, unknown> = {}): never {
+function fail(reason, extra = {}) {
   process.stderr.write(`${JSON.stringify({ ok: false, reason, ...extra })}\n`);
   process.exit(1);
 }
 
-function parseRef(flag: string, args: string[]): string {
+function parseRef(flag, args) {
   const index = args.indexOf(flag);
   const value = index >= 0 ? args[index + 1] : undefined;
   if (!value || value.startsWith("-")) {
@@ -66,7 +69,7 @@ function parseRef(flag: string, args: string[]): string {
   return value;
 }
 
-function git(root: string, ...gitArgs: string[]): string {
+function git(root, ...gitArgs) {
   const result = spawnSync("git", gitArgs, { cwd: root, encoding: "utf8" });
   if (result.status !== 0) {
     fail("phase_diff", { detail: (result.stderr || result.stdout || "git failed").trim() });
@@ -74,7 +77,7 @@ function git(root: string, ...gitArgs: string[]): string {
   return result.stdout.trim();
 }
 
-function resolveCommit(root: string, ref: string): string {
+function resolveCommit(root, ref) {
   const commit = git(root, "rev-parse", "--verify", `${ref}^{commit}`);
   if (!HEX40.test(commit)) {
     fail("phase_identity");
@@ -82,7 +85,7 @@ function resolveCommit(root: string, ref: string): string {
   return commit;
 }
 
-function listNormalizedPaths(root: string, baseline: string, head: string): string[] {
+function listNormalizedPaths(root, baseline, head) {
   const renameOut = git(root, "diff", "--name-status", "--find-renames", baseline, head);
   for (const line of renameOut.split("\n")) {
     if (!line) {
@@ -103,23 +106,37 @@ function listNormalizedPaths(root: string, baseline: string, head: string): stri
   return paths;
 }
 
-function codeChangesRequireTests(paths: string[]): boolean {
+function codeChangesRequireTests(paths) {
   return paths.some((path) => CODE_SUFFIX.test(path));
 }
 
-function canonicalDigest(value: unknown): string {
+function canonicalDigest(value) {
   const serialized = JSON.stringify(value);
   return `sha256:${createHash("sha256").update(serialized).digest("hex")}`;
 }
 
-function main(): void {
-  const args = process.argv.slice(2);
-  const root = process.cwd();
-  const baseline = resolveCommit(root, parseRef("--base", args));
-  const head = resolveCommit(root, parseRef("--head", args));
-  const changedPaths = listNormalizedPaths(root, baseline, head);
-  const plan = resolveChangedTestTargetPlan(changedPaths, { cwd: root, broad: false });
-  const allPathsHaveFocusedValidation = changedPaths.every((path) => NON_VITEST_VALIDATION.has(path));
+function focusedNonVitestPlan() {
+  return { mode: "targets", targets: [], skippedBroadFallbackPaths: [] };
+}
+
+async function loadChangedTestTargetPlan(changedPaths, root) {
+  let resolveChangedTestTargetPlan;
+  try {
+    ({ resolveChangedTestTargetPlan } = await import(TARGET_PLAN_RESOLVER));
+  } catch (error) {
+    fail("relevant_tests_unresolved", {
+      detail: error instanceof Error ? error.message : "resolver_import_failed",
+    });
+  }
+  if (typeof resolveChangedTestTargetPlan !== "function") {
+    fail("relevant_tests_unresolved");
+  }
+  return resolveChangedTestTargetPlan(changedPaths, { cwd: root, broad: false });
+}
+
+function emitPlan(plan, changedPaths, baseline, head) {
+  const allPathsHaveFocusedValidation =
+    changedPaths.length > 0 && changedPaths.every((path) => NON_VITEST_VALIDATION.has(path));
   const targets = allPathsHaveFocusedValidation ? [] : [...new Set(plan.targets ?? [])];
   const skipped = plan.skippedBroadFallbackPaths ?? [];
   const nonVitestValidations = changedPaths.flatMap((path) => {
@@ -160,4 +177,22 @@ function main(): void {
   process.stdout.write(`${serialized}\n`);
 }
 
-main();
+async function main() {
+  const args = process.argv.slice(2);
+  const root = process.cwd();
+  const baseline = resolveCommit(root, parseRef("--base", args));
+  const head = resolveCommit(root, parseRef("--head", args));
+  const changedPaths = listNormalizedPaths(root, baseline, head);
+  const allPathsHaveFocusedValidation =
+    changedPaths.length > 0 && changedPaths.every((path) => NON_VITEST_VALIDATION.has(path));
+  const plan = allPathsHaveFocusedValidation
+    ? focusedNonVitestPlan()
+    : await loadChangedTestTargetPlan(changedPaths, root);
+  emitPlan(plan, changedPaths, baseline, head);
+}
+
+void main().catch((error) => {
+  fail("relevant_tests_unresolved", {
+    detail: error instanceof Error ? error.message : "planner_failed",
+  });
+});
