@@ -49,14 +49,25 @@ def _ok_scan(_root: Path, paths: list[str] | tuple[str, ...]) -> dict[str, objec
     return {"ok": True, "findings": [], "scannedPaths": list(paths)}
 
 
-# Synthetic fixture identity only. Hosted CI has no global user.name/user.email,
-# and linked worktrees share the parent repo config, so `git config` there is
-# not a reliable commit identity. Never read or write global Git config.
+# Synthetic fixture identity only. Hosted Full installs set the parent
+# `core.hooksPath` (pnpm prepare → git-hooks); linked worktrees inherit that
+# config and lack node_modules, so pre-commit/oxfmt abort the probe commit.
+# Process-local -c plus env identity; never read or write global Git config.
 _FIXTURE_GIT_NAME = "OpenClaw Prime Test Fixture"
 _FIXTURE_GIT_EMAIL = "openclaw-prime-test-fixture@example.invalid"
+_FIXTURE_GIT_CONFIG = (
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    f"user.name={_FIXTURE_GIT_NAME}",
+    "-c",
+    f"user.email={_FIXTURE_GIT_EMAIL}",
+)
 
 
-def _git(cwd: Path, *args: str) -> str:
+def _fixture_git_env() -> dict[str, str]:
     env = os.environ.copy()
     env.update(
         {
@@ -66,21 +77,38 @@ def _git(cwd: Path, *args: str) -> str:
             "GIT_COMMITTER_EMAIL": _FIXTURE_GIT_EMAIL,
         }
     )
+    return env
+
+
+def _git(cwd: Path, *args: str) -> str:
+    argv = ["git", *_FIXTURE_GIT_CONFIG, *args]
+    if args[:1] == ("commit",) and "--allow-empty" not in args:
+        staged = subprocess.run(
+            ["git", *_FIXTURE_GIT_CONFIG, "diff", "--cached", "--quiet"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_fixture_git_env(),
+        )
+        if staged.returncode == 0:
+            raise RuntimeError("fixture commit has no staged changes")
+        if staged.returncode != 1:
+            detail = (staged.stderr or staged.stdout).strip() or f"exit {staged.returncode}"
+            raise RuntimeError(f"git diff --cached --quiet failed: {detail}")
+        if "--no-verify" not in args:
+            argv = ["git", *_FIXTURE_GIT_CONFIG, "commit", "--no-verify", *args[1:]]
     result = subprocess.run(
-        [
-            "git",
-            "-c",
-            f"user.name={_FIXTURE_GIT_NAME}",
-            "-c",
-            f"user.email={_FIXTURE_GIT_EMAIL}",
-            *args,
-        ],
+        argv,
         cwd=cwd,
         capture_output=True,
         text=True,
-        check=True,
-        env=env,
+        check=False,
+        env=_fixture_git_env(),
     )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip() or f"exit {result.returncode}"
+        raise RuntimeError(f"{' '.join(argv)} failed: {detail}")
     return result.stdout.strip()
 
 
@@ -744,7 +772,7 @@ class ProgressiveValidationTests(unittest.TestCase):
                 destination = repo / rel
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 destination.write_text(content, encoding="utf-8")
-                _git(repo, "add", rel)
+                _git(repo, "add", "--", rel)
             _git(repo, "commit", "-m", "planner native probe")
             baseline = _git(repo, "rev-parse", "HEAD~1")
             head = _git(repo, "rev-parse", "HEAD")
