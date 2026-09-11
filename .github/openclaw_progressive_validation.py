@@ -461,8 +461,8 @@ def non_vitest_command(validation: str, baseline: str, head: str) -> list[str]:
             "test_execution_approval_snapshot.py",
         ],
         "phase-packager-history-tests": [
-            "env", "PYTHONPATH=.", "python3", "-m", "unittest",
-            "test/packager_coordinator_phase_history.py",
+            "env", "PYTHONPATH=.", "python3", "-m", "unittest", "discover",
+            "-s", "test", "-p", "packager_coordinator_phase_history.py",
         ],
         "phase-diff-check": ["git", "diff", "--check", baseline, head],
     }

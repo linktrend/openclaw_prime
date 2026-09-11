@@ -698,6 +698,35 @@ class ProgressiveValidationTests(unittest.TestCase):
         )
         self.assertEqual(accepted["targets"], [])
 
+    def test_phase_packager_history_registry_uses_unittest_discovery(self) -> None:
+        command = MODULE.non_vitest_command(
+            "phase-packager-history-tests",
+            OCP01_BASE,
+            OCP01_HEAD,
+        )
+        discovered = [
+            "env",
+            "PYTHONPATH=.",
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "test",
+            "-p",
+            "packager_coordinator_phase_history.py",
+        ]
+        imported = [
+            "env",
+            "PYTHONPATH=.",
+            "python3",
+            "-m",
+            "unittest",
+            "test/packager_coordinator_phase_history.py",
+        ]
+        self.assertEqual(command, discovered)
+        self.assertNotEqual(command, imported)
+
     def test_non_vitest_validations_execute_and_bind_each_declared_path(self) -> None:
         changed = sorted(
             [
