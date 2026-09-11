@@ -698,6 +698,45 @@ class ProgressiveValidationTests(unittest.TestCase):
         )
         self.assertEqual(accepted["targets"], [])
 
+    def test_pkt04_source_only_planning_doc_stays_narrow_non_vitest(self) -> None:
+        pkt04 = "linkbots/lisa/docs/LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md"
+        planner_source = (ROOT / ".linktrend/openclaw-prime/resolve_customization_tests.mts").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(f'["{pkt04}", "phase-diff-check"]', planner_source)
+        self.assertNotIn('["linkbots/lisa/docs", "phase-diff-check"]', planner_source)
+        self.assertNotIn("LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md*", planner_source)
+
+        repo = _init_repo()
+        destination = repo / pkt04
+        destination.parent.mkdir(parents=True)
+        destination.write_text("# PKT-04 planning document\n", encoding="utf-8")
+        _git(repo, "add", pkt04)
+        _git(repo, "commit", "-m", "pkt04 source-only")
+        baseline = _git(repo, "rev-parse", "HEAD~1")
+        head = _git(repo, "rev-parse", "HEAD")
+
+        executed = subprocess.run(
+            [*MODULE.PLANNER, "--base", baseline, "--head", head],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "GIT_DIR": str(repo / ".git"), "GIT_WORK_TREE": str(repo)},
+        )
+        self.assertNotIn("relevant_tests_broadened", executed.stderr)
+        self.assertEqual(executed.returncode, 0, executed.stderr)
+        payload = json.loads(executed.stdout)
+        self.assertEqual(payload["mode"], "targets")
+        self.assertEqual(payload["targets"], [])
+        self.assertEqual(payload["skippedBroadFallbackPaths"], [])
+        self.assertEqual(payload["changedPaths"], [pkt04])
+        self.assertEqual(
+            payload["nonVitestValidations"],
+            [{"path": pkt04, "validation": "phase-diff-check"}],
+        )
+        self.assertEqual(payload["changedPathsDigest"], MODULE.canonical_digest([pkt04]))
+
     def test_phase_packager_history_registry_uses_unittest_discovery(self) -> None:
         command = MODULE.non_vitest_command(
             "phase-packager-history-tests",
