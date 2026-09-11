@@ -121,7 +121,7 @@ function main(): void {
   const allPathsHaveFocusedValidation = changedPaths.every((path) => NON_VITEST_VALIDATION.has(path));
   const targets = allPathsHaveFocusedValidation ? [] : [...new Set(plan.targets ?? [])];
   const skipped = plan.skippedBroadFallbackPaths ?? [];
-  const nonVitestValidations = skipped.flatMap((path) => {
+  const nonVitestValidations = changedPaths.flatMap((path) => {
     const validation = NON_VITEST_VALIDATION.get(path);
     return validation ? [{ path, validation }] : [];
   });
