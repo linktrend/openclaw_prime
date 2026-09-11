@@ -67,6 +67,7 @@ PLANNER = (
 CODE_SUFFIXES = (".ts", ".mts", ".tsx", ".cts", ".js", ".mjs", ".cjs", ".jsx")
 PlannerRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 TestRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
+ValidationRunner = Callable[[Sequence[str]], subprocess.CompletedProcess[str]]
 HOLD_BOUNDARY = "HOLD: customization_boundary_unavailable"
 HOLD_IDENTITY = "HOLD: phase_identity_invalid"
 HOLD_SCAN = "HOLD: customization_secret_scan_blocked"
@@ -434,6 +435,67 @@ def _run_captured(command: Sequence[str], root: Path) -> subprocess.CompletedPro
     return subprocess.run(list(command), cwd=root, capture_output=True, text=True, check=False)
 
 
+def non_vitest_command(validation: str, baseline: str, head: str) -> list[str]:
+    """Return the one bounded command that proves a declared non-Vitest check."""
+    commands = {
+        "customization-boundary-validator": [
+            "python3",
+            ".linktrend/openclaw-prime/validate_customization_boundary.py",
+        ],
+        "progressive-validation-tests": [
+            "env", "PYTHONPATH=.", "python3", "-m", "unittest", "discover",
+            "-s", "test", "-p", "openclaw_progressive_validation.py",
+        ],
+        "execution-approval-tests": [
+            "env", "PYTHONPATH=.", "python3", "-m", "unittest", "discover",
+            "-s", "docs/execution/openclaw-prime-lisa/tests", "-p",
+            "test_execution_approval_snapshot.py",
+        ],
+        "phase-packager-history-tests": [
+            "env", "PYTHONPATH=.", "python3", "-m", "unittest",
+            "test/packager_coordinator_phase_history.py",
+        ],
+        "phase-diff-check": ["git", "diff", "--check", baseline, head],
+    }
+    command = commands.get(validation)
+    if command is None:
+        raise RuntimeError("relevant_tests_unresolved")
+    return command
+
+
+def run_non_vitest_validations(
+    root: Path,
+    baseline: str,
+    head: str,
+    validations: Sequence[Mapping[str, str]],
+    runner: ValidationRunner | None = None,
+) -> list[dict[str, Any]]:
+    """Execute every declared fork-only validation and retain its exact file binding."""
+    grouped: dict[str, list[str]] = {}
+    for item in validations:
+        path = item.get("path")
+        validation = item.get("validation")
+        if not isinstance(path, str) or not isinstance(validation, str):
+            raise RuntimeError("relevant_tests_unresolved")
+        grouped.setdefault(validation, []).append(path)
+
+    results: list[dict[str, Any]] = []
+    for validation in sorted(grouped):
+        command = non_vitest_command(validation, baseline, head)
+        executed = (runner or (lambda args: _run_captured(args, root)))(command)
+        output = (executed.stdout or "") + "\n" + (executed.stderr or "")
+        if executed.returncode != 0:
+            raise RuntimeError("relevant_tests_failed")
+        results.append({
+            "validation": validation,
+            "paths": sorted(grouped[validation]),
+            "command": command,
+            "ok": True,
+            "runOutputDigest": canonical_digest(output),
+        })
+    return results
+
+
 def test_plan_is_broad(output: str, existing_paths: Sequence[str]) -> bool:
     lowered = output.lower()
     if any(marker in output for marker in BROAD_TEST_MARKERS):
@@ -465,12 +527,14 @@ def run_relevant_tests(
     execute: bool,
     planner_runner: PlannerRunner | None = None,
     test_runner: TestRunner | None = None,
+    validation_runner: ValidationRunner | None = None,
 ) -> dict[str, Any]:
     if not changed_paths:
         return {
             "command": None,
             "mode": "empty-diff",
             "selectedTests": [],
+            "nonVitestResults": [],
             "approvedTestPlan": None,
             "broadFallback": False,
             "skippedChangedPaths": False,
@@ -482,6 +546,7 @@ def run_relevant_tests(
             "command": None,
             "mode": "deferred-hosted",
             "selectedTests": [],
+            "nonVitestResults": [],
             "approvedTestPlan": None,
             "broadFallback": False,
             "skippedChangedPaths": False,
@@ -489,11 +554,19 @@ def run_relevant_tests(
         }
     approved = invoke_planner(root, baseline, head, changed_paths, planner_runner)
     targets = list(approved["targets"])
+    non_vitest_results = run_non_vitest_validations(
+        root,
+        baseline,
+        head,
+        approved["nonVitestValidations"],
+        validation_runner,
+    )
     if not targets:
         return {
             "command": None,
             "mode": "execute",
             "selectedTests": [],
+            "nonVitestResults": non_vitest_results,
             "approvedTestPlan": approved,
             "broadFallback": False,
             "skippedChangedPaths": False,
@@ -514,6 +587,7 @@ def run_relevant_tests(
         "command": run_cmd,
         "mode": "execute",
         "selectedTests": selected,
+        "nonVitestResults": non_vitest_results,
         "approvedTestPlan": approved,
         "broadFallback": False,
         "skippedChangedPaths": False,
@@ -552,6 +626,7 @@ def validate_phase(
     write_evidence_file: bool = True,
     planner_runner: PlannerRunner | None = None,
     test_runner: TestRunner | None = None,
+    validation_runner: ValidationRunner | None = None,
 ) -> dict[str, Any]:
     errors: list[str] = []
     hold: str | None = None
@@ -654,6 +729,7 @@ def validate_phase(
                 execute=should_execute,
                 planner_runner=planner_runner,
                 test_runner=test_runner,
+                validation_runner=validation_runner,
             )
         except RuntimeError as exc:
             errors.append(str(exc))
@@ -683,6 +759,7 @@ def validate_phase(
             "command": test_result.get("command"),
             "runOutputDigest": test_result.get("runOutputDigest"),
         },
+        "nonVitestValidationResults": test_result.get("nonVitestResults") or [],
         "workflow": os.environ.get("GITHUB_WORKFLOW"),
         "run": os.environ.get("GITHUB_RUN_ID"),
         "attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),

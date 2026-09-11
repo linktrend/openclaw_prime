@@ -648,6 +648,52 @@ class ProgressiveValidationTests(unittest.TestCase):
                 ROOT,
             )
 
+    def test_non_vitest_validations_execute_and_bind_each_declared_path(self) -> None:
+        changed = sorted(
+            [
+                ".linktrend/openclaw-prime/customization-boundary.json",
+                "docs/execution/openclaw-prime-lisa/BASELINE-CI-RECEIPT.md",
+                "docs/execution/openclaw-prime-lisa/dispatch-authority.json",
+                "test/openclaw_progressive_validation.py",
+                "test/packager_coordinator_phase_history.py",
+            ]
+        )
+        validations = [
+            {"path": path, "validation": MODULE.NON_VITEST_VALIDATION[path]}
+            for path in changed
+        ]
+        plan = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "mode": "targets",
+            "targets": [],
+            "skippedBroadFallbackPaths": [],
+            "changedPaths": changed,
+            "changedPathsDigest": MODULE.canonical_digest(changed),
+            "baselineCommit": OCP01_BASE,
+            "headCommit": OCP01_HEAD,
+            "nonVitestValidations": validations,
+        }
+        executed: list[list[str]] = []
+        result = MODULE.run_relevant_tests(
+            ROOT,
+            OCP01_BASE,
+            OCP01_HEAD,
+            changed,
+            execute=True,
+            planner_runner=lambda _cmd: self._completed(0, json.dumps(plan)),
+            validation_runner=lambda command: executed.append(list(command)) or self._completed(0, "ok"),
+        )
+        self.assertEqual(len(executed), len({item["validation"] for item in validations}))
+        self.assertEqual(len(result["nonVitestResults"]), len(executed))
+        bound_paths = sorted(
+            path for row in result["nonVitestResults"] for path in row["paths"]
+        )
+        self.assertEqual(bound_paths, changed)
+        diff = next(row for row in result["nonVitestResults"] if row["validation"] == "phase-diff-check")
+        self.assertEqual(diff["command"], ["git", "diff", "--check", OCP01_BASE, OCP01_HEAD])
+        self.assertTrue(all(row["runOutputDigest"].startswith("sha256:") for row in result["nonVitestResults"]))
+
     def test_fast_workflow_fetches_only_the_exact_historical_snapshot_commit(self) -> None:
         workflow = (ROOT / ".github/workflows/linktrend-review-packager.yml").read_text(
             encoding="utf-8"
