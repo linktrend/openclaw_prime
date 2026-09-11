@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "kind": "repository-ci-contract",
+  "aggregateContext": "Linktrend Full Suite",
+  "profiles": {
+    "fast": {
+      "id": "fast",
+      "commands": [
+        [
+          "python3",
+          "-m",
+          "py_compile",
+          "scripts/gitops/run_delivery_profile.py",
+          "scripts/gitops/gate_receipt.py",
+          "scripts/gitops/secret_scan.py",
+          "scripts/gitops/repository_ci_contract.py",
+          "scripts/gitops/receipt_seal.py",
+          "scripts/gitops/packager_coordinator.py",
+          ".github/openclaw_progressive_validation.py",
+          ".linktrend/openclaw-prime/validate_customization_boundary.py"
+        ],
+        ["python3", ".linktrend/openclaw-prime/validate_customization_boundary.py"],
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "fast"],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "openclaw_progressive_validation.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "docs/execution/openclaw-prime-lisa/tests",
+          "-p",
+          "test_execution_approval_snapshot.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "test/packager_coordinator_phase_history.py"
+        ]
+      ],
+      "requiredCheckContexts": ["Linktrend Fast Checks"],
+      "timeoutMinutes": 5
+    },
+    "full": {
+      "id": "full",
+      "commands": [
+        [
+          "python3",
+          "-m",
+          "py_compile",
+          "scripts/gitops/run_delivery_profile.py",
+          "scripts/gitops/gate_receipt.py",
+          "scripts/gitops/secret_scan.py",
+          "scripts/gitops/repository_ci_contract.py",
+          "scripts/gitops/receipt_seal.py",
+          "scripts/gitops/packager_coordinator.py",
+          ".github/openclaw_progressive_validation.py",
+          ".linktrend/openclaw-prime/validate_customization_boundary.py"
+        ],
+        ["python3", ".linktrend/openclaw-prime/validate_customization_boundary.py"],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "openclaw_progressive_validation.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "docs/execution/openclaw-prime-lisa/tests",
+          "-p",
+          "test_execution_approval_snapshot.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "test/packager_coordinator_phase_history.py"
+        ],
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "full"]
+      ],
+      "requiredCheckContexts": ["Linktrend Full Suite"]
+    },
+    "scheduled": {
+      "id": "scheduled",
+      "commands": []
+    },
+    "promotion": {
+      "id": "promotion",
+      "commands": [],
+      "requiredCheckContexts": [
+        "Linktrend Branch Source Policy",
+        "Linktrend Receipt Gate"
+      ]
+    },
+    "trusted-governance": {
+      "id": "trusted-governance",
+      "commands": [
+        [
+          "python3",
+          "-m",
+          "py_compile",
+          "scripts/gitops/run_delivery_profile.py",
+          "scripts/gitops/gate_receipt.py",
+          "scripts/gitops/secret_scan.py",
+          "scripts/gitops/repository_ci_contract.py",
+          "scripts/gitops/receipt_seal.py",
+          ".github/openclaw_progressive_validation.py",
+          ".linktrend/openclaw-prime/validate_customization_boundary.py"
+        ],
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "fast"]
+      ],
+      "requiredCheckContexts": ["Verify IDE Development"]
+    }
+  },
+  "coverageComponents": [
+    {
+      "id": "governance-gate-contract",
+      "mandatory": true,
+      "category": "governance"
+    },
+    {
+      "id": "secret-scan",
+      "mandatory": true,
+      "category": "security",
+      "commands": [["python3", ".github/openclaw_progressive_validation.py", "--profile", "full"]]
+    },
+    {
+      "id": "application-tests",
+      "mandatory": true,
+      "category": "test",
+      "commands": [
+        [
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "openclaw_progressive_validation.py"
+        ]
+      ]
+    },
+    {
+      "id": "production-resolution",
+      "mandatory": true,
+      "category": "production-resolution"
+    }
+  ],
+  "trustedGovernance": {
+    "pathPrefixes": [
+      ".github/workflows/",
+      ".github/linktrend-",
+      "core/github/",
+      "core/managed-core/schemas/",
+      "core/managed-core/content/doctrine/",
+      "scripts/gitops/",
+      "docs/contracts/",
+      "docs/adr/"
+    ],
+    "requiredProofs": [
+      "gate-contract",
+      "workflow-syntax",
+      "identity-receipt",
+      "ruleset-migration",
+      "rollback",
+      "no-application-path"
+    ]
+  },
+  "expensiveWorkflowMarkers": [
+    "full",
+    "matrix",
+    "e2e",
+    "integration",
+    "browser",
+    "playwright",
+    "cypress",
+    "docker",
+    "build-and-test",
+    "verify ide development"
+  ]
+}

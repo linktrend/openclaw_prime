@@ -68,6 +68,7 @@ jobs:
 
       - name: Fetch bounded baseline history
         env:
+          HISTORICAL_APPROVAL_COMMIT: 452a7f1f31b1d1947d4bb992f91457e5a238ea31
           BASELINE_REFSPEC: ${{ format('+refs/heads/{0}:refs/remotes/origin/{0}', github.event.pull_request.base.ref) }}
           PHASE_REFSPEC: ${{ format('+refs/heads/{0}:refs/remotes/origin/{0}', github.event.pull_request.head.ref) }}
         run: |
@@ -92,6 +93,9 @@ jobs:
           }
           trap cleanup_checkout_credentials EXIT
           git fetch --no-tags --depth=64 origin "${BASELINE_REFSPEC}" "${PHASE_REFSPEC}"
+          # Snapshot validation needs one old authority object. Fetch that
+          # exact commit only; do not deepen or scan upstream history.
+          git fetch --no-tags --depth=1 origin "${HISTORICAL_APPROVAL_COMMIT}"
           cleanup_checkout_credentials
           trap - EXIT
 
@@ -120,17 +124,8 @@ jobs:
       - name: Run fast profile
         run: |
           set -euo pipefail
-          git diff --check
-          # OpenClaw is a large upstream fork, so its secret check remains
-          # change-scoped rather than scanning untouched upstream history.
-          # Admission itself is now the same for ordinary Phase work as peers.
-          python3 -m py_compile \
-            scripts/gitops/run_delivery_profile.py \
-            scripts/gitops/gate_receipt.py \
-            scripts/gitops/secret_scan.py \
-            scripts/gitops/repository_ci_contract.py \
-            scripts/gitops/receipt_seal.py
-          PYTHONPATH=. python3 .ide-development/tests/test_change_scoped_secret_scan_acceptance.py
+          git diff --check "${BASELINE_SHA}" "${EXPECTED_HEAD}"
+          python3 scripts/gitops/run_delivery_profile.py fast
 
       - name: Retain fast-check evidence
         if: always()
@@ -149,6 +144,14 @@ jobs:
         with:
           name: linktrend-fast-check-${{ github.run_id }}
           path: fast-check-summary.txt
+          retention-days: 30
+
+      - name: Upload customization-validation evidence
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linktrend-fast-customization-evidence-${{ github.run_id }}
+          path: customization-validation-evidence.json
           retention-days: 30
 
   reconciled-fast:
