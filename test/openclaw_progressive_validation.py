@@ -49,8 +49,38 @@ def _ok_scan(_root: Path, paths: list[str] | tuple[str, ...]) -> dict[str, objec
     return {"ok": True, "findings": [], "scannedPaths": list(paths)}
 
 
+# Synthetic fixture identity only. Hosted CI has no global user.name/user.email,
+# and linked worktrees share the parent repo config, so `git config` there is
+# not a reliable commit identity. Never read or write global Git config.
+_FIXTURE_GIT_NAME = "OpenClaw Prime Test Fixture"
+_FIXTURE_GIT_EMAIL = "openclaw-prime-test-fixture@example.invalid"
+
+
 def _git(cwd: Path, *args: str) -> str:
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
+    env = os.environ.copy()
+    env.update(
+        {
+            "GIT_AUTHOR_NAME": _FIXTURE_GIT_NAME,
+            "GIT_AUTHOR_EMAIL": _FIXTURE_GIT_EMAIL,
+            "GIT_COMMITTER_NAME": _FIXTURE_GIT_NAME,
+            "GIT_COMMITTER_EMAIL": _FIXTURE_GIT_EMAIL,
+        }
+    )
+    result = subprocess.run(
+        [
+            "git",
+            "-c",
+            f"user.name={_FIXTURE_GIT_NAME}",
+            "-c",
+            f"user.email={_FIXTURE_GIT_EMAIL}",
+            *args,
+        ],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=True,
+        env=env,
+    )
     return result.stdout.strip()
 
 
@@ -710,8 +740,6 @@ class ProgressiveValidationTests(unittest.TestCase):
         repo.rmdir()
         try:
             _git(ROOT, "worktree", "add", "--detach", str(repo), "HEAD")
-            _git(repo, "config", "user.email", "gate@example.invalid")
-            _git(repo, "config", "user.name", "gate")
             for rel, content in files.items():
                 destination = repo / rel
                 destination.parent.mkdir(parents=True, exist_ok=True)
