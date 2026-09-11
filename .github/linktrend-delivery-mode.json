@@ -57,7 +57,11 @@
           "python3",
           "-m",
           "unittest",
-          "test/packager_coordinator_phase_history.py"
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "packager_coordinator_phase_history.py"
         ]
       ],
       "timeoutMinutes": 5
@@ -108,7 +112,11 @@
           "python3",
           "-m",
           "unittest",
-          "test/packager_coordinator_phase_history.py"
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "packager_coordinator_phase_history.py"
         ],
         ["python3", ".github/openclaw_progressive_validation.py", "--profile", "full"]
       ],

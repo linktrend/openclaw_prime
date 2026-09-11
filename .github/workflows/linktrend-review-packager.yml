@@ -69,6 +69,8 @@ jobs:
       - name: Fetch bounded baseline history
         env:
           HISTORICAL_APPROVAL_COMMIT: 452a7f1f31b1d1947d4bb992f91457e5a238ea31
+          OCP01_BASE: 7aee52d52695ab50bfa13dd275a68d28a5cbbe6b
+          OCP01_HEAD: 566d6f2140fd86c5fb6fee7da6d58b3629442287
           BASELINE_REFSPEC: ${{ format('+refs/heads/{0}:refs/remotes/origin/{0}', github.event.pull_request.base.ref) }}
           PHASE_REFSPEC: ${{ format('+refs/heads/{0}:refs/remotes/origin/{0}', github.event.pull_request.head.ref) }}
         run: |
@@ -93,9 +95,15 @@ jobs:
           }
           trap cleanup_checkout_credentials EXIT
           git fetch --no-tags --depth=64 origin "${BASELINE_REFSPEC}" "${PHASE_REFSPEC}"
-          # Snapshot validation needs one old authority object. Fetch that
-          # exact commit only; do not deepen or scan upstream history.
+          # Snapshot validation needs one old authority object.
           git fetch --no-tags --depth=1 origin "${HISTORICAL_APPROVAL_COMMIT}"
+          # OCP-01 focused tests need HEAD plus the short parent chain to
+          # BASE. Do not unshallow or scan upstream-wide history.
+          git fetch --no-tags --depth=8 origin "${OCP01_HEAD}"
+          git cat-file -e "${HISTORICAL_APPROVAL_COMMIT}^{commit}"
+          git cat-file -e "${OCP01_BASE}^{commit}"
+          git cat-file -e "${OCP01_HEAD}^{commit}"
+          git merge-base --is-ancestor "${OCP01_BASE}" "${OCP01_HEAD}"
           cleanup_checkout_credentials
           trap - EXIT
 

@@ -80,13 +80,38 @@ class ProgressiveValidationTests(unittest.TestCase):
         consumer = json.loads((ROOT / ".github/linktrend-gitops-consumer.json").read_text(encoding="utf-8"))
         self.assertEqual(consumer["ciWorkflowName"], "Linktrend Full Suite")
         delivery = json.loads((ROOT / ".github/linktrend-delivery-mode.json").read_text(encoding="utf-8"))
+        self.assertEqual(delivery["profiles"]["fast"]["commands"], contract["profiles"]["fast"]["commands"])
         self.assertEqual(delivery["profiles"]["full"]["commands"], contract["profiles"]["full"]["commands"])
+        history_cmd = [
+            "env",
+            "PYTHONPATH=.",
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "test",
+            "-p",
+            "packager_coordinator_phase_history.py",
+        ]
+        broken_history_cmd = [
+            "env",
+            "PYTHONPATH=.",
+            "python3",
+            "-m",
+            "unittest",
+            "test/packager_coordinator_phase_history.py",
+        ]
+        self.assertIn(history_cmd, delivery["profiles"]["fast"]["commands"])
+        self.assertIn(history_cmd, delivery["profiles"]["full"]["commands"])
+        self.assertNotIn(broken_history_cmd, delivery["profiles"]["fast"]["commands"])
+        self.assertNotIn(broken_history_cmd, delivery["profiles"]["full"]["commands"])
         full_commands = json.dumps(delivery["profiles"]["full"]["commands"])
         for required in (
             ".linktrend/openclaw-prime/validate_customization_boundary.py",
             "openclaw_progressive_validation.py",
             "test_execution_approval_snapshot.py",
-            "test/packager_coordinator_phase_history.py",
+            "packager_coordinator_phase_history.py",
         ):
             self.assertIn(required, full_commands)
 
@@ -673,6 +698,35 @@ class ProgressiveValidationTests(unittest.TestCase):
         )
         self.assertEqual(accepted["targets"], [])
 
+    def test_phase_packager_history_registry_uses_unittest_discovery(self) -> None:
+        command = MODULE.non_vitest_command(
+            "phase-packager-history-tests",
+            OCP01_BASE,
+            OCP01_HEAD,
+        )
+        discovered = [
+            "env",
+            "PYTHONPATH=.",
+            "python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "test",
+            "-p",
+            "packager_coordinator_phase_history.py",
+        ]
+        imported = [
+            "env",
+            "PYTHONPATH=.",
+            "python3",
+            "-m",
+            "unittest",
+            "test/packager_coordinator_phase_history.py",
+        ]
+        self.assertEqual(command, discovered)
+        self.assertNotEqual(command, imported)
+
     def test_non_vitest_validations_execute_and_bind_each_declared_path(self) -> None:
         changed = sorted(
             [
@@ -727,10 +781,20 @@ class ProgressiveValidationTests(unittest.TestCase):
             "HISTORICAL_APPROVAL_COMMIT: 452a7f1f31b1d1947d4bb992f91457e5a238ea31",
             workflow,
         )
+        self.assertIn(f"OCP01_BASE: {OCP01_BASE}", workflow)
+        self.assertIn(f"OCP01_HEAD: {OCP01_HEAD}", workflow)
         self.assertIn(
             'git fetch --no-tags --depth=1 origin "${HISTORICAL_APPROVAL_COMMIT}"',
             workflow,
         )
+        self.assertIn(
+            'git fetch --no-tags --depth=8 origin "${OCP01_HEAD}"',
+            workflow,
+        )
+        self.assertIn('git cat-file -e "${OCP01_BASE}^{commit}"', workflow)
+        self.assertIn('git merge-base --is-ancestor "${OCP01_BASE}" "${OCP01_HEAD}"', workflow)
+        self.assertNotIn("git fetch --unshallow", workflow)
+        self.assertNotIn("--deepen", workflow)
 
     def test_fast_does_not_invoke_node_planner_or_test_runner(self) -> None:
         planner_calls: list[list[str]] = []

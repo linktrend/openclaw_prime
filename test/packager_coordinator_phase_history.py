@@ -39,17 +39,18 @@ class AcceptedPhaseHistoryTests(unittest.TestCase):
         git(self.root, "commit", "-qm", message)
         return git(self.root, "rev-parse", "HEAD")
 
-    def _accepted_phase(self) -> tuple[str, str]:
+    def _accepted_phase(self, *, merge_newest_tip: bool) -> tuple[str, str]:
         git(self.root, "checkout", "-qb", "issue/1-multi", self.base)
-        self._commit("one.txt", "one\n", "accepted ancestor")
+        ancestor = self._commit("one.txt", "one\n", "accepted ancestor")
         accepted_tip = self._commit("two.txt", "two\n", "accepted tip")
         git(self.root, "checkout", "-q", "development")
         git(self.root, "checkout", "-qb", "phase/next", self.base)
-        git(self.root, "merge", "--no-ff", "--no-edit", accepted_tip)
+        merge_source = accepted_tip if merge_newest_tip else ancestor
+        git(self.root, "merge", "--no-ff", "--no-edit", merge_source)
         return accepted_tip, git(self.root, "rev-parse", "HEAD")
 
-    def test_multi_commit_accepted_tip_has_no_unique_phase_divergence(self) -> None:
-        accepted_tip, phase_head = self._accepted_phase()
+    def test_multi_commit_accepted_issue_can_revise_existing_phase(self) -> None:
+        accepted_tip, phase_head = self._accepted_phase(merge_newest_tip=False)
         self.assertEqual(
             _unique_phase_commits(
                 self.root,
@@ -61,7 +62,7 @@ class AcceptedPhaseHistoryTests(unittest.TestCase):
         )
 
     def test_unrelated_phase_commit_still_blocks_reuse(self) -> None:
-        accepted_tip, _phase_head = self._accepted_phase()
+        accepted_tip, _phase_head = self._accepted_phase(merge_newest_tip=True)
         unique = self._commit("unique.txt", "unique\n", "unrelated phase work")
         self.assertEqual(
             _unique_phase_commits(

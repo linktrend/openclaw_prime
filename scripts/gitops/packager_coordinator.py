@@ -763,11 +763,13 @@ def _unique_phase_commits(
         commit = normalize_sha(parts[0])
         parents = [normalize_sha(item) for item in parts[1:]]
         # An accepted exact tip authorizes its complete post-development
-        # ancestry. Otherwise revising a Phase falsely treats a multi-commit
+        # ancestry, including an existing two-parent Phase merge whose
+        # second parent is that history rather than only the newest tip.
+        # Otherwise revising a Phase falsely treats a multi-commit
         # accepted issue as unrelated Phase work.
         if commit in accepted_history:
             continue
-        if len(parents) == 2 and parents[1] in accepted_shas:
+        if len(parents) == 2 and parents[1] in accepted_history:
             continue
         unique.append(commit)
     return unique
