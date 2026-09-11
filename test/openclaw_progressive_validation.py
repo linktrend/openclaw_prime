@@ -707,23 +707,48 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertNotIn('["linkbots/lisa/docs", "phase-diff-check"]', planner_source)
         self.assertNotIn("LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md*", planner_source)
 
-        repo = _init_repo()
-        destination = repo / pkt04
-        destination.parent.mkdir(parents=True)
-        destination.write_text("# PKT-04 planning document\n", encoding="utf-8")
-        _git(repo, "add", pkt04)
-        _git(repo, "commit", "-m", "pkt04 source-only")
-        baseline = _git(repo, "rev-parse", "HEAD~1")
-        head = _git(repo, "rev-parse", "HEAD")
-
-        executed = subprocess.run(
-            [*MODULE.PLANNER, "--base", baseline, "--head", head],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-            env={**os.environ, "GIT_DIR": str(repo / ".git"), "GIT_WORK_TREE": str(repo)},
-        )
+        # GIT_DIR/GIT_WORK_TREE on a throwaway repo makes scripts/tsx.mjs resolve
+        # tsx/esm from /tmp via git-common-dir. A linked worktree keeps the real
+        # planner subprocess and temp diff while Node stays on this checkout.
+        repo = Path(tempfile.mkdtemp(prefix="pkt04-planner-"))
+        repo.rmdir()
+        try:
+            _git(ROOT, "worktree", "add", "--detach", str(repo), "HEAD")
+            _git(repo, "config", "user.email", "gate@example.invalid")
+            _git(repo, "config", "user.name", "gate")
+            destination = repo / pkt04
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text("# PKT-04 planning document\n", encoding="utf-8")
+            _git(repo, "add", pkt04)
+            _git(repo, "commit", "-m", "pkt04 source-only")
+            baseline = _git(repo, "rev-parse", "HEAD~1")
+            head = _git(repo, "rev-parse", "HEAD")
+            env = os.environ.copy()
+            for git_env in (
+                "GIT_DIR",
+                "GIT_WORK_TREE",
+                "GIT_INDEX_FILE",
+                "GIT_OBJECT_DIRECTORY",
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                "GIT_COMMON_DIR",
+            ):
+                env.pop(git_env, None)
+            executed = subprocess.run(
+                [*MODULE.PLANNER, "--base", baseline, "--head", head],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                env=env,
+            )
+        finally:
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", str(repo)],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
         self.assertNotIn("relevant_tests_broadened", executed.stderr)
         self.assertEqual(executed.returncode, 0, executed.stderr)
         payload = json.loads(executed.stdout)
