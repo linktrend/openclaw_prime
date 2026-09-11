@@ -23,6 +23,7 @@ const NON_VITEST_VALIDATION = new Map<string, string>([
   [".linktrend/openclaw-prime/resolve_customization_tests.mts", "progressive-validation-tests"],
   ["docs/execution/openclaw-prime-lisa/BASELINE-CI-RECEIPT.md", "phase-diff-check"],
   ["docs/execution/openclaw-prime-lisa/IMPLEMENTATION-ROADMAP.md", "phase-diff-check"],
+  ["linkbots/lisa/docs/LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md", "phase-diff-check"],
   ["docs/execution/openclaw-prime-lisa/dispatch-authority.json", "execution-approval-tests"],
   ["docs/execution/openclaw-prime-lisa/dispatch-authority.schema.json", "execution-approval-tests"],
   [
