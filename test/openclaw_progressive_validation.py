@@ -736,6 +736,18 @@ class ProgressiveValidationTests(unittest.TestCase):
             [{"path": pkt04, "validation": "phase-diff-check"}],
         )
         self.assertEqual(payload["changedPathsDigest"], MODULE.canonical_digest([pkt04]))
+        self.assertEqual(MODULE.NON_VITEST_VALIDATION[pkt04], "phase-diff-check")
+        accepted = MODULE.validate_planner_payload(
+            payload,
+            [pkt04],
+            payload["baselineCommit"],
+            payload["headCommit"],
+            ROOT,
+        )
+        self.assertEqual(
+            accepted["nonVitestValidations"],
+            [{"path": pkt04, "validation": "phase-diff-check"}],
+        )
 
     def test_phase_packager_history_registry_uses_unittest_discovery(self) -> None:
         command = MODULE.non_vitest_command(
