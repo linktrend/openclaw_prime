@@ -754,10 +754,16 @@ class ProgressiveValidationTests(unittest.TestCase):
         )
         self.assertIn(f"OCP01_BASE: {OCP01_BASE}", workflow)
         self.assertIn(f"OCP01_HEAD: {OCP01_HEAD}", workflow)
-        self.assertIn('git fetch --no-tags --depth=1 origin', workflow)
-        self.assertIn('"${HISTORICAL_APPROVAL_COMMIT}"', workflow)
-        self.assertIn('"${OCP01_BASE}"', workflow)
-        self.assertIn('"${OCP01_HEAD}"', workflow)
+        self.assertIn(
+            'git fetch --no-tags --depth=1 origin "${HISTORICAL_APPROVAL_COMMIT}"',
+            workflow,
+        )
+        self.assertIn(
+            'git fetch --no-tags --depth=8 origin "${OCP01_HEAD}"',
+            workflow,
+        )
+        self.assertIn('git cat-file -e "${OCP01_BASE}^{commit}"', workflow)
+        self.assertIn('git merge-base --is-ancestor "${OCP01_BASE}" "${OCP01_HEAD}"', workflow)
         self.assertNotIn("git fetch --unshallow", workflow)
         self.assertNotIn("--deepen", workflow)
 

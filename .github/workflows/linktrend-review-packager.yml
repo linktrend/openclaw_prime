@@ -95,12 +95,15 @@ jobs:
           }
           trap cleanup_checkout_credentials EXIT
           git fetch --no-tags --depth=64 origin "${BASELINE_REFSPEC}" "${PHASE_REFSPEC}"
-          # Focused Fast tests need these exact historical objects. Fetch
-          # those SHAs only; do not deepen or scan upstream history.
-          git fetch --no-tags --depth=1 origin \
-            "${HISTORICAL_APPROVAL_COMMIT}" \
-            "${OCP01_BASE}" \
-            "${OCP01_HEAD}"
+          # Snapshot validation needs one old authority object.
+          git fetch --no-tags --depth=1 origin "${HISTORICAL_APPROVAL_COMMIT}"
+          # OCP-01 focused tests need HEAD plus the short parent chain to
+          # BASE. Do not unshallow or scan upstream-wide history.
+          git fetch --no-tags --depth=8 origin "${OCP01_HEAD}"
+          git cat-file -e "${HISTORICAL_APPROVAL_COMMIT}^{commit}"
+          git cat-file -e "${OCP01_BASE}^{commit}"
+          git cat-file -e "${OCP01_HEAD}^{commit}"
+          git merge-base --is-ancestor "${OCP01_BASE}" "${OCP01_HEAD}"
           cleanup_checkout_credentials
           trap - EXIT
 
