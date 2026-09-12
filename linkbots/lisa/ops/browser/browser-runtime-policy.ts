@@ -5,6 +5,7 @@
  * but importing it never starts Chromium, changes a service, or reads secrets.
  */
 import {
+  GOVERNED_BROWSER_RUNTIME_MODE,
   resolveBrowserDownloadPolicy,
   resolveBrowserRuntimeLimits,
   type BrowserRuntimeLimits,
@@ -16,6 +17,7 @@ export const LISA_BROWSER_RUNTIME_CONTRACT = "lisa-vps-governed-browser-v1" as c
 export type LisaBrowserRuntimePolicy = {
   contract: typeof LISA_BROWSER_RUNTIME_CONTRACT;
   profile: "lisa-vps";
+  mode: typeof GOVERNED_BROWSER_RUNTIME_MODE;
   headless: true;
   privateNetwork: "deny-by-default";
   redirects: "revalidate-every-hop";
@@ -34,6 +36,7 @@ export function resolveLisaBrowserRuntimePolicy(params: {
   return {
     contract: LISA_BROWSER_RUNTIME_CONTRACT,
     profile: "lisa-vps",
+    mode: GOVERNED_BROWSER_RUNTIME_MODE,
     headless: true,
     privateNetwork: "deny-by-default",
     redirects: "revalidate-every-hop",

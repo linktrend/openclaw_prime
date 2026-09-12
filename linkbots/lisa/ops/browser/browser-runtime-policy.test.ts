@@ -10,6 +10,7 @@ describe("Lisa browser runtime contract", () => {
     expect(policy).toMatchObject({
       contract: LISA_BROWSER_RUNTIME_CONTRACT,
       profile: "lisa-vps",
+      mode: "source-only",
       headless: true,
       privateNetwork: "deny-by-default",
       redirects: "revalidate-every-hop",
