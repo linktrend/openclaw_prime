@@ -12,6 +12,9 @@ import {
   planUploadRetry,
   uploadEncryptedSnapshot,
   verifyUploadedObject,
+  verifyDisposablePrivateRestore,
+  createOpaqueDestinationBindingId,
+  assertBackupDestinationBindings,
 } from "./backup.js";
 
 const KEY = new Uint8Array(32).fill(7);
@@ -138,6 +141,7 @@ describe("PKT-09 deterministic backup and encrypted private-state contract", () 
   it("uploads ciphertext only, verifies the object, and emits a sanitized receipt", async () => {
     const sourceArchive = createSourceArchive([
       { path: "ops/procedure.md", kind: "procedure", bytes: new TextEncoder().encode("procedure") },
+      { path: "config/openclaw.json", kind: "source", bytes: new TextEncoder().encode("config") },
     ]);
     const snapshot = await encryptPrivateSnapshot({
       plaintext: PRIVATE_BYTES,
@@ -209,5 +213,103 @@ describe("PKT-09 deterministic backup and encrypted private-state contract", () 
     ).toEqual({ current: "new", previous: "old", retention: "promote_current" });
     expect(planUploadRetry(1)).toEqual({ retry: true, nextAttempt: 2 });
     expect(planUploadRetry(2)).toEqual({ retry: false, nextAttempt: null });
+    expect(() =>
+      buildBackupReceipt({
+        sourceArchive: createSourceArchive([
+          {
+            path: "ops/procedure.md",
+            kind: "procedure",
+            bytes: new TextEncoder().encode("procedure"),
+          },
+        ]),
+        snapshot: {
+          formatVersion: 1,
+          algorithm: "aes-256-gcm",
+          keyReference: REFERENCE,
+          nonce: NONCE,
+          ciphertext: new Uint8Array(16),
+          authTag: new Uint8Array(16),
+          plaintextSha256: "a".repeat(64),
+          objectSha256: "b".repeat(64),
+          objectBytes: 44,
+        },
+        upload: {
+          status: "verified",
+          destinationBindingId: "drive-binding-lisa",
+          objectSha256: "b".repeat(64),
+          objectBytes: 44,
+        },
+        restore: {
+          status: "verified",
+          plaintextSha256: "a".repeat(64),
+          quickCheck: "passed",
+          network: "disabled",
+          channelDelivery: "disabled",
+        },
+        capturedAtMs: 1,
+      }),
+    ).toThrow("incomplete_company_archive");
+  });
+
+  it("keeps company and private destinations as distinct opaque bindings", () => {
+    expect(createOpaqueDestinationBindingId("drive-binding-lisa")).toBe("drive-binding-lisa");
+    expect(() => createOpaqueDestinationBindingId("Backups/OpenClaw Prime/Lisa")).toThrow(
+      "invalid_destination_binding",
+    );
+    expect(() => createOpaqueDestinationBindingId("https://drive.google.com/lisa")).toThrow(
+      "invalid_destination_binding",
+    );
+    expect(
+      assertBackupDestinationBindings({
+        companyArchiveBindingId: "company-archive-binding",
+        privateSnapshotBindingId: "drive-binding-lisa",
+      }),
+    ).toEqual({
+      companyArchiveBindingId: "company-archive-binding",
+      privateSnapshotBindingId: "drive-binding-lisa",
+    });
+    expect(() =>
+      assertBackupDestinationBindings({
+        companyArchiveBindingId: "drive-binding-lisa",
+        privateSnapshotBindingId: "drive-binding-lisa",
+      }),
+    ).toThrow("destination_bindings_not_distinct");
+  });
+
+  it("verifies private restore in a disposable directory and always removes it", async () => {
+    const snapshot = await encryptPrivateSnapshot({
+      plaintext: PRIVATE_BYTES,
+      keyReference: REFERENCE,
+      nonce: NONCE,
+      resolveKey: async () => KEY,
+    });
+    const removed: string[] = [];
+    const verification = await verifyDisposablePrivateRestore({
+      snapshot,
+      resolveKey: async () => KEY,
+      quickCheck: (bytes) => new TextDecoder().decode(bytes).includes("sqlite snapshot"),
+      makeTemporaryDirectory: async () => "/var/tmp/lisa-pkt09-restore",
+      removeTemporaryDirectory: async (directory) => {
+        removed.push(directory);
+      },
+    });
+    expect(verification).toMatchObject({
+      status: "verified",
+      network: "disabled",
+      channelDelivery: "disabled",
+    });
+    expect(removed).toEqual(["/var/tmp/lisa-pkt09-restore"]);
+    await expect(
+      verifyDisposablePrivateRestore({
+        snapshot,
+        resolveKey: async () => KEY,
+        quickCheck: () => false,
+        makeTemporaryDirectory: async () => "/var/tmp/lisa-pkt09-restore-fail",
+        removeTemporaryDirectory: async (directory) => {
+          removed.push(directory);
+        },
+      }),
+    ).rejects.toThrow("restore_quick_check_failed");
+    expect(removed).toEqual(["/var/tmp/lisa-pkt09-restore", "/var/tmp/lisa-pkt09-restore-fail"]);
   });
 });

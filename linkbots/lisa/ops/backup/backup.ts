@@ -65,6 +65,11 @@ export type UploadVerification = Readonly<{
   objectBytes: number;
 }>;
 
+export type BackupDestinationBindings = Readonly<{
+  companyArchiveBindingId: string;
+  privateSnapshotBindingId: string;
+}>;
+
 export type BackupRetention = "retain_previous" | "promote_current";
 
 export const MAX_UPLOAD_ATTEMPTS = 2 as const;
@@ -219,6 +224,35 @@ function assertCompanyArchivePath(value: string): void {
   }
 }
 
+/** Opaque binding IDs only. Drive paths, URLs, and host-local destinations never enter source. */
+export function createOpaqueDestinationBindingId(value: string): string {
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$/u.test(value) ||
+    /(?:https?:|\/\/|\.google\.)/iu.test(value)
+  ) {
+    fail("invalid_destination_binding");
+  }
+  return value;
+}
+
+export function assertBackupDestinationBindings(
+  input: BackupDestinationBindings,
+): BackupDestinationBindings {
+  const companyArchiveBindingId = createOpaqueDestinationBindingId(input.companyArchiveBindingId);
+  const privateSnapshotBindingId = createOpaqueDestinationBindingId(input.privateSnapshotBindingId);
+  if (companyArchiveBindingId === privateSnapshotBindingId) {
+    fail("destination_bindings_not_distinct");
+  }
+  return Object.freeze({ companyArchiveBindingId, privateSnapshotBindingId });
+}
+
+function assertRestorableCompanyArchive(archive: SourceArchive): void {
+  const kinds = new Set(archive.entries.map((entry) => entry.kind));
+  if (!kinds.has("source") || !kinds.has("procedure")) {
+    fail("incomplete_company_archive");
+  }
+}
+
 function assertKeyReference(reference: KeyReference): KeyReference {
   if (
     reference.provider !== "google-secret-manager" ||
@@ -340,6 +374,34 @@ export function encryptedSnapshotBytes(snapshot: EncryptedPrivateSnapshot): Uint
   return bytes;
 }
 
+export async function verifyDisposablePrivateRestore(input: {
+  snapshot: EncryptedPrivateSnapshot;
+  resolveKey: KeyResolver;
+  quickCheck: (plaintext: Uint8Array) => boolean;
+  makeTemporaryDirectory: () => Promise<string>;
+  removeTemporaryDirectory: (directory: string) => Promise<void>;
+}): Promise<RestoreVerification> {
+  const restoreDirectory = await input.makeTemporaryDirectory();
+  try {
+    if (
+      !restoreDirectory.startsWith("/") ||
+      restoreDirectory.includes("\\") ||
+      restoreDirectory.includes("\0") ||
+      /(?:\/Users\/|\/Applications\/)/u.test(restoreDirectory)
+    ) {
+      fail("invalid_restore_directory");
+    }
+    const restored = await decryptAndVerifyPrivateSnapshot({
+      snapshot: input.snapshot,
+      resolveKey: input.resolveKey,
+      quickCheck: input.quickCheck,
+    });
+    return restored.verification;
+  } finally {
+    await input.removeTemporaryDirectory(restoreDirectory);
+  }
+}
+
 export async function decryptAndVerifyPrivateSnapshot(input: {
   snapshot: EncryptedPrivateSnapshot;
   resolveKey: KeyResolver;
@@ -379,12 +441,10 @@ export async function uploadEncryptedSnapshot(input: {
   destinationBindingId: string;
   uploader: PrivateSnapshotUploader;
 }): Promise<UploadVerification> {
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{1,127}$/u.test(input.destinationBindingId)) {
-    fail("invalid_destination_binding");
-  }
+  const destinationBindingId = createOpaqueDestinationBindingId(input.destinationBindingId);
   const objectBytes = encryptedSnapshotBytes(input.snapshot);
   const uploaded = await input.uploader({
-    destinationBindingId: input.destinationBindingId,
+    destinationBindingId,
     objectBytes,
     objectSha256: input.snapshot.objectSha256,
     metadata: {
@@ -401,7 +461,7 @@ export async function uploadEncryptedSnapshot(input: {
   }
   return Object.freeze({
     status: "verified",
-    destinationBindingId: input.destinationBindingId,
+    destinationBindingId,
     objectSha256: uploaded.objectSha256,
     objectBytes: uploaded.objectBytes,
   });
@@ -472,6 +532,7 @@ export function buildBackupReceipt(input: {
   if (!Number.isSafeInteger(input.capturedAtMs) || input.capturedAtMs < 0) {
     fail("invalid_capture_time");
   }
+  assertRestorableCompanyArchive(input.sourceArchive);
   const base = {
     formatVersion: BACKUP_FORMAT_VERSION,
     profile: "lisa" as const,
