@@ -56,6 +56,14 @@ PHASE315_SKIPPED_FORK_PATHS = (
     ("test/vitest/vitest.linkbots-paths.mjs", "phase-diff-check"),
     ("test/vitest/vitest.tooling.config.ts", "phase-diff-check"),
 )
+# Exact Full run 34700938000 skippedBroadFallbackPaths that still blocked the
+# hosted Full runner after NON_VITEST mapping. Keep path-exact sibling tests.
+PHASE315_SKIPPED_FOCUSED_TARGETS = (
+    ("src/agents/noncoding-route.ts", "src/agents/noncoding-route.test.ts"),
+    ("src/agents/profile-manifest.ts", "src/agents/profile-manifest.test.ts"),
+    ("src/state/lisa-compliance-state-store.ts", "src/state/lisa-compliance-state-store.test.ts"),
+    ("src/state/lisa-principal-task-store.ts", "src/state/lisa-principal-task-store.test.ts"),
+)
 OCP01_PATHS = (
     "extensions/codex/src/app-server/client-runtime.ts",
     "extensions/codex/src/app-server/event-projector-terminal-failure.ts",
@@ -1283,6 +1291,95 @@ class ProgressiveValidationTests(unittest.TestCase):
                 "phase-diff-check",
             },
         )
+
+    def _planner_skipped_focused_map(self) -> dict[str, str]:
+        source = (ROOT / ".linktrend/openclaw-prime/resolve_customization_tests.mts").read_text(
+            encoding="utf-8"
+        )
+        start = source.index("const SKIPPED_PATH_FOCUSED_TARGETS = new Map([")
+        end = source.index("]);", start)
+        return dict(re.findall(r'\[\s*"([^"]+)",\s*"([^"]+)"\s*,?\s*\]', source[start:end]))
+
+    def test_phase315_skipped_sources_pass_exact_focused_targets_to_hosted_full(self) -> None:
+        overlay_targets = [
+            "test/vitest/vitest.tooling.config.ts",
+            "test/scripts/ci-workflow-guards.test.ts",
+            "linkbots/lisa/ops/backup/backup.test.ts",
+            "linkbots/lisa/ops/deployment/deployment.test.ts",
+            "linkbots/lisa/ops/jobs/lisa-job-catalogue.test.ts",
+            "linkbots/lisa/ops/jobs/lisa-job-contracts.test.ts",
+            "linkbots/lisa/ops/model-routing.test.ts",
+            "test/scripts/run-vitest.test.ts",
+            "test/scripts/test-projects.test.ts",
+            "test/scripts/vitest-local-scheduling.test.ts",
+            "src/agents/agent-create.test.ts",
+            "src/agents/agent-scope.test.ts",
+            "src/agents/prepared-model-catalog.test.ts",
+            "src/agents/prepared-model-runtime.test.ts",
+            "test/scripts/test-projects-routing.test.ts",
+        ]
+        mapped = dict(PHASE315_SKIPPED_FOCUSED_TARGETS)
+        planner_source = (ROOT / ".linktrend/openclaw-prime/resolve_customization_tests.mts").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(self._planner_skipped_focused_map(), mapped)
+        self.assertNotIn('["src/agents", "src/agents"]', planner_source)
+        self.assertNotIn("src/agents/*", planner_source)
+        self.assertNotIn("src/state/*", planner_source)
+        for source_path, target in PHASE315_SKIPPED_FOCUSED_TARGETS:
+            self.assertNotIn(source_path, MODULE.NON_VITEST_VALIDATION)
+            self.assertIn(f'["{source_path}", "{target}"]', planner_source)
+            self.assertTrue(target.endswith(".test.ts"))
+        selected = sorted({*overlay_targets, *mapped.values()})
+        self.assertEqual(len(overlay_targets) + len(mapped), 19)
+        self.assertEqual(len(selected), 19)
+        # Phase head from Full run 34700938000 owns the sibling tests; OCP-01 does not.
+        phase_head = "8788f4d9b5da806eb560dcc366bf806c4efe5d22"
+        phase_base = "7aee52d52695ab50bfa13dd275a68d28a5cbbe6b"
+        payload = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "mode": "targets",
+            "targets": selected,
+            "skippedBroadFallbackPaths": [],
+            "changedPaths": list(OCP01_PATHS),
+            "changedPathsDigest": MODULE.canonical_digest(list(OCP01_PATHS)),
+            "baselineCommit": phase_base,
+            "headCommit": phase_head,
+            "nonVitestValidations": [],
+        }
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_broadened"):
+            MODULE.validate_planner_payload(
+                {**payload, "targets": overlay_targets, "skippedBroadFallbackPaths": list(mapped)},
+                list(OCP01_PATHS),
+                phase_base,
+                phase_head,
+                ROOT,
+            )
+        accepted = MODULE.validate_planner_payload(
+            payload,
+            list(OCP01_PATHS),
+            phase_base,
+            phase_head,
+            ROOT,
+        )
+        self.assertEqual(accepted["skippedBroadFallbackPaths"], [])
+        self.assertEqual(accepted["targets"], selected)
+        test_calls: list[list[str]] = []
+        result = MODULE.run_relevant_tests(
+            ROOT,
+            phase_base,
+            phase_head,
+            list(OCP01_PATHS),
+            execute=True,
+            planner_runner=lambda _cmd: self._completed(0, json.dumps(payload)),
+            test_runner=lambda command: test_calls.append(list(command))
+            or self._completed(0, "ok"),
+        )
+        self.assertEqual(len(test_calls), 1)
+        self.assertEqual(test_calls[0][:4], list(MODULE.TEST_PROJECTS))
+        self.assertEqual(test_calls[0][4:], selected)
+        self.assertEqual(sorted(result["selectedTests"]), selected)
 
 
 if __name__ == "__main__":

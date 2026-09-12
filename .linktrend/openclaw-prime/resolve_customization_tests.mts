@@ -144,6 +144,32 @@ function focusedNonVitestPlan() {
   return { mode: "targets", targets: [], skippedBroadFallbackPaths: [] };
 }
 
+// Exact Full run 34700938000: overlay selected 15 targets plus these 4 skipped
+// sources (19 paths). Unmapped skips fail closed; mapped siblings become targets
+// so hosted Full can invoke them. Do not replace this list with a prefix.
+const SKIPPED_PATH_FOCUSED_TARGETS = new Map([
+  ["src/agents/noncoding-route.ts", "src/agents/noncoding-route.test.ts"],
+  ["src/agents/profile-manifest.ts", "src/agents/profile-manifest.test.ts"],
+  ["src/state/lisa-compliance-state-store.ts", "src/state/lisa-compliance-state-store.test.ts"],
+  ["src/state/lisa-principal-task-store.ts", "src/state/lisa-principal-task-store.test.ts"],
+]);
+
+function overlaySkippedFocusedTargets(skipped) {
+  const extraTargets = [];
+  const unresolvedSkipped = [];
+  for (const path of skipped) {
+    const mapped = SKIPPED_PATH_FOCUSED_TARGETS.get(path);
+    if (mapped) {
+      extraTargets.push(mapped);
+      continue;
+    }
+    if (!NON_VITEST_VALIDATION.has(path)) {
+      unresolvedSkipped.push(path);
+    }
+  }
+  return { extraTargets, unresolvedSkipped };
+}
+
 async function loadChangedTestTargetPlan(changedPaths, root) {
   let resolveChangedTestTargetPlan;
   try {
@@ -162,13 +188,15 @@ async function loadChangedTestTargetPlan(changedPaths, root) {
 function emitPlan(plan, changedPaths, baseline, head) {
   const allPathsHaveFocusedValidation =
     changedPaths.length > 0 && changedPaths.every((path) => NON_VITEST_VALIDATION.has(path));
-  const targets = allPathsHaveFocusedValidation ? [] : [...new Set(plan.targets ?? [])];
   const skipped = plan.skippedBroadFallbackPaths ?? [];
+  const { extraTargets, unresolvedSkipped } = overlaySkippedFocusedTargets(skipped);
+  const targets = allPathsHaveFocusedValidation
+    ? []
+    : [...new Set([...(plan.targets ?? []), ...extraTargets])];
   const nonVitestValidations = changedPaths.flatMap((path) => {
     const validation = NON_VITEST_VALIDATION.get(path);
     return validation ? [{ path, validation }] : [];
   });
-  const unresolvedSkipped = skipped.filter((path) => !NON_VITEST_VALIDATION.has(path));
   const payload = {
     schemaVersion: 1,
     kind: "customization-test-target-plan",
