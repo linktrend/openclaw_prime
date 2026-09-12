@@ -60,6 +60,7 @@ import {
 import { isVoiceCallExtensionRoot } from "../test/vitest/vitest.extension-voice-call-paths.mjs";
 import { isWhatsAppExtensionRoot } from "../test/vitest/vitest.extension-whatsapp-paths.mjs";
 import { isZaloExtensionRoot } from "../test/vitest/vitest.extension-zalo-paths.mjs";
+import { isApprovedLinkbotsToolingTestFile } from "../test/vitest/vitest.linkbots-paths.mjs";
 import { narrowIncludePatternsForCli } from "../test/vitest/vitest.pattern-file.ts";
 import { resolveVitestFsModuleCacheRoot } from "../test/vitest/vitest.performance-config.ts";
 import {
@@ -68,7 +69,6 @@ import {
   resolvePluginSdkLightIncludePattern,
 } from "../test/vitest/vitest.plugin-sdk-paths.mjs";
 import { fullSuiteVitestShards, tuiPtyTestFiles } from "../test/vitest/vitest.test-shards.mjs";
-import { isApprovedLinkbotsToolingTestFile } from "../test/vitest/vitest.linkbots-paths.mjs";
 import {
   isToolingIsolatedTestFile,
   toolingIsolatedTestFiles,
