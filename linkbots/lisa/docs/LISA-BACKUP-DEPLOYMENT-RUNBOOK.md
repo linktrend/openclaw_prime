@@ -30,7 +30,11 @@ only a throwaway key and in-memory ciphertext.
 The receipt separates upload proof from restore proof. A failed upload or
 failed restore returns `retain_previous`; only when both are verified may the
 candidate be promoted to `current`. The previous verified object remains
-available for rollback.
+available for rollback. Company-archive and private-snapshot destinations are
+distinct opaque binding IDs; a Drive path is never a destination. Disposable
+restore verification uses an injected temporary directory, disables network
+and channel delivery, returns only the sanitized verification, and always
+removes that directory.
 
 ## Clean-host recreation packet
 
@@ -41,7 +45,7 @@ The deployment templates are:
 - `ops/deployment/linktrend-lisa-private-health-restore.service`
 
 `ops/deployment/deployment.ts` renders and validates the same three units from
-Linux host paths. The backup service runs as `openclaw-lisa`, uses a host-only
+Linux host paths, and requires the committed unit files to match that render. The backup service runs as `openclaw-lisa`, uses a host-only
 `EnvironmentFile` for references, writes only the backup/receipt roots, and
 has `ProtectSystem=strict`, `ProtectHome=true`, `NoNewPrivileges=true`, and a
 private umask. The restore verification service denies network access and
@@ -70,10 +74,12 @@ The rollback sequence is represented by the injected executor in
 ## Validation
 
 ```sh
-node scripts/run-vitest.mjs linkbots/lisa/ops/backup
-node scripts/run-vitest.mjs linkbots/lisa/ops/deployment
+node scripts/run-vitest.mjs --config linkbots/lisa/ops/backup/vitest.config.ts linkbots/lisa/ops/backup
+node scripts/run-vitest.mjs --config linkbots/lisa/ops/deployment/vitest.config.ts linkbots/lisa/ops/deployment
 git diff --check
 ```
+
+Root Vitest projects do not include `linkbots/`. The local configs above keep the same `run-vitest.mjs` wrapper without changing repository Vitest lanes.
 
 These checks prove source behavior only. They do not prove VPS, stage,
 production, Google Workspace, Secret Manager, or Drive operation.
