@@ -71,7 +71,7 @@ const LISA_GENERIC_SOURCE = {
 
 const LISA_PRIVATE_SOURCE = {
   ...LISA_GENERIC_SOURCE,
-  credentials: { token: "must-not-clone" },
+  credentials: { liveField: "synthetic non-secret fixture" },
   privateState: { memory: "instance-private" },
   accountIds: ["acct_live"],
   recipients: ["user@example.com"],
