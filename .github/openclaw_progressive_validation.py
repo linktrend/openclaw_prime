@@ -95,6 +95,15 @@ class PhaseIdentityError(RuntimeError):
     """Exact Phase identity or diff failed closed."""
 
 
+class SecretScanHold(RuntimeError):
+    """Scoped scan blocked; payload must stay attached to the hold."""
+
+    def __init__(self, code: str, payload: Mapping[str, Any]) -> None:
+        super().__init__(code)
+        self.code = code
+        self.payload = dict(payload)
+
+
 def git(root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
@@ -304,31 +313,39 @@ def scan_existing(
     scanned = result.get("scannedPaths")
     if not isinstance(scanned, list) or any(not isinstance(item, str) for item in scanned):
         raise RuntimeError("scanner-error")
+    findings = result.get("findings")
+    if not isinstance(findings, list):
+        raise RuntimeError("scanner-error")
+    payload = dict(result)
+    payload["scannedPaths"] = list(scanned)
+    payload["findings"] = list(findings)
+
+    def hold(code: str) -> None:
+        raise SecretScanHold(code, payload)
+
     admitted_set = set(admitted)
     scanned_set = set(scanned)
     extra = sorted(scanned_set - admitted_set)
     if extra:
-        raise RuntimeError("scanner_escaped_scope")
+        hold("scanner_escaped_scope")
     if scanned_set != admitted_set or len(scanned) != len(scanned_set):
-        raise RuntimeError("scanner_incomplete_scope")
-    findings = result.get("findings")
-    if not isinstance(findings, list):
-        raise RuntimeError("scanner-error")
+        hold("scanner_incomplete_scope")
+    allowed_kinds = {SKIPPED_KIND, load_secret_scan(root).KIND_APPROVED}
     for row in findings:
         if not isinstance(row, Mapping):
-            raise RuntimeError("scanner-error")
+            hold("scanner-error")
         kind = row.get("kind")
         path = row.get("path")
-        if kind == SKIPPED_KIND:
-            raise RuntimeError("new-skipped-input")
         if path is not None and path not in admitted:
-            raise RuntimeError("scanner_escaped_scope")
-        if kind and kind != SKIPPED_KIND:
-            raise RuntimeError("new-or-changed-finding")
+            hold("scanner_escaped_scope")
+        if kind == SKIPPED_KIND:
+            hold("new-skipped-input")
+        if kind and kind not in allowed_kinds:
+            hold("new-or-changed-finding")
     if result.get("ok") is False:
-        raise RuntimeError("new-or-changed-finding")
-    payload = dict(result)
-    payload["scannedPaths"] = list(scanned)
+        # Scanner refused the run without a blocking finding row. That is a
+        # scanner contract failure, not a new/changed secret finding.
+        hold("scanner-error")
     return payload
 
 
@@ -730,6 +747,10 @@ def validate_phase(
     if not errors:
         try:
             scan_result = scan_existing(root, admitted, scanner)
+        except SecretScanHold as exc:
+            errors.append(exc.code)
+            hold = HOLD_SCAN
+            scan_result = exc.payload
         except RuntimeError as exc:
             errors.append(str(exc))
             hold = HOLD_SCAN
