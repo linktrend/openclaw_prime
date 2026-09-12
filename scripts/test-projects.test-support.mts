@@ -1210,7 +1210,22 @@ function toScopedIncludePattern(arg: string, cwd: string) {
   return `${relative.replace(/\/+$/u, "")}/**/*.test.ts`;
 }
 
-const EXPLICIT_TEST_TARGET_ROOTS = ["src", "test", "extensions", "ui", "packages", "apps"];
+// Lisa customization tests sit outside OpenClaw source roots. Inventory only
+// these explicit owners so directory targets can match without scanning all of
+// linkbots or changing the full-suite include set.
+const LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS = [
+  "linkbots/lisa/ops/backup",
+  "linkbots/lisa/ops/deployment",
+] as const;
+const EXPLICIT_TEST_TARGET_ROOTS = [
+  "src",
+  "test",
+  "extensions",
+  "ui",
+  "packages",
+  "apps",
+  ...LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS,
+];
 let cachedExplicitTestTargetFiles: string[] | null = null;
 let cachedExplicitTestTargetFilesCwd: string | null = null;
 
@@ -3635,7 +3650,8 @@ function classifyTarget(arg: string, cwd: string) {
     relative.startsWith("src/scripts/") ||
     relative === "src/config/doc-baseline.integration.test.ts" ||
     relative === "src/config/schema.base.generated.test.ts" ||
-    relative === "src/config/schema.help.quality.test.ts"
+    relative === "src/config/schema.help.quality.test.ts" ||
+    LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS.some((root) => isPathAtOrUnder(relative, root))
   ) {
     return "tooling";
   }

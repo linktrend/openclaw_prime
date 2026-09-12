@@ -373,6 +373,16 @@ describe("test-projects args", () => {
       target: "extensions/firecrawl/index.test.ts",
       config: "test/vitest/vitest.extension-misc.config.ts",
     },
+    {
+      title: "routes Lisa backup customization tests to the tooling config",
+      target: "linkbots/lisa/ops/backup/backup.test.ts",
+      config: "test/vitest/vitest.tooling.config.ts",
+    },
+    {
+      title: "routes Lisa deployment customization tests to the tooling config",
+      target: "linkbots/lisa/ops/deployment/deployment.test.ts",
+      config: "test/vitest/vitest.tooling.config.ts",
+    },
   ])("$title", ({ target, config }) => {
     expect(buildVitestRunPlans([target])).toEqual([
       {
@@ -878,6 +888,37 @@ describe("test-projects args", () => {
       {
         target: "src/not-a-real-openclaw-test.test.ts",
         reason: "path-does-not-exist",
+      },
+    ]);
+  });
+
+  it.each([
+    {
+      target: "linkbots/lisa/ops/backup",
+      includePattern: "linkbots/lisa/ops/backup/**/*.test.ts",
+    },
+    {
+      target: "linkbots/lisa/ops/deployment",
+      includePattern: "linkbots/lisa/ops/deployment/**/*.test.ts",
+    },
+  ])("discovers tracked Lisa customization tests from $target", ({ target, includePattern }) => {
+    expect(findUnmatchedExplicitTestTargets([target])).toEqual([]);
+    expect(buildVitestRunPlans([target])).toEqual([
+      {
+        config: "test/vitest/vitest.tooling.config.ts",
+        forwardedArgs: [],
+        includePatterns: [includePattern],
+        watchMode: false,
+      },
+    ]);
+  });
+
+  it("keeps unrelated linkbots paths fail-closed", () => {
+    expect(findUnmatchedExplicitTestTargets(["linkbots/lisa/ops/google-workspace"])).toEqual([
+      {
+        target: "linkbots/lisa/ops/google-workspace",
+        reason: "target-matched-no-test-files",
+        includePattern: "linkbots/lisa/ops/google-workspace/**/*.test.ts",
       },
     ]);
   });
