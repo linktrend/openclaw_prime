@@ -735,7 +735,8 @@ def _read_isolated_state_pair(state_dir: Path) -> tuple[dict[str, Any], dict[str
     """Read the published record/handoff pair from one directory.
 
     Readers must treat these files as one generation. A missing sibling is
-    incomplete isolated state, not a usable mixed pair.
+    incomplete isolated state, not a usable mixed pair. Record/handoff
+    identity drift is also mixed state and fails closed.
     """
 
     record_path = state_dir / ISOLATED_RECORD_NAME
@@ -746,7 +747,29 @@ def _read_isolated_state_pair(state_dir: Path) -> tuple[dict[str, Any], dict[str
     handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
     if not isinstance(record, dict) or not isinstance(handoff, dict):
         raise CoordinatorError("isolated_state_incomplete", str(state_dir))
+    record_head = normalize_sha(str(record.get("headSha") or ""))
+    handoff_head = normalize_sha(str(handoff.get("headCommit") or ""))
+    record_tree = normalize_sha(str(record.get("gitTree") or ""))
+    handoff_tree = normalize_sha(str(handoff.get("gitTree") or ""))
+    if record_head != handoff_head or record_tree != handoff_tree:
+        raise CoordinatorError("isolated_state_incomplete", str(state_dir))
     return record, handoff
+
+
+def _existing_isolated_state_pair(
+    state_dir: Path,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Load a complete published pair, or None when no isolated state exists.
+
+    Duplicate, idempotent, hydrate, and assemble readers share this helper so
+    a lone record, lone handoff, or mixed identity cannot be treated as live.
+    """
+
+    record_exists = (state_dir / ISOLATED_RECORD_NAME).exists()
+    handoff_exists = (state_dir / ISOLATED_HANDOFF_NAME).exists()
+    if not record_exists and not handoff_exists:
+        return None
+    return _read_isolated_state_pair(state_dir)
 
 
 def _publish_isolated_state_dir(staging: Path, live: Path) -> None:
@@ -1239,12 +1262,10 @@ def hydrate_existing_phase_state(
     )
 
     state_dir = _coordinator_state_dir(repo, phase_branch)
-    record_path = state_dir / ISOLATED_RECORD_NAME
+    pair = _existing_isolated_state_pair(state_dir)
     identical = False
-    if record_path.is_file():
-        previous = json.loads(record_path.read_text(encoding="utf-8"))
-        if not isinstance(previous, dict):
-            raise CoordinatorError("duplicate_active_phase", phase_branch)
+    if pair is not None:
+        previous, _previous_handoff = pair
         previous_branch = str(previous.get("phaseBranch") or "")
         if previous_branch not in {"", phase_branch}:
             raise CoordinatorError("duplicate_active_phase", previous_branch)
@@ -1371,10 +1392,10 @@ def assemble_phase(
     _probe_conflicts(repo, development_sha, ordered)
 
     state_dir = _coordinator_state_dir(repo, phase_branch)
-    record_path = state_dir / ISOLATED_RECORD_NAME
+    pair = _existing_isolated_state_pair(state_dir)
     previous = None
-    if record_path.is_file():
-        previous = json.loads(record_path.read_text(encoding="utf-8"))
+    if pair is not None:
+        previous, _previous_handoff = pair
         if previous.get("phaseBranch") not in {None, phase_branch} and previous.get("phaseBranch") != phase_branch:
             raise CoordinatorError("duplicate_active_phase", str(previous.get("phaseBranch")))
 

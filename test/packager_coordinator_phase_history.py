@@ -310,10 +310,15 @@ class ExistingPhaseStateHydrationTests(unittest.TestCase):
             )
         drifted = dict(assembled["record"])
         state_dir = Path(assembled["stateDir"])
-        drifted_on_disk, _handoff = _read_isolated_state_pair(state_dir)
+        drifted_on_disk, drifted_handoff = _read_isolated_state_pair(state_dir)
         drifted_on_disk["headSha"] = one.sha
+        drifted_handoff["headCommit"] = one.sha
         (state_dir / ISOLATED_RECORD_NAME).write_text(
             json.dumps(drifted_on_disk, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        (state_dir / ISOLATED_HANDOFF_NAME).write_text(
+            json.dumps(drifted_handoff, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         with self.assertRaisesRegex(CoordinatorError, "duplicate_active_phase"):
@@ -323,6 +328,78 @@ class ExistingPhaseStateHydrationTests(unittest.TestCase):
                 github=self.fx.github,
                 expected_repository="owner/name",
             )
+
+
+class IsolatedStateCompletePairReaderTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fx = HydrationFixture()
+        self.addCleanup(self.fx.cleanup)
+
+    def _assembled_state(self, number: int, filename: str) -> tuple[AcceptedSource, dict[str, object], Path]:
+        source = self.fx.accept_issue(number, filename, f"{filename}\n")
+        assembled = self.fx.assemble([source])
+        return source, assembled, Path(assembled["stateDir"])
+
+    def test_hydrate_missing_handoff_fails_closed(self) -> None:
+        _source, assembled, state_dir = self._assembled_state(71, "hydrate-handoff.txt")
+        (state_dir / ISOLATED_HANDOFF_NAME).unlink()
+        with self.assertRaisesRegex(CoordinatorError, "isolated_state_incomplete"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=assembled["record"],
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_hydrate_missing_record_fails_closed(self) -> None:
+        _source, assembled, state_dir = self._assembled_state(72, "hydrate-record.txt")
+        (state_dir / ISOLATED_RECORD_NAME).unlink()
+        with self.assertRaisesRegex(CoordinatorError, "isolated_state_incomplete"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=assembled["record"],
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_hydrate_mixed_pair_identities_fail_closed(self) -> None:
+        source, assembled, state_dir = self._assembled_state(73, "hydrate-mixed.txt")
+        record, _handoff = _read_isolated_state_pair(state_dir)
+        record["headSha"] = source.sha
+        (state_dir / ISOLATED_RECORD_NAME).write_text(
+            json.dumps(record, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(CoordinatorError, "isolated_state_incomplete"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=assembled["record"],
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_assemble_missing_handoff_fails_closed(self) -> None:
+        source, _assembled, state_dir = self._assembled_state(74, "assemble-handoff.txt")
+        (state_dir / ISOLATED_HANDOFF_NAME).unlink()
+        with self.assertRaisesRegex(CoordinatorError, "isolated_state_incomplete"):
+            self.fx.assemble([source])
+
+    def test_assemble_missing_record_fails_closed(self) -> None:
+        source, _assembled, state_dir = self._assembled_state(75, "assemble-record.txt")
+        (state_dir / ISOLATED_RECORD_NAME).unlink()
+        with self.assertRaisesRegex(CoordinatorError, "isolated_state_incomplete"):
+            self.fx.assemble([source])
+
+    def test_assemble_mixed_pair_identities_fail_closed(self) -> None:
+        source, _assembled, state_dir = self._assembled_state(76, "assemble-mixed.txt")
+        record, _handoff = _read_isolated_state_pair(state_dir)
+        record["headSha"] = source.sha
+        (state_dir / ISOLATED_RECORD_NAME).write_text(
+            json.dumps(record, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(CoordinatorError, "isolated_state_incomplete"):
+            self.fx.assemble([source])
 
 
 class IsolatedStateAtomicPublicationTests(unittest.TestCase):

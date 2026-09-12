@@ -107,6 +107,9 @@ jobs:
           cleanup_checkout_credentials
           trap - EXIT
 
+      - name: Install Fast profile Python dependencies
+        run: python3 -m pip install --disable-pip-version-check --no-input "jsonschema==4.26.0"
+
       - name: Reject stale or non-Phase dispatch
         env:
           GH_TOKEN: ${{ github.token }}
@@ -195,6 +198,8 @@ jobs:
             --repo . --expected-repository "${EXPECTED_REPOSITORY}" --actual-repository "${ACTUAL_REPOSITORY}" \
             --ref "${WORKFLOW_REF}" --expected-commit "${EXPECTED_COMMIT}" --expected-tree "${EXPECTED_TREE}" \
             --package-version "${PACKAGE_VERSION}" --installed-state-digest "${INSTALLED_STATE_DIGEST}"
+      - name: Install Fast profile Python dependencies
+        run: python3 -m pip install --disable-pip-version-check --no-input "jsonschema==4.26.0"
       - name: Run exact Fast profile without cache or write authority
         run: |
           set -euo pipefail
