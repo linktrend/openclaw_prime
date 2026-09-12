@@ -18,18 +18,23 @@ function importerIsApprovedLinkbotsToolingTest(importer) {
   );
 }
 
+export function rewriteApprovedLinkbotsNodeTestImport(code, id) {
+  if (!importerIsApprovedLinkbotsToolingTest(id) || !code.includes("node:test")) {
+    return null;
+  }
+  return code.replaceAll(/from\s+["']node:test["']/gu, 'from "vitest"');
+}
+
 // Vitest collects describe/it from its own module. Approved Lisa tests still
-// import node:test; remap only those importers so sibling linkbots files stay
-// on the Node test runner.
+// import node:test; rewrite only those files so sibling linkbots tests and
+// tooling files that import node:test mock stay on Node.
 export function createApprovedLinkbotsNodeTestAliasPlugin() {
   return {
     name: "openclaw-approved-linkbots-node-test",
     enforce: "pre",
-    resolveId(source, importer) {
-      if (source !== "node:test" || !importerIsApprovedLinkbotsToolingTest(importer)) {
-        return null;
-      }
-      return this.resolve("vitest", importer, { skipSelf: true });
+    transform(code, id) {
+      const rewritten = rewriteApprovedLinkbotsNodeTestImport(code, id);
+      return rewritten === null ? null : { code: rewritten, map: null };
     },
   };
 }

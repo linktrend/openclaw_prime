@@ -4,11 +4,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { resolveVitestCliEntry } from "../../scripts/lib/vitest-build-prerequisites.mts";
 import { resolveVitestNodeArgs } from "../../scripts/lib/vitest-process-env.mts";
 import { withEnv } from "../../src/test-utils/env.js";
-import { createApprovedLinkbotsNodeTestAliasPlugin } from "../../test/vitest/vitest.linkbots-paths.mjs";
+import { rewriteApprovedLinkbotsNodeTestImport } from "../../test/vitest/vitest.linkbots-paths.mjs";
 
 const {
   applyParallelVitestCachePaths,
@@ -390,22 +390,23 @@ describe("test-projects args", () => {
     ]);
   });
 
-  it("remaps node:test to vitest only for the approved Lisa model-routing test", async () => {
-    const plugin = createApprovedLinkbotsNodeTestAliasPlugin();
-    const resolved = { id: "vitest" };
-    const vitestResolve = vi.fn().mockResolvedValue(resolved);
-    const remap = plugin.resolveId.bind({ resolve: vitestResolve });
-
-    await expect(
-      remap("node:test", "/workspace/linkbots/lisa/ops/model-routing.test.ts"),
-    ).resolves.toEqual(resolved);
-    await expect(
-      remap("node:test", "/workspace/linkbots/lisa/ops/model-routing-contract.test.ts"),
-    ).resolves.toBeNull();
-    await expect(
-      remap("node:assert/strict", "linkbots/lisa/ops/model-routing.test.ts"),
-    ).resolves.toBeNull();
-    expect(vitestResolve).toHaveBeenCalledTimes(1);
+  it("rewrites node:test imports only for the approved Lisa model-routing test", () => {
+    const source = 'import { describe, it } from "node:test";\n';
+    expect(
+      rewriteApprovedLinkbotsNodeTestImport(source, "linkbots/lisa/ops/model-routing.test.ts"),
+    ).toBe('import { describe, it } from "vitest";\n');
+    expect(
+      rewriteApprovedLinkbotsNodeTestImport(
+        source,
+        "linkbots/lisa/ops/model-routing-contract.test.ts",
+      ),
+    ).toBeNull();
+    expect(
+      rewriteApprovedLinkbotsNodeTestImport(
+        'import { mock } from "node:test";\n',
+        "test/scripts/managed-child-process.test.ts",
+      ),
+    ).toBeNull();
   });
 
   it("does not broaden linkbots discovery beyond the approved model-routing test", () => {

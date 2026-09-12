@@ -1,11 +1,8 @@
 export const approvedLinkbotsToolingTestFiles: string[];
 export function isApprovedLinkbotsToolingTestFile(file: string): boolean;
+export function rewriteApprovedLinkbotsNodeTestImport(code: string, id: string): string | null;
 export function createApprovedLinkbotsNodeTestAliasPlugin(): {
   name: string;
   enforce: "pre";
-  resolveId(
-    this: { resolve(source: string, importer?: string, options?: { skipSelf?: boolean }): unknown },
-    source: string,
-    importer?: string,
-  ): unknown;
+  transform(code: string, id: string): { code: string; map: null } | null;
 };
