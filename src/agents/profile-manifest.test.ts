@@ -1,9 +1,15 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import {
+  createBusinessPlanDraft,
+  evaluateBlueprintLaunch,
+} from "../../linkbots/blueprints/business-plan-workflow.js";
 import { applyAgentConfig, buildAgentSummaries } from "../commands/agents.config.js";
 import { createAgent } from "./agent-create.js";
 import { resolveSessionAgentIds, setAgentEffectiveModelPrimary } from "./agent-scope.js";
 import {
   OPENCLAW_PROFILE_RUNTIME_PIN,
+  PROFILE_EXCLUSION_KEYS,
   cloneCommonProfileManifest,
   dryRunInactiveProfileProvisioning,
   parseCommonProfileManifest,
@@ -279,6 +285,61 @@ describe("inactive profiles cannot route, schedule, or authenticate", () => {
     });
     expect(summaries.find((entry) => entry.id === "main")).toMatchObject({
       id: "main",
+    });
+  });
+});
+
+const EXECUTIVE_BLUEPRINT_IDS = ["eric", "david", "sara", "jane"] as const;
+const WORKFLOW_DIGEST = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+function readExecutiveBlueprint(id: (typeof EXECUTIVE_BLUEPRINT_IDS)[number]): unknown {
+  return JSON.parse(
+    readFileSync(
+      new URL(`../../linkbots/blueprints/${id}.profile-manifest.json`, import.meta.url),
+      "utf8",
+    ),
+  );
+}
+
+describe("inactive executive blueprint files", () => {
+  it("parses committed blueprints as inactive dry-runs with required exclusions", async () => {
+    for (const id of EXECUTIVE_BLUEPRINT_IDS) {
+      const input = readExecutiveBlueprint(id);
+      const parsed = parseCommonProfileManifest(input);
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) {
+        continue;
+      }
+      expect(parsed.value.activation).toBe("inactive");
+      expect(parsed.value.exclusions).toEqual(
+        Object.fromEntries(PROFILE_EXCLUSION_KEYS.map((key) => [key, true])),
+      );
+      expect(dryRunInactiveProfileProvisioning(parsed.value)).toMatchObject({
+        ok: true,
+        value: { mode: "dry-run", profileId: id, effects: [] },
+      });
+      await expect(createAgent({ profileManifest: input })).resolves.toMatchObject({
+        status: "inactive",
+        agentId: id,
+        provisioning: { mode: "dry-run", effects: [] },
+      });
+    }
+  });
+
+  it("rejects plan content and keeps launch verification from activating a blueprint", () => {
+    expect(() =>
+      createBusinessPlanDraft({
+        artifactId: "artifact:plan",
+        version: 1,
+        blueprintProfileId: "eric",
+        contentDigest: WORKFLOW_DIGEST,
+        contentLength: 100,
+        content: "a fake plan",
+      }),
+    ).toThrow(/does not accept content/);
+    expect(evaluateBlueprintLaunch({ profileId: "eric", activation: "inactive" })).toMatchObject({
+      status: "blocked",
+      actions: [],
     });
   });
 });
