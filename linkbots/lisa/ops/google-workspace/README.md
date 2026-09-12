@@ -182,17 +182,13 @@ does not claim that OAuth or any Google call has passed.
 
 ## Source-only validation
 
-The canonical focused test is offline and replaces `gws` with a synthetic
-executable; it
-does not read credentials, open OAuth, contact Google, or mutate a VPS:
+The canonical focused test command is recorded in the execution manifest. The
+repo Vitest unit shard does not include `linkbots/**`, so that wrapper currently
+reports no test files. The executable source-only proof is:
 
 ```text
-node scripts/run-vitest.mjs linkbots/lisa/ops/google-workspace/google-workspace.test.ts
+node --test linkbots/lisa/ops/google-workspace/google-workspace.test.ts
 ```
-
-When repository dependencies are unavailable, the equivalent dependency-free
-source fallback is `node --test` on the same file. Also run `bash -n` over both
-wrappers and the installer. A passing source test
 proves argument routing, identity separation, private-path checks, internal
 recipient rejection, and prohibited-command rejection only. It does not prove
 Google access, account ownership, live writes, restart survival, or cleanup.

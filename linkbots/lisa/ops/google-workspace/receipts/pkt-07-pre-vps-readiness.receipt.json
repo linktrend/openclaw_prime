@@ -19,7 +19,8 @@
     "negativeAccessAndScopeAssertions": "pass",
     "canonicalFocusedTest": {
       "command": "node scripts/run-vitest.mjs linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
-      "status": "source-contract"
+      "status": "failed-no-test-files",
+      "reason": "scripts/run-vitest.mjs defaults to test/vitest/vitest.unit.config.ts; unit include does not cover linkbots. Adding linkbots/**/*.test.ts to unitTestIncludePatterns is outside PKT-07 owned paths. These tests use node:test and pass under node --test."
     },
     "offlineFocusedTests": { "command": "node --test linkbots/lisa/ops/google-workspace/google-workspace.test.ts", "passed": 19, "failed": 0 },
     "shellSyntax": { "scripts": 5, "passed": 5, "failed": 0 },

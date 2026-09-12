@@ -1107,8 +1107,8 @@ describe("VPS Lisa Google Workspace wrappers", () => {
         sourceReceipt: string;
       };
       openclawOwnedProof: {
-        canonicalFocusedTest: { command: string };
-        offlineFocusedTests: { passed: number; failed: number };
+    canonicalFocusedTest: { command: string; status: string; reason: string };
+    offlineFocusedTests: { command: string; passed: number; failed: number };
         shellSyntax: { passed: number; failed: number };
         oauthPerformed: boolean;
         liveGoogleCallsPerformed: boolean;
@@ -1156,6 +1156,18 @@ describe("VPS Lisa Google Workspace wrappers", () => {
     assert.equal(
       preVpsReadiness.openclawOwnedProof.canonicalFocusedTest.command,
       "node scripts/run-vitest.mjs linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
+    );
+    assert.equal(
+      preVpsReadiness.openclawOwnedProof.canonicalFocusedTest.status,
+      "failed-no-test-files",
+    );
+    assert.match(
+      preVpsReadiness.openclawOwnedProof.canonicalFocusedTest.reason,
+      /unit include does not cover linkbots/,
+    );
+    assert.equal(
+      preVpsReadiness.openclawOwnedProof.offlineFocusedTests.command,
+      "node --test linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
     );
     assert.equal(preVpsReadiness.openclawOwnedProof.offlineFocusedTests.passed, 19);
     assert.equal(preVpsReadiness.openclawOwnedProof.offlineFocusedTests.failed, 0);
