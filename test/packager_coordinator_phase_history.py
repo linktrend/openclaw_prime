@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.gitops.packager_coordinator import _unique_phase_commits
+from scripts.gitops.packager_coordinator import (
+    AcceptedSource,
+    CoordinatorError,
+    GitPushAdapter,
+    MemoryGitHub,
+    _unique_phase_commits,
+    assemble_phase,
+    hydrate_existing_phase_state,
+)
 
 
 def git(root: Path, *args: str) -> str:
@@ -73,6 +82,242 @@ class AcceptedPhaseHistoryTests(unittest.TestCase):
             ),
             [unique],
         )
+
+
+def write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+class HydrationFixture:
+    def __init__(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.origin = root / "origin.git"
+        self.work = root / "work"
+        self.work.mkdir()
+        git(root, "init", "--bare", str(self.origin))
+        git(self.work, "init", "-q", "-b", "development")
+        git(self.work, "config", "user.email", "phase@example.invalid")
+        git(self.work, "config", "user.name", "Phase test")
+        git(self.work, "remote", "add", "origin", str(self.origin))
+        write(self.work / "base.txt", "base\n")
+        git(self.work, "add", "base.txt")
+        git(self.work, "commit", "-qm", "base")
+        git(self.work, "push", "-q", "-u", "origin", "development")
+        self.github = MemoryGitHub(repository="owner/name")
+
+    def cleanup(self) -> None:
+        self.tmp.cleanup()
+
+    def accept_issue(self, number: int, filename: str, content: str) -> AcceptedSource:
+        branch = f"issue/{number}-{filename.split('.')[0]}"
+        git(self.work, "checkout", "-B", branch, "development")
+        write(self.work / filename, content)
+        git(self.work, "add", filename)
+        git(self.work, "commit", "-qm", f"issue {number}")
+        sha = git(self.work, "rev-parse", "HEAD")
+        git(self.work, "push", "-q", "-u", "origin", branch)
+        git(self.work, "checkout", "development")
+        source = AcceptedSource(branch=branch, sha=sha, order=number)
+        self.github.ready_shas.add(sha)
+        self.github.evidence[sha] = {"schemaVersion": 1, "headSha": sha, "classification": "tests"}
+        return source
+
+    def assemble(self, sources: list[AcceptedSource]):
+        ordered = [
+            AcceptedSource(branch=item.branch, sha=item.sha, order=index)
+            for index, item in enumerate(sources, start=1)
+        ]
+        return assemble_phase(
+            repo=self.work,
+            repository="owner/name",
+            sources=ordered,
+            github=self.github,
+            pusher=GitPushAdapter(),
+            phase_branch="phase/next",
+            expected_repository="owner/name",
+        )
+
+
+class ExistingPhaseStateHydrationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fx = HydrationFixture()
+        self.addCleanup(self.fx.cleanup)
+
+    def _clear_isolated_state(self, state_dir: Path) -> None:
+        for name in ("phase-delivery-record.json", "phase-handoff.json", "provider-consumer-handoff.json"):
+            path = state_dir / name
+            if path.exists():
+                path.unlink()
+
+    def test_exact_supplied_record_hydrates_isolated_state_only(self) -> None:
+        one = self.fx.accept_issue(41, "hydrate.txt", "hydrate\n")
+        assembled = self.fx.assemble([one])
+        ensure_calls = self.fx.github.ensure_calls
+        remote_before = git(self.fx.work, "ls-remote", "--heads", "origin", "refs/heads/phase/next")
+        state_dir = Path(assembled["stateDir"])
+        self._clear_isolated_state(state_dir)
+        caller = git(self.fx.work, "rev-parse", "HEAD")
+        result = hydrate_existing_phase_state(
+            repo=self.fx.work,
+            record=assembled["record"],
+            github=self.fx.github,
+            expected_repository="owner/name",
+        )
+        self.assertEqual(result["action"], "hydrated")
+        self.assertFalse(result["idempotent"])
+        self.assertEqual(self.fx.github.ensure_calls, ensure_calls)
+        self.assertEqual(self.fx.github.labels, [])
+        self.assertEqual(self.fx.github.workflow_dispatches, [])
+        self.assertEqual(
+            git(self.fx.work, "ls-remote", "--heads", "origin", "refs/heads/phase/next"),
+            remote_before,
+        )
+        self.assertEqual(git(self.fx.work, "rev-parse", "HEAD"), caller)
+        self.assertEqual(git(self.fx.work, "rev-parse", "--abbrev-ref", "HEAD"), "development")
+        self.assertFalse((self.fx.work / ".linktrend" / "phase-handoff.json").exists())
+        written_record = json.loads((state_dir / "phase-delivery-record.json").read_text(encoding="utf-8"))
+        written_handoff = json.loads((state_dir / "phase-handoff.json").read_text(encoding="utf-8"))
+        self.assertEqual(written_record["headSha"], assembled["headSha"])
+        self.assertEqual(written_record["gitTree"], assembled["gitTree"])
+        self.assertEqual(written_handoff["headCommit"], assembled["headSha"])
+        self.assertEqual(written_handoff["phasePr"]["number"], assembled["phasePr"]["number"])
+        self.assertTrue(written_handoff["valid"])
+
+    def test_identical_isolated_state_is_idempotent(self) -> None:
+        one = self.fx.accept_issue(42, "again.txt", "again\n")
+        assembled = self.fx.assemble([one])
+        result = hydrate_existing_phase_state(
+            repo=self.fx.work,
+            record=assembled["record"],
+            github=self.fx.github,
+            expected_repository="owner/name",
+        )
+        self.assertEqual(result["action"], "reused")
+        self.assertTrue(result["idempotent"])
+
+    def test_wrong_repository_is_refused(self) -> None:
+        one = self.fx.accept_issue(43, "repo.txt", "repo\n")
+        assembled = self.fx.assemble([one])
+        record = dict(assembled["record"])
+        record["repository"] = "other/name"
+        with self.assertRaisesRegex(CoordinatorError, "wrong_repository"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=record,
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_stale_head_is_refused(self) -> None:
+        one = self.fx.accept_issue(44, "stale.txt", "stale\n")
+        assembled = self.fx.assemble([one])
+        record = dict(assembled["record"])
+        record["headSha"] = one.sha
+        with self.assertRaisesRegex(CoordinatorError, "stale_commit"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=record,
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_protected_phase_branch_is_refused(self) -> None:
+        one = self.fx.accept_issue(45, "prot.txt", "prot\n")
+        assembled = self.fx.assemble([one])
+        record = dict(assembled["record"])
+        record["phaseBranch"] = "main"
+        record["phaseId"] = "main"
+        with self.assertRaisesRegex(CoordinatorError, "invalid_phase_branch"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=record,
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_malformed_record_is_refused(self) -> None:
+        one = self.fx.accept_issue(46, "bad.txt", "bad\n")
+        assembled = self.fx.assemble([one])
+        record = dict(assembled["record"])
+        record["kind"] = "phase-note"
+        with self.assertRaisesRegex(CoordinatorError, "malformed_phase_record"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=record,
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_duplicate_accepted_issue_is_refused(self) -> None:
+        one = self.fx.accept_issue(47, "dup.txt", "dup\n")
+        assembled = self.fx.assemble([one])
+        record = dict(assembled["record"])
+        commit = dict(record["acceptedCommits"][0])
+        record["acceptedCommits"] = [commit, dict(commit)]
+        record["dependencyOrder"] = [one.branch, one.branch]
+        with self.assertRaisesRegex(CoordinatorError, "duplicate_issue"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=record,
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_missing_evidence_is_refused(self) -> None:
+        one = self.fx.accept_issue(48, "ev.txt", "ev\n")
+        assembled = self.fx.assemble([one])
+        github = MemoryGitHub(repository="owner/name")
+        github.prs = dict(self.fx.github.prs)
+        with self.assertRaisesRegex(CoordinatorError, "evidence_missing"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=assembled["record"],
+                github=github,
+                expected_repository="owner/name",
+            )
+
+    def test_draft_pr_mismatch_is_refused(self) -> None:
+        one = self.fx.accept_issue(49, "pr.txt", "pr\n")
+        assembled = self.fx.assemble([one])
+        record = dict(assembled["record"])
+        record["phasePr"] = dict(record["phasePr"], number=99)
+        with self.assertRaisesRegex(CoordinatorError, "phase_pr_mismatch"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=record,
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+
+    def test_duplicate_isolated_state_is_refused(self) -> None:
+        one = self.fx.accept_issue(50, "exist.txt", "exist\n")
+        assembled = self.fx.assemble([one])
+        record = dict(assembled["record"])
+        record["candidateRevision"] = "ffffffffffffffff"
+        with self.assertRaisesRegex(CoordinatorError, "stale_commit"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=record,
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
+        drifted = dict(assembled["record"])
+        state_dir = Path(assembled["stateDir"])
+        drifted_on_disk = json.loads((state_dir / "phase-delivery-record.json").read_text(encoding="utf-8"))
+        drifted_on_disk["headSha"] = one.sha
+        (state_dir / "phase-delivery-record.json").write_text(
+            json.dumps(drifted_on_disk, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(CoordinatorError, "duplicate_active_phase"):
+            hydrate_existing_phase_state(
+                repo=self.fx.work,
+                record=drifted,
+                github=self.fx.github,
+                expected_repository="owner/name",
+            )
 
 
 if __name__ == "__main__":
