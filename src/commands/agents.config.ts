@@ -15,6 +15,11 @@ import {
 import { resolveAgentAvatarUrlFromSource } from "../agents/identity-avatar-file.js";
 import { loadAgentIdentityFromWorkspace } from "../agents/identity-file.js";
 import { pinLegacyInheritedAuthOwnerForRosterTransition } from "../agents/legacy-inherited-auth-dir.js";
+import {
+  authorizeProfileManifest,
+  parseCommonProfileManifest,
+  readOptionalProfileManifest,
+} from "../agents/profile-manifest.js";
 import { pinSurvivorWorkspaceForRosterCollapse } from "../config/agent-workspace-roster-transition.js";
 import { listRouteBindings } from "../config/bindings.js";
 import type { IdentityConfig } from "../config/types.base.js";
@@ -70,6 +75,21 @@ export function buildAgentSummaries(cfg: OpenClawConfig): AgentSummary[] {
   const ordered = uniqueStrings(orderedIds);
 
   return ordered.map((id) => {
+    const listedEntry = configuredAgents.find((entry) => normalizeAgentId(entry.id) === id);
+    const attachedManifest = readOptionalProfileManifest(listedEntry);
+    const inactiveProfile =
+      attachedManifest !== undefined &&
+      (!attachedManifest.ok || attachedManifest.value.activation !== "active");
+    if (inactiveProfile) {
+      return {
+        id,
+        name: normalizeOptionalString(listedEntry?.name),
+        workspace: "",
+        agentDir: "",
+        bindings: 0,
+        isDefault: false,
+      };
+    }
     const workspace = resolveAgentWorkspaceDir(cfg, id);
     const identity = loadAgentIdentityFromWorkspace(workspace);
     const agentConfig = resolveAgentConfig(cfg, id);
@@ -111,13 +131,32 @@ export function applyAgentConfig(
     agentDir?: string;
     model?: string | null;
     identity?: IdentityConfig;
+    profileManifest?: unknown;
   },
 ): OpenClawConfig {
+  if (params.profileManifest !== undefined) {
+    const parsed = parseCommonProfileManifest(params.profileManifest);
+    if (!parsed.ok) {
+      return cfg;
+    }
+    const authorized = authorizeProfileManifest(parsed.value, cfg);
+    if (!authorized.ok || authorized.value.activation !== "active") {
+      // Inactive manifests are source-only; they must not become roster actors.
+      return cfg;
+    }
+  }
   const agentId = normalizeAgentId(params.agentId);
   const name = params.name?.trim();
   const list = listAgentEntries(cfg);
   const index = findAgentEntryIndex(list, agentId);
   const base = (index >= 0 ? list[index] : undefined) ?? { id: agentId };
+  const existingManifest = readOptionalProfileManifest(base);
+  if (
+    existingManifest &&
+    (!existingManifest.ok || existingManifest.value.activation !== "active")
+  ) {
+    return cfg;
+  }
   const mergedIdentity = params.identity ? { ...base.identity, ...params.identity } : undefined;
   const nextEntry: AgentEntry = {
     ...base,
