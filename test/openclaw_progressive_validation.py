@@ -282,6 +282,9 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertFalse(secret["ok"])
         self.assertEqual(secret["hold"], MODULE.HOLD_SCAN)
         self.assertIn("new-or-changed-finding", secret["errors"])
+        self.assertEqual(len(secret["findings"]), 1)
+        self.assertEqual(secret["findings"][0]["kind"], "credential")
+        self.assertEqual(secret["scannedPaths"], [".github/linktrend-gitops-consumer.json"])
 
         skipped = MODULE.validate_phase(
             root=ROOT,
@@ -331,6 +334,52 @@ class ProgressiveValidationTests(unittest.TestCase):
         )
         self.assertFalse(incomplete["ok"])
         self.assertIn("scanner_incomplete_scope", incomplete["errors"])
+        self.assertEqual(incomplete["scannedPaths"], [])
+        self.assertEqual(incomplete["findings"], [])
+
+    def test_approved_fixture_is_not_a_new_or_changed_finding(self) -> None:
+        admitted = [".github/linktrend-gitops-consumer.json"]
+        result = MODULE.validate_phase(
+            root=ROOT,
+            profile="fast",
+            changed=admitted,
+            scanner=lambda _root, paths: {
+                "ok": True,
+                "findings": [
+                    {
+                        "kind": "approved_synthetic_fixture",
+                        "path": admitted[0],
+                        "rule": "assignment.secret",
+                    }
+                ],
+                "scannedPaths": list(paths),
+            },
+            write_evidence_file=False,
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["findings"][0]["kind"], "approved_synthetic_fixture")
+        self.assertEqual(result["scannedPaths"], admitted)
+
+    def test_ok_false_without_findings_is_scanner_error_not_new_finding(self) -> None:
+        admitted = [".github/linktrend-gitops-consumer.json"]
+        result = MODULE.validate_phase(
+            root=ROOT,
+            profile="fast",
+            changed=admitted,
+            scanner=lambda _root, paths: {
+                "ok": False,
+                "findings": [],
+                "scannedPaths": list(paths),
+            },
+            write_evidence_file=False,
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["hold"], MODULE.HOLD_SCAN)
+        self.assertIn("scanner-error", result["errors"])
+        self.assertNotIn("new-or-changed-finding", result["errors"])
+        self.assertEqual(result["findings"], [])
+        self.assertEqual(result["scannedPaths"], admitted)
 
     def test_upstream_untouched_files_absent_from_scan_and_test_evidence(self) -> None:
         recorded: list[str] = []
