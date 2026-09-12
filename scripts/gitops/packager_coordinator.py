@@ -93,6 +93,9 @@ COMPONENT_KIND = "phase_packager_coordinator"
 IS_PHASE_PACKAGER = True
 HANDOFF_REL = Path(".linktrend/phase-handoff.json")
 COORDINATOR_STATE_REL = Path("ide-development/phase-packager")
+ISOLATED_RECORD_NAME = "phase-delivery-record.json"
+ISOLATED_HANDOFF_NAME = "phase-handoff.json"
+ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME = "provider-consumer-handoff.json"
 PROTECTED_BRANCHES = frozenset({"development", "staging", "main"})
 ISSUE_BRANCH_RE = re.compile(r"^issue/([1-9][0-9]{0,8})-[a-z0-9]+(?:-[a-z0-9]+)*$")
 PHASE_BRANCH_RE = re.compile(r"^phase/[A-Za-z0-9._-]+$")
@@ -728,6 +731,47 @@ def _coordinator_state_dir(repo: Path, phase_branch: str) -> Path:
     return _git_common_dir(repo) / COORDINATOR_STATE_REL / phase_id
 
 
+def _read_isolated_state_pair(state_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read the published record/handoff pair from one directory.
+
+    Readers must treat these files as one generation. A missing sibling is
+    incomplete isolated state, not a usable mixed pair.
+    """
+
+    record_path = state_dir / ISOLATED_RECORD_NAME
+    handoff_path = state_dir / ISOLATED_HANDOFF_NAME
+    if not record_path.is_file() or not handoff_path.is_file():
+        raise CoordinatorError("isolated_state_incomplete", str(state_dir))
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    if not isinstance(record, dict) or not isinstance(handoff, dict):
+        raise CoordinatorError("isolated_state_incomplete", str(state_dir))
+    return record, handoff
+
+
+def _publish_isolated_state_dir(staging: Path, live: Path) -> None:
+    """Replace live isolated state with a complete staged directory.
+
+    Directory rename is the publication step. File-by-file replace would let a
+    crash pair a new record with a stale handoff (or the reverse). If live
+    cannot be replaced, roll the previous directory back so readers still see
+    the old complete pair.
+    """
+
+    backup: Path | None = None
+    try:
+        if live.exists():
+            backup = live.with_name(f".{live.name}-prev-{staging.name.lstrip('.')}")
+            os.rename(live, backup)
+        os.rename(staging, live)
+    except Exception:
+        if backup is not None and backup.exists() and not live.exists():
+            os.rename(backup, live)
+        raise
+    if backup is not None:
+        shutil.rmtree(backup, ignore_errors=True)
+
+
 def _local_sha(repo: Path, branch: str) -> str:
     value = _git(repo, "rev-parse", "--verify", f"refs/heads/{branch}", check=False)
     return normalize_sha(value) if is_valid_sha(value) else ""
@@ -856,29 +900,35 @@ def _write_isolated_state(
     handoff: Mapping[str, Any],
     provider_consumer_handoff: Mapping[str, Any] | None = None,
 ) -> Path:
-    state_dir = _coordinator_state_dir(repo, phase_branch)
-    state_dir.mkdir(parents=True, exist_ok=True)
+    live = _coordinator_state_dir(repo, phase_branch)
+    parent = live.parent
+    parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, Mapping[str, Any]] = {
-        "phase-delivery-record.json": record,
-        "phase-handoff.json": handoff,
+        ISOLATED_RECORD_NAME: record,
+        ISOLATED_HANDOFF_NAME: handoff,
     }
     if provider_consumer_handoff is not None:
-        payload["provider-consumer-handoff.json"] = provider_consumer_handoff
-    tmp_root = Path(tempfile.mkdtemp(prefix="phase-state-", dir=str(state_dir)))
+        payload[ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME] = provider_consumer_handoff
+    staging = Path(tempfile.mkdtemp(prefix=f".{live.name}-next-", dir=str(parent)))
+    published = False
     try:
-        staged: list[tuple[Path, Path]] = []
         for name, data in payload.items():
-            staged_path = tmp_root / name
-            staged_path.write_text(
+            (staging / name).write_text(
                 json.dumps(data, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8",
             )
-            staged.append((staged_path, state_dir / name))
-        for src, dest in staged:
-            os.replace(src, dest)
+        # Omitted optional provider-consumer handoff stays with the generation
+        # being replaced; dropping it here would change that reader contract.
+        if provider_consumer_handoff is None:
+            existing_typed = live / ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME
+            if existing_typed.is_file():
+                shutil.copy2(existing_typed, staging / ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME)
+        _publish_isolated_state_dir(staging, live)
+        published = True
     finally:
-        shutil.rmtree(tmp_root, ignore_errors=True)
-    return state_dir
+        if not published:
+            shutil.rmtree(staging, ignore_errors=True)
+    return live
 
 
 def _stable_title(phase_branch: str) -> str:
@@ -1189,7 +1239,7 @@ def hydrate_existing_phase_state(
     )
 
     state_dir = _coordinator_state_dir(repo, phase_branch)
-    record_path = state_dir / "phase-delivery-record.json"
+    record_path = state_dir / ISOLATED_RECORD_NAME
     identical = False
     if record_path.is_file():
         previous = json.loads(record_path.read_text(encoding="utf-8"))
@@ -1321,7 +1371,7 @@ def assemble_phase(
     _probe_conflicts(repo, development_sha, ordered)
 
     state_dir = _coordinator_state_dir(repo, phase_branch)
-    record_path = state_dir / "phase-delivery-record.json"
+    record_path = state_dir / ISOLATED_RECORD_NAME
     previous = None
     if record_path.is_file():
         previous = json.loads(record_path.read_text(encoding="utf-8"))

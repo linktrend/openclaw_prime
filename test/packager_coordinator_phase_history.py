@@ -3,16 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts.gitops.packager_coordinator import (
+    ISOLATED_HANDOFF_NAME,
+    ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME,
+    ISOLATED_RECORD_NAME,
     AcceptedSource,
     CoordinatorError,
     GitPushAdapter,
     MemoryGitHub,
+    _read_isolated_state_pair,
     _unique_phase_commits,
     assemble_phase,
     hydrate_existing_phase_state,
@@ -146,7 +152,7 @@ class ExistingPhaseStateHydrationTests(unittest.TestCase):
         self.addCleanup(self.fx.cleanup)
 
     def _clear_isolated_state(self, state_dir: Path) -> None:
-        for name in ("phase-delivery-record.json", "phase-handoff.json", "provider-consumer-handoff.json"):
+        for name in (ISOLATED_RECORD_NAME, ISOLATED_HANDOFF_NAME, ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME):
             path = state_dir / name
             if path.exists():
                 path.unlink()
@@ -177,8 +183,7 @@ class ExistingPhaseStateHydrationTests(unittest.TestCase):
         self.assertEqual(git(self.fx.work, "rev-parse", "HEAD"), caller)
         self.assertEqual(git(self.fx.work, "rev-parse", "--abbrev-ref", "HEAD"), "development")
         self.assertFalse((self.fx.work / ".linktrend" / "phase-handoff.json").exists())
-        written_record = json.loads((state_dir / "phase-delivery-record.json").read_text(encoding="utf-8"))
-        written_handoff = json.loads((state_dir / "phase-handoff.json").read_text(encoding="utf-8"))
+        written_record, written_handoff = _read_isolated_state_pair(state_dir)
         self.assertEqual(written_record["headSha"], assembled["headSha"])
         self.assertEqual(written_record["gitTree"], assembled["gitTree"])
         self.assertEqual(written_handoff["headCommit"], assembled["headSha"])
@@ -305,9 +310,9 @@ class ExistingPhaseStateHydrationTests(unittest.TestCase):
             )
         drifted = dict(assembled["record"])
         state_dir = Path(assembled["stateDir"])
-        drifted_on_disk = json.loads((state_dir / "phase-delivery-record.json").read_text(encoding="utf-8"))
+        drifted_on_disk, _handoff = _read_isolated_state_pair(state_dir)
         drifted_on_disk["headSha"] = one.sha
-        (state_dir / "phase-delivery-record.json").write_text(
+        (state_dir / ISOLATED_RECORD_NAME).write_text(
             json.dumps(drifted_on_disk, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
@@ -318,6 +323,144 @@ class ExistingPhaseStateHydrationTests(unittest.TestCase):
                 github=self.fx.github,
                 expected_repository="owner/name",
             )
+
+
+class IsolatedStateAtomicPublicationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fx = HydrationFixture()
+        self.addCleanup(self.fx.cleanup)
+
+    def _pair_identities(self, state_dir: Path) -> tuple[str, str, str, str]:
+        record, handoff = _read_isolated_state_pair(state_dir)
+        return (
+            str(record.get("headSha") or ""),
+            str(record.get("gitTree") or ""),
+            str(handoff.get("headCommit") or ""),
+            str(handoff.get("gitTree") or ""),
+        )
+
+    def test_failure_before_publication_keeps_old_complete_pair(self) -> None:
+        one = self.fx.accept_issue(61, "atomic-old.txt", "old\n")
+        assembled = self.fx.assemble([one])
+        state_dir = Path(assembled["stateDir"])
+        old_pair = self._pair_identities(state_dir)
+        self.assertEqual(old_pair[0], old_pair[2])
+        self.assertEqual(old_pair[1], old_pair[3])
+
+        def boom(staging: Path, live: Path) -> None:
+            raise RuntimeError("publication blocked")
+
+        with patch(
+            "scripts.gitops.packager_coordinator._publish_isolated_state_dir",
+            side_effect=boom,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "publication blocked"):
+                hydrate_existing_phase_state(
+                    repo=self.fx.work,
+                    record=assembled["record"],
+                    github=self.fx.github,
+                    expected_repository="owner/name",
+                )
+        self.assertEqual(self._pair_identities(state_dir), old_pair)
+        self.assertFalse(any(state_dir.parent.glob(f".{state_dir.name}-next-*")))
+
+    def test_failed_live_swap_rolls_back_to_old_complete_pair(self) -> None:
+        one = self.fx.accept_issue(62, "atomic-swap.txt", "swap\n")
+        assembled = self.fx.assemble([one])
+        state_dir = Path(assembled["stateDir"])
+        old_pair = self._pair_identities(state_dir)
+        real_rename = os.rename
+        calls = {"n": 0}
+
+        def flaky_rename(src: object, dst: object) -> None:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("swap failed")
+            real_rename(src, dst)
+
+        with patch("scripts.gitops.packager_coordinator.os.rename", side_effect=flaky_rename):
+            with self.assertRaises(OSError):
+                hydrate_existing_phase_state(
+                    repo=self.fx.work,
+                    record=assembled["record"],
+                    github=self.fx.github,
+                    expected_repository="owner/name",
+                )
+        self.assertEqual(self._pair_identities(state_dir), old_pair)
+
+    def test_successful_rewrite_publishes_new_complete_pair(self) -> None:
+        first = self.fx.accept_issue(63, "atomic-first.txt", "first\n")
+        assembled = self.fx.assemble([first])
+        state_dir = Path(assembled["stateDir"])
+        second = self.fx.accept_issue(64, "atomic-second.txt", "second\n")
+        updated = self.fx.assemble([first, second])
+        self.assertEqual(Path(updated["stateDir"]), state_dir)
+        record, handoff = _read_isolated_state_pair(state_dir)
+        self.assertEqual(record["headSha"], updated["headSha"])
+        self.assertEqual(record["gitTree"], updated["gitTree"])
+        self.assertEqual(handoff["headCommit"], updated["headSha"])
+        self.assertEqual(handoff["gitTree"], updated["gitTree"])
+        self.assertNotEqual(record["headSha"], assembled["headSha"])
+
+    def test_failure_before_first_publication_leaves_no_partial_pair(self) -> None:
+        one = self.fx.accept_issue(65, "atomic-empty.txt", "empty\n")
+        assembled = self.fx.assemble([one])
+        state_dir = Path(assembled["stateDir"])
+        for name in (ISOLATED_RECORD_NAME, ISOLATED_HANDOFF_NAME, ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME):
+            path = state_dir / name
+            if path.exists():
+                path.unlink()
+
+        def boom(staging: Path, live: Path) -> None:
+            raise RuntimeError("publication blocked")
+
+        with patch(
+            "scripts.gitops.packager_coordinator._publish_isolated_state_dir",
+            side_effect=boom,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "publication blocked"):
+                hydrate_existing_phase_state(
+                    repo=self.fx.work,
+                    record=assembled["record"],
+                    github=self.fx.github,
+                    expected_repository="owner/name",
+                )
+        self.assertFalse((state_dir / ISOLATED_RECORD_NAME).exists())
+        self.assertFalse((state_dir / ISOLATED_HANDOFF_NAME).exists())
+        with self.assertRaisesRegex(CoordinatorError, "isolated_state_incomplete"):
+            _read_isolated_state_pair(state_dir)
+
+    def test_omitted_provider_consumer_handoff_stays_with_replaced_generation(self) -> None:
+        one = self.fx.accept_issue(66, "typed-keep.txt", "keep\n")
+        typed = {
+            "schemaVersion": 1,
+            "kind": "provider-consumer-handoff",
+            "artifact": "optional-keep",
+        }
+        assembled = assemble_phase(
+            repo=self.fx.work,
+            repository="owner/name",
+            sources=[AcceptedSource(branch=one.branch, sha=one.sha, order=1)],
+            github=self.fx.github,
+            pusher=GitPushAdapter(),
+            phase_branch="phase/next",
+            expected_repository="owner/name",
+            provider_consumer_handoff=typed,
+        )
+        state_dir = Path(assembled["stateDir"])
+        result = hydrate_existing_phase_state(
+            repo=self.fx.work,
+            record=assembled["record"],
+            github=self.fx.github,
+            expected_repository="owner/name",
+        )
+        self.assertEqual(result["action"], "reused")
+        record, handoff = _read_isolated_state_pair(state_dir)
+        self.assertEqual(record["headSha"], handoff["headCommit"])
+        self.assertEqual(
+            json.loads((state_dir / ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME).read_text(encoding="utf-8")),
+            typed,
+        )
 
 
 if __name__ == "__main__":
