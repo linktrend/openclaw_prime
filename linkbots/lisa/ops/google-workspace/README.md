@@ -115,16 +115,17 @@ The Workspace skill release and gws interface catalogue binding are recorded in
 [`receipts/qualified-skills.receipt.json`](receipts/qualified-skills.receipt.json).
 OpenClaw records the provider release/tree, gws catalogue digest, and per-skill
 digests, then invokes only the finite wrapper verbs; it does not copy or execute
-reusable skill bodies from this repository. The receipt currently has
-`qualification-required` / `unavailable` status because an exact qualified
-release and provider receipt are not present; the execution gate is fail-closed
-and cannot activate a guessed skill release. Qualification remains a separate
-human-controlled gate.
+reusable skill bodies from this repository. Consumption is inert: wrappers
+compare a private runtime receipt to the committed source contract through
+`qualification-receipt.mjs` and otherwise stay fail-closed. The receipt currently
+has `qualification-required` / `unavailable` status because an exact qualified
+release and provider receipt are not present; the execution gate cannot
+activate a guessed skill release or a flags-only copy. Qualification remains a
+separate human-controlled gate. This packet does not scan or audit LiNKskills.
 
-The `smoke-gws` wrapper is additionally blocked unless that receipt is an exact
-qualified release receipt with `status=qualified`, `qualification.state=qualified`,
-and `executionGate=enabled`; an unavailable or guessed qualification never runs
-the provider smoke calls.
+Every wrapper route is blocked unless that runtime receipt is an exact
+qualified release receipt that passes `qualification-receipt.mjs`; an
+unavailable, source-only, or guessed qualification never invokes `gws`.
 The runtime receipt is private metadata at the configured Workspace root
 (`qualified-skills.receipt.json`); wrappers compare its provider and catalogue
 digests to the committed source receipt and require every required skill ID.
