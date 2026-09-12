@@ -1004,7 +1004,7 @@ class ProgressiveValidationTests(unittest.TestCase):
         )
         start = source.index("const NON_VITEST_VALIDATION = new Map([")
         end = source.index("]);", start)
-        return dict(re.findall(r'\["([^"]+)",\s*"([^"]+)"\s*,?\s*\]', source[start:end]))
+        return dict(re.findall(r'\[\s*"([^"]+)",\s*"([^"]+)"\s*,?\s*\]', source[start:end]))
 
     def test_non_vitest_maps_are_semantically_identical(self) -> None:
         self.assertEqual(self._planner_source_map(), dict(MODULE.NON_VITEST_VALIDATION))
