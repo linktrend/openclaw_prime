@@ -287,6 +287,8 @@ function isOwnedLisaCustomizationDirectoryTarget(
   cwd: string,
   fsImpl: VitestPathFs,
 ): boolean {
+  // Keep Lisa ops directories on the project router. Direct Vitest workspace
+  // filters find zero files because those tests are outside OpenClaw roots.
   const relative = toRepoRelativeArg(arg, cwd).replace(/\/+$/u, "");
   return (
     LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS.some((root) => isPathAtOrUnder(relative, root)) &&
