@@ -60,6 +60,11 @@ NON_VITEST_VALIDATION = {
     "test/packager_coordinator_phase_history.py": "phase-packager-history-tests",
     "scripts/gitops/packager_coordinator.py": "phase-packager-history-tests",
     "scripts/gitops/secret_scan.py": "progressive-validation-tests",
+    "scripts/gitops/coordinator/state.py": "phase-integrator-tests",
+    "scripts/gitops/phase_integrator.py": "phase-integrator-tests",
+    "scripts/gitops/receipt_seal.py": "receipt-seal-tests",
+    "test/phase_integrator.py": "phase-integrator-tests",
+    "test/receipt_seal.py": "receipt-seal-tests",
 }
 TEST_PROJECTS = (
     "node",
@@ -464,6 +469,14 @@ def non_vitest_command(validation: str, baseline: str, head: str) -> list[str]:
         "phase-packager-history-tests": [
             "env", "PYTHONPATH=.", "python3", "-m", "unittest", "discover",
             "-s", "test", "-p", "packager_coordinator_phase_history.py",
+        ],
+        "phase-integrator-tests": [
+            "env", "PYTHONPATH=.", "python3", "-m", "unittest", "discover",
+            "-s", "test", "-p", "phase_integrator.py",
+        ],
+        "receipt-seal-tests": [
+            "env", "PYTHONPATH=.", "python3", "-m", "unittest", "discover",
+            "-s", "test", "-p", "receipt_seal.py",
         ],
         "phase-diff-check": ["git", "diff", "--check", baseline, head],
     }
