@@ -1,4 +1,12 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import {
+  LISA_NONCODING_ROUTING,
+  lisaNonCodingFallbackRefs,
+  validateLisaNonCodingRouting,
+} from "../../linkbots/lisa/ops/model-routing.ts";
 import {
   admitTransientNonCodingRuntimeOverlay,
   boundClassifierContext,
@@ -237,5 +245,26 @@ describe("PKT-04 source-only non-coding route", () => {
         forbiddenConfig((config) => ({ ...config, exactModelIdsApproved: true as false })),
       ),
     ).toContain("exactModelIdsApproved must be false");
+  });
+
+  it("keeps the Lisa source contract aligned and founder-gated", () => {
+    expect(validateLisaNonCodingRouting()).toEqual([]);
+    expect(LISA_NONCODING_ROUTING).toMatchObject({
+      liveMutationAllowed: false,
+      exactModelIdsApproved: false,
+      paidRouteActivationAllowed: false,
+      activationState: "disabled_pending_founder_approval",
+    });
+    expect(lisaNonCodingFallbackRefs()).toEqual(defaultNonCodingRouteConfig().defaults.fallbacks);
+    const raw = JSON.parse(
+      readFileSync(
+        path.join(
+          path.dirname(fileURLToPath(import.meta.url)),
+          "../../linkbots/lisa/ops/model-routing.contract.json",
+        ),
+        "utf8",
+      ),
+    ) as { nonCodingRouting: typeof LISA_NONCODING_ROUTING };
+    expect(raw.nonCodingRouting).toEqual(LISA_NONCODING_ROUTING);
   });
 });
