@@ -1,14 +1,19 @@
 /**
  * PKT-04 non-coding route authority.
  *
- * This is a source-only, non-live contract. It describes transient choices;
+ * This is a source-only, non-live contract. It describes candidate slots;
  * callers must not write these values into Lisa's persistent defaults/session.
+ * Exact model IDs and paid-route activation stay disabled pending founder approval.
  */
 export const LISA_NONCODING_ROUTING_VERSION = "2026-08-24-transient-noncoding-routing-v1" as const;
 
 export const LISA_NONCODING_ROUTING = {
   version: LISA_NONCODING_ROUTING_VERSION,
   liveMutationAllowed: false,
+  exactModelIdsApproved: false,
+  paidRouteActivationAllowed: false,
+  sourceOnlyEvaluation: true,
+  activationState: "disabled_pending_founder_approval",
   classifier: {
     obviousRequestsSkipClassifier: true,
     ambiguousRequestsOnly: true,
@@ -46,6 +51,14 @@ export function validateLisaNonCodingRouting(
 ): string[] {
   const errors: string[] = [];
   if (routing.liveMutationAllowed !== false) errors.push("liveMutationAllowed must be false");
+  if (routing.exactModelIdsApproved !== false) errors.push("exactModelIdsApproved must be false");
+  if (routing.paidRouteActivationAllowed !== false) {
+    errors.push("paidRouteActivationAllowed must be false");
+  }
+  if (routing.sourceOnlyEvaluation !== true) errors.push("sourceOnlyEvaluation must be true");
+  if (routing.activationState !== "disabled_pending_founder_approval") {
+    errors.push("activationState must remain disabled_pending_founder_approval");
+  }
   if (routing.classifier.obviousRequestsSkipClassifier !== true) {
     errors.push("obviousRequestsSkipClassifier must be true");
   }
