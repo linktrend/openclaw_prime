@@ -26,6 +26,7 @@ import {
 import { createLazyImportLoader } from "../../shared/lazy-promise.js";
 import { isRecord } from "../../utils.js";
 import { extractReadableContent } from "../../web-fetch/content-extractors.runtime.js";
+import { admitGovernedWebFetch } from "../../web-fetch/governed-runtime.js";
 import { resolveWebProviderConfig } from "../../web/provider-runtime-shared.js";
 import { stringEnum } from "../schema/string-enum.js";
 import { writePrivateTempFile } from "../sessions/tools/private-temp-file.js";
@@ -1014,9 +1015,11 @@ export function createWebFetchTool(options?: {
         return providerFallbackCache;
       };
       const params = args as Record<string, unknown>;
-      const url = sanitizeWebFetchUrl(
-        readToolStringParam(params, "url", { required: true, trim: false }),
-      );
+      const url = admitGovernedWebFetch({
+        url: sanitizeWebFetchUrl(
+          readToolStringParam(params, "url", { required: true, trim: false }),
+        ),
+      }).url.href;
       const extractMode =
         readToolStringParam(params, "extractMode") === "text" ? "text" : "markdown";
       const maxChars = readPositiveIntegerParam(params, "maxChars");
