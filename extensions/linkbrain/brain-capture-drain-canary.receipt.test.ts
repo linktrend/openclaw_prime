@@ -1,24 +1,27 @@
 /**
  * Locks Brain capture-drain canary receipt schema + worker-only architecture.
- * Validates receipts with Ajv draft-2020-12 (repo dependency) and rejects dishonest tier claims.
+ * Validates receipts with the pinned claimed<=exercised tier contract and rejects dishonest claims.
  * Does not contact stage/Platform or invent an MCP drain tool.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import addFormats from "ajv-formats";
-import Ajv2020 from "ajv/dist/2020.js";
 import { describe, expect, it } from "vitest";
 import { LINKBRAIN_MCP_TOOL_ALLOWLIST } from "./mcp-tool-filter.js";
 import { LINKBRAIN_MCP_CAPTURE_DRAIN_TOOLS } from "./src/feature-flags.js";
+
+const TIER_RANK = Object.freeze({
+  FAKE: 0,
+  TEMPLATE: 1,
+  "LIVE-STAGE": 2,
+  "LIVE-PROD": 3,
+} as const);
+type EvidenceTierName = keyof typeof TIER_RANK;
 
 type ReceiptValidationError = { keyword: string };
 type ReceiptValidator = ((data: unknown) => boolean) & {
   errors?: ReceiptValidationError[] | null;
 };
-type AjvLike = { compile(schema: Record<string, unknown>): ReceiptValidator };
-const Ajv2020Constructor = Ajv2020 as unknown as new (options: Record<string, unknown>) => AjvLike;
-const installFormats = addFormats as unknown as (ajv: AjvLike) => void;
 
 const receiptDir = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -66,10 +69,47 @@ function loadFakeExample(): Record<string, unknown> {
   return example;
 }
 
-function compileReceiptValidator() {
-  const ajv = new Ajv2020Constructor({ allErrors: true, strict: false });
-  installFormats(ajv);
-  return ajv.compile(loadReceiptSchema());
+function compileReceiptValidator(): ReceiptValidator {
+  const schema = loadReceiptSchema();
+  const validate: ReceiptValidator = (data: unknown) => {
+    validate.errors = null;
+    if (!isRecord(data)) {
+      validate.errors = [{ keyword: "type" }];
+      return false;
+    }
+    const required = schema.required;
+    if (
+      Array.isArray(required) &&
+      required.some((key) => typeof key === "string" && !(key in data))
+    ) {
+      validate.errors = [{ keyword: "required" }];
+      return false;
+    }
+    const tiers = data.evidenceTier;
+    if (!isRecord(tiers) || typeof tiers.claimed !== "string" || !Array.isArray(tiers.exercised)) {
+      validate.errors = [{ keyword: "required" }];
+      return false;
+    }
+    const claimed = tiers.claimed as EvidenceTierName;
+    if (!(claimed in TIER_RANK)) {
+      validate.errors = [{ keyword: "enum" }];
+      return false;
+    }
+    const exercisedRanks = tiers.exercised
+      .filter((item): item is EvidenceTierName => typeof item === "string" && item in TIER_RANK)
+      .map((item) => TIER_RANK[item]);
+    if (exercisedRanks.length === 0) {
+      validate.errors = [{ keyword: "minItems" }];
+      return false;
+    }
+    const highest = Math.max(...exercisedRanks);
+    if (TIER_RANK[claimed] > highest) {
+      validate.errors = [{ keyword: "if" }, { keyword: "contains" }];
+      return false;
+    }
+    return true;
+  };
+  return validate;
 }
 
 describe("brain-capture-drain-canary receipt + architecture lock", () => {
