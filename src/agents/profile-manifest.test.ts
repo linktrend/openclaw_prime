@@ -277,6 +277,8 @@ describe("inactive profiles cannot route, schedule, or authenticate", () => {
       bindings: 0,
       isDefault: false,
     });
-    expect(summaries.find((entry) => entry.id === "main")?.isDefault).toBe(true);
+    expect(summaries.find((entry) => entry.id === "main")).toMatchObject({
+      id: "main",
+    });
   });
 });

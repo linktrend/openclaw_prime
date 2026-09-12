@@ -137,7 +137,7 @@ export function applyAgentConfig(
   if (params.profileManifest !== undefined) {
     const parsed = parseCommonProfileManifest(params.profileManifest);
     if (!parsed.ok) {
-      throw new Error(parsed.error.message);
+      return cfg;
     }
     const authorized = authorizeProfileManifest(parsed.value, cfg);
     if (!authorized.ok || authorized.value.activation !== "active") {

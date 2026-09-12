@@ -156,6 +156,51 @@ function readStringList(value: unknown, path: string): Result<string[], ProfileM
   return ok(unique);
 }
 
+function isOwnerToken(value: string): boolean {
+  return isOpaqueRef(value) || PROFILE_ID_RE.test(value);
+}
+
+function readOwnerRef(value: unknown, path: string): Result<string, ProfileManifestIssue> {
+  const text = normalizeOptionalString(value);
+  if (!text || !isOwnerToken(text)) {
+    return err(
+      issue("invalid-opaque-ref", `${path} must be an opaque reference or store identifier`, path),
+    );
+  }
+  return ok(text);
+}
+
+function readOwnerRefMap(
+  value: unknown,
+  path: string,
+): Result<Record<string, string>, ProfileManifestIssue> {
+  if (!isRecord(value)) {
+    return err(issue("invalid-shape", `${path} must be an object of owner tokens`, path));
+  }
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    return err(issue("invalid-shape", `${path} must declare at least one owner`, path));
+  }
+  const next: Record<string, string> = {};
+  for (const [key, raw] of entries) {
+    if (!PROFILE_ID_RE.test(key)) {
+      return err(
+        issue("invalid-shape", `${path} keys must be lowercase identifiers`, `${path}.${key}`),
+      );
+    }
+    const parsed = readOwnerRef(raw, `${path}.${key}`);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    next[key] = parsed.value;
+  }
+  return ok(
+    Object.fromEntries(
+      [...Object.entries(next)].sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  );
+}
+
 function readOpaqueRef(value: unknown, path: string): Result<string, ProfileManifestIssue> {
   const text = normalizeOptionalString(value);
   if (!text || !isOpaqueRef(text)) {
@@ -226,6 +271,9 @@ export function findLiveProfileFields(value: unknown, path = "$"): string[] {
     }
     for (const [key, child] of Object.entries(node)) {
       const childPath = `${nodePath}.${key}`;
+      if (key === "exclusions" && isRecord(child)) {
+        continue;
+      }
       if (LIVE_FIELD_KEY_SET.has(key)) {
         found.push(childPath);
       }
@@ -345,7 +393,7 @@ export function parseCommonProfileManifest(
   if (!toolExposure.ok) {
     return toolExposure;
   }
-  const stateOwners = readOpaqueRefMap(value.stateOwners, "stateOwners");
+  const stateOwners = readOwnerRefMap(value.stateOwners, "stateOwners");
   if (!stateOwners.ok) {
     return stateOwners;
   }
