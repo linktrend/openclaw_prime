@@ -9,14 +9,21 @@ Google account, run a production canary, or grant execution approval.
 The committed receipt is
 `linkbots/lisa/ops/receipts/pkt-11-source-acceptance.receipt.json`. It is
 bound to the protected development base recorded in the receipt and covers
-only the PKT-11 owned paths. The receipt intentionally lists PKT-01 through
-PKT-10 as required but not reproduced; their exact accepted commit/tree
+only the PKT-11 owned paths. The receipt schema keeps `openclaw/openclaw` +
+`origin/development` as that protected-base identity because the source-base
+preflight contract shares it; this packet does not retarget the identity and
+does not scan upstream OpenClaw. The receipt intentionally lists PKT-01
+through PKT-10 as required but not reproduced; their exact accepted commit/tree
 receipts must be read from the external runtime authority snapshot.
 
 The receipt is deterministic: its digest is over the canonical JSON payload
 without `receiptDigestSha256`. `validateSourceAcceptanceReceipt` rejects a
-changed source identity, owned/prohibited path set, dependency reproduction,
-gate claim, action flag, or rollback claim.
+changed source identity, owned/prohibited path set, extra properties,
+dependency reproduction, a `blocked-hash-mismatch` package status, gate claim,
+action flag, or rollback claim. The companion schemas are
+`linkbots/lisa/ops/receipts/pkt-11-source-acceptance.schema.json` and
+`linkbots/lisa/ops/receipts/pkt-11-pre-vps-qualification.schema.json`
+(`additionalProperties: false`).
 
 ## Current source posture
 
@@ -53,8 +60,20 @@ The harness and validator are additive exports from
   no target path or external result.
 - `buildPkt11OfflineRollbackEvidence` requires all installed files to be
   removed from the disposable target and never claims live restore.
-- `validatePkt11PreVpsQualificationReceipt` rejects sensitive fields, digest
-  tampering, missing package proof, non-HOLD gates, and any live-action flag.
+- `validatePkt11PreVpsQualificationReceipt` rejects extra properties, sensitive
+  fields, digest tampering, missing package proof, non-HOLD gates, and any
+  live-action flag.
+
+Source-only CLI checks (no VPS, credentials, or live mutation):
+
+```sh
+node linkbots/lisa/ops/lisa-vps-reconciliation.mjs verify-acceptance \
+  --receipt linkbots/lisa/ops/receipts/pkt-11-source-acceptance.receipt.json
+node --experimental-strip-types \
+  --import ./linkbots/lisa/ops/register-strip-types-js-resolve.mjs \
+  linkbots/lisa/ops/stage-workspace-package.ts verify-pre-vps-receipt \
+  --receipt linkbots/lisa/ops/receipts/pkt-11-pre-vps-qualification.receipt.json
+```
 
 ## External gates remain separate
 

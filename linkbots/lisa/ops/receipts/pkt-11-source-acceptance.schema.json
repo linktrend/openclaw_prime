@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openclaw.local/schemas/lisa/pkt-11-source-acceptance-v1.json",
+  "title": "PKT-11 source-only Lisa integration acceptance receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receiptType",
+    "status",
+    "packet",
+    "sourceBase",
+    "ownedPaths",
+    "prohibitedPaths",
+    "dependencyPackets",
+    "artifacts",
+    "gates",
+    "actions",
+    "rollback",
+    "receiptDigestSha256"
+  ],
+  "properties": {
+    "receiptType": { "const": "lisa_pkt_11_source_acceptance_receipt_v1" },
+    "status": { "const": "source-prepared" },
+    "packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "issue", "executionState"],
+      "properties": {
+        "id": { "const": "PKT-11" },
+        "issue": { "const": "ISS-11" },
+        "executionState": { "const": "PLAN" }
+      }
+    },
+    "sourceBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "ref", "commit", "tree"],
+      "properties": {
+        "repository": { "const": "openclaw/openclaw" },
+        "ref": { "const": "origin/development" },
+        "commit": { "$ref": "#/$defs/gitSha" },
+        "tree": { "$ref": "#/$defs/gitSha" }
+      }
+    },
+    "ownedPaths": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "prohibitedPaths": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "dependencyPackets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "reproduced", "resolution"],
+      "properties": {
+        "required": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "items": { "type": "string", "pattern": "^PKT-(0[1-9]|10)$" }
+        },
+        "reproduced": { "type": "array", "maxItems": 0, "items": { "type": "string" } },
+        "resolution": {
+          "const": "exact accepted commit/tree receipts are consumed from the external runtime authority snapshot"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reconciliationTool", "stageWorkspacePackage", "providerQualificationReference"],
+      "properties": {
+        "reconciliationTool": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sourceOnly", "liveActions"],
+          "properties": {
+            "path": { "const": "linkbots/lisa/ops/lisa-vps-reconciliation.mjs" },
+            "sourceOnly": { "const": true },
+            "liveActions": { "const": false }
+          }
+        },
+        "stageWorkspacePackage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sourceReceiptType",
+            "status",
+            "packageId",
+            "manifestSha256",
+            "fileCount",
+            "mutableSeeds",
+            "liveMutationAllowed"
+          ],
+          "properties": {
+            "sourceReceiptType": { "const": "lisa_stage_workspace_package_source_receipt_v1" },
+            "status": { "const": "verified-source" },
+            "packageId": { "type": "string", "minLength": 1 },
+            "manifestSha256": { "$ref": "#/$defs/sha256" },
+            "fileCount": { "type": "integer", "minimum": 1 },
+            "mutableSeeds": { "const": false },
+            "liveMutationAllowed": { "const": false }
+          }
+        },
+        "providerQualificationReference": { "type": "string", "minLength": 1 }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerReleaseSetAccepted",
+        "independentTerraVerification",
+        "independentReview",
+        "stageDeployment",
+        "vpsDeployment",
+        "productionCanary",
+        "principalAcceptance",
+        "rollbackVerification"
+      ],
+      "properties": {
+        "providerReleaseSetAccepted": { "$ref": "#/$defs/holdGate" },
+        "independentTerraVerification": { "$ref": "#/$defs/holdGate" },
+        "independentReview": { "$ref": "#/$defs/holdGate" },
+        "stageDeployment": { "$ref": "#/$defs/holdGate" },
+        "vpsDeployment": { "$ref": "#/$defs/holdGate" },
+        "productionCanary": { "$ref": "#/$defs/holdGate" },
+        "principalAcceptance": { "$ref": "#/$defs/holdGate" },
+        "rollbackVerification": { "$ref": "#/$defs/holdGate" }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vpsTouched",
+        "liveLisaTouched",
+        "productionTouched",
+        "scheduleChangesApplied",
+        "oauthOrLiveGoogleCalls",
+        "privateDataRecorded"
+      ],
+      "properties": {
+        "vpsTouched": { "const": false },
+        "liveLisaTouched": { "const": false },
+        "productionTouched": { "const": false },
+        "scheduleChangesApplied": { "const": false },
+        "oauthOrLiveGoogleCalls": { "const": false },
+        "privateDataRecorded": { "const": false }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "sourceRevertAvailable",
+        "liveRestorePerformed",
+        "rollbackVerified",
+        "approvalRequired"
+      ],
+      "properties": {
+        "strategy": { "const": "revert-this-source-checkpoint-before-any-promotion" },
+        "sourceRevertAvailable": { "const": true },
+        "liveRestorePerformed": { "const": false },
+        "rollbackVerified": { "const": false },
+        "approvalRequired": { "const": true }
+      }
+    },
+    "receiptDigestSha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "gitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "holdGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "requiredEvidence"],
+      "properties": {
+        "status": { "const": "HOLD" },
+        "requiredEvidence": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
