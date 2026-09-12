@@ -1213,7 +1213,7 @@ function toScopedIncludePattern(arg: string, cwd: string) {
 // Lisa customization tests sit outside OpenClaw source roots. Inventory only
 // these explicit owners so directory targets can match without scanning all of
 // linkbots or changing the full-suite include set.
-const LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS = [
+export const LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS = [
   "linkbots/lisa/ops/backup",
   "linkbots/lisa/ops/deployment",
 ] as const;

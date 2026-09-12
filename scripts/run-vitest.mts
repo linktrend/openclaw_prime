@@ -17,6 +17,7 @@ import { resolveExtensionTestConfig } from "./lib/extension-test-plan.mts";
 import { createGatewayServerTestTargetChunks } from "./lib/gateway-server-test-plan.mts";
 import { resolveRepoRoot } from "./lib/repo-root.mjs";
 import { spawnTestProjectsRunner } from "./lib/test-projects-delegation.mts";
+import { LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS } from "./test-projects.test-support.mts";
 import {
   prepareE2eVitestRuntime,
   resolveVitestCliEntry,
@@ -281,6 +282,18 @@ function isOwnedAgentDirectoryTarget(arg: string, cwd: string, fsImpl: VitestPat
   );
 }
 
+function isOwnedLisaCustomizationDirectoryTarget(
+  arg: string,
+  cwd: string,
+  fsImpl: VitestPathFs,
+): boolean {
+  const relative = toRepoRelativeArg(arg, cwd).replace(/\/+$/u, "");
+  return (
+    LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS.some((root) => isPathAtOrUnder(relative, root)) &&
+    isExplicitDirectoryTargetArg(arg, cwd, fsImpl)
+  );
+}
+
 function isOwnedExtensionRootTarget(arg: string, cwd: string, fsImpl: VitestPathFs): boolean {
   const relative = toRepoRelativeArg(arg, cwd).replace(/\/+$/u, "");
   const [root, extensionId, ...remainder] = relative.split("/");
@@ -315,6 +328,7 @@ function isExplicitProjectRouterTargetArg(
   return fsImpl.existsSync(filePath)
     ? isDelegableBroadProjectRouterTarget(arg, cwd) ||
         isOwnedAgentDirectoryTarget(arg, cwd, fsImpl) ||
+        isOwnedLisaCustomizationDirectoryTarget(arg, cwd, fsImpl) ||
         isPluginControlUiPath(toRepoRelativeArg(arg, cwd)) ||
         isOwnedExtensionRootTarget(arg, cwd, fsImpl)
     : path.extname(arg) === "" &&
