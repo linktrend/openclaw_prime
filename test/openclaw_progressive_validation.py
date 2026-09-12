@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -24,6 +25,13 @@ SPEC.loader.exec_module(MODULE)
 
 OCP01_BASE = "7aee52d52695ab50bfa13dd275a68d28a5cbbe6b"
 OCP01_HEAD = "566d6f2140fd86c5fb6fee7da6d58b3629442287"
+RECEIPT_IDENTITY_FOCUSED = (
+    ("scripts/gitops/coordinator/state.py", "phase-integrator-tests"),
+    ("scripts/gitops/phase_integrator.py", "phase-integrator-tests"),
+    ("scripts/gitops/receipt_seal.py", "receipt-seal-tests"),
+    ("test/phase_integrator.py", "phase-integrator-tests"),
+    ("test/receipt_seal.py", "receipt-seal-tests"),
+)
 OCP01_PATHS = (
     "extensions/codex/src/app-server/client-runtime.ts",
     "extensions/codex/src/app-server/event-projector-terminal-failure.ts",
@@ -989,6 +997,148 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         self.assertEqual(planner_calls, [])
         self.assertEqual(test_calls, [])
+
+    def _planner_source_map(self) -> dict[str, str]:
+        source = (ROOT / ".linktrend/openclaw-prime/resolve_customization_tests.mts").read_text(
+            encoding="utf-8"
+        )
+        start = source.index("const NON_VITEST_VALIDATION = new Map([")
+        end = source.index("]);", start)
+        return dict(re.findall(r'\["([^"]+)",\s*"([^"]+)"\]', source[start:end]))
+
+    def test_non_vitest_maps_are_semantically_identical(self) -> None:
+        self.assertEqual(self._planner_source_map(), dict(MODULE.NON_VITEST_VALIDATION))
+
+    def test_receipt_identity_paths_use_declared_focused_python_tests(self) -> None:
+        expected = dict(RECEIPT_IDENTITY_FOCUSED)
+        for path, validation in RECEIPT_IDENTITY_FOCUSED:
+            self.assertEqual(MODULE.NON_VITEST_VALIDATION[path], validation)
+            self.assertEqual(self._planner_source_map()[path], validation)
+        self.assertEqual(
+            MODULE.non_vitest_command("phase-integrator-tests", OCP01_BASE, OCP01_HEAD),
+            [
+                "env",
+                "PYTHONPATH=.",
+                "python3",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "test",
+                "-p",
+                "phase_integrator.py",
+            ],
+        )
+        self.assertEqual(
+            MODULE.non_vitest_command("receipt-seal-tests", OCP01_BASE, OCP01_HEAD),
+            [
+                "env",
+                "PYTHONPATH=.",
+                "python3",
+                "-m",
+                "unittest",
+                "discover",
+                "-s",
+                "test",
+                "-p",
+                "receipt_seal.py",
+            ],
+        )
+        changed = sorted(expected)
+        validations = [
+            {"path": path, "validation": MODULE.NON_VITEST_VALIDATION[path]}
+            for path in changed
+        ]
+        payload = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "mode": "targets",
+            "targets": [],
+            "skippedBroadFallbackPaths": [],
+            "changedPaths": changed,
+            "changedPathsDigest": MODULE.canonical_digest(changed),
+            "baselineCommit": OCP01_BASE,
+            "headCommit": OCP01_HEAD,
+            "nonVitestValidations": validations,
+        }
+        accepted = MODULE.validate_planner_payload(
+            payload,
+            changed,
+            OCP01_BASE,
+            OCP01_HEAD,
+            ROOT,
+        )
+        self.assertEqual(accepted["targets"], [])
+        self.assertEqual(accepted["skippedBroadFallbackPaths"], [])
+        self.assertEqual(accepted["nonVitestValidations"], validations)
+        self.assertEqual(
+            {item["validation"] for item in accepted["nonVitestValidations"]},
+            {"phase-integrator-tests", "receipt-seal-tests"},
+        )
+
+    def test_receipt_identity_native_planner_stays_narrow_non_vitest(self) -> None:
+        files = {
+            path: (ROOT / path).read_text(encoding="utf-8") + "# focused-mapping-probe\n"
+            for path, _validation in RECEIPT_IDENTITY_FOCUSED
+        }
+        executed = self._run_native_planner_for_paths(files)
+        self.assertNotIn("tsx/esm", executed.stderr)
+        self.assertNotIn("relevant_tests_broadened", executed.stderr)
+        self.assertEqual(executed.returncode, 0, executed.stderr)
+        payload = json.loads(executed.stdout)
+        changed = sorted(path for path, _validation in RECEIPT_IDENTITY_FOCUSED)
+        self.assertEqual(payload["mode"], "targets")
+        self.assertEqual(payload["targets"], [])
+        self.assertEqual(payload["skippedBroadFallbackPaths"], [])
+        self.assertEqual(payload["changedPaths"], changed)
+        self.assertEqual(
+            payload["nonVitestValidations"],
+            [
+                {"path": path, "validation": MODULE.NON_VITEST_VALIDATION[path]}
+                for path in changed
+            ],
+        )
+        accepted = MODULE.validate_planner_payload(
+            payload,
+            changed,
+            payload["baselineCommit"],
+            payload["headCommit"],
+            ROOT,
+        )
+        self.assertEqual(accepted["targets"], [])
+        executed_cmds: list[list[str]] = []
+        result = MODULE.run_relevant_tests(
+            ROOT,
+            payload["baselineCommit"],
+            payload["headCommit"],
+            changed,
+            execute=True,
+            planner_runner=lambda _cmd: self._completed(0, json.dumps(payload)),
+            validation_runner=lambda command: executed_cmds.append(list(command))
+            or self._completed(0, "ok"),
+        )
+        self.assertEqual(
+            sorted(row["validation"] for row in result["nonVitestResults"]),
+            ["phase-integrator-tests", "receipt-seal-tests"],
+        )
+        self.assertEqual(len(executed_cmds), 2)
+        self.assertIn(
+            MODULE.non_vitest_command(
+                "phase-integrator-tests",
+                payload["baselineCommit"],
+                payload["headCommit"],
+            ),
+            executed_cmds,
+        )
+        self.assertIn(
+            MODULE.non_vitest_command(
+                "receipt-seal-tests",
+                payload["baselineCommit"],
+                payload["headCommit"],
+            ),
+            executed_cmds,
+        )
+        self.assertIsNone(result["command"])
 
 
 if __name__ == "__main__":

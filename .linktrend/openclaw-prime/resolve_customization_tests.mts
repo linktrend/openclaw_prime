@@ -53,6 +53,11 @@ const NON_VITEST_VALIDATION = new Map([
   ["test/packager_coordinator_phase_history.py", "phase-packager-history-tests"],
   ["scripts/gitops/packager_coordinator.py", "phase-packager-history-tests"],
   ["scripts/gitops/secret_scan.py", "progressive-validation-tests"],
+  ["scripts/gitops/coordinator/state.py", "phase-integrator-tests"],
+  ["scripts/gitops/phase_integrator.py", "phase-integrator-tests"],
+  ["scripts/gitops/receipt_seal.py", "receipt-seal-tests"],
+  ["test/phase_integrator.py", "phase-integrator-tests"],
+  ["test/receipt_seal.py", "receipt-seal-tests"],
 ]);
 
 function fail(reason, extra = {}) {
