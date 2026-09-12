@@ -107,6 +107,35 @@ class CandidateIdentity:
         return json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
 
 
+def comparable_sealed_identity(payload: Mapping[str, Any]) -> dict[str, str | None]:
+    """Project a sealed Phase identity onto receipt-comparable fields.
+
+    Phase-local records use ``sourceSha`` / ``gitTreeSha`` / ``testProfile``.
+    Schema-v2 FullSuiteReceipt uses ``headCommit`` / ``gitTree`` / ``profileDigest``
+    and has no ``candidateId``. This view does not hash either shape; callers
+    must not treat a schema-v2 canonical digest as the Phase Candidate ID.
+    """
+
+    if not isinstance(payload, Mapping):
+        raise StateError("invalid_candidate_identity", "sealed identity must be an object")
+    repository = payload.get("repository")
+    head = payload.get("sourceSha") or payload.get("headCommit")
+    tree = payload.get("gitTreeSha") or payload.get("gitTree")
+    test_profile = payload.get("testProfile")
+    profile_digest = payload.get("profileDigest")
+    dependency_digest = payload.get("dependencyDigest")
+    workflow_digest = payload.get("workflowDigest")
+    return {
+        "repository": repository if isinstance(repository, str) and repository else None,
+        "headCommit": head if isinstance(head, str) and head else None,
+        "gitTree": tree if isinstance(tree, str) and tree else None,
+        "testProfile": test_profile if isinstance(test_profile, str) and test_profile else None,
+        "profileDigest": profile_digest if isinstance(profile_digest, str) and profile_digest else None,
+        "dependencyDigest": dependency_digest if isinstance(dependency_digest, str) else None,
+        "workflowDigest": workflow_digest if isinstance(workflow_digest, str) else None,
+    }
+
+
 def _git(repo: Path, *args: str) -> str:
     result = subprocess.run(["git", *args], cwd=repo, text=True, capture_output=True, check=False)
     if result.returncode:
