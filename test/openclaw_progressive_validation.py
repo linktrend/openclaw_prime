@@ -32,6 +32,30 @@ RECEIPT_IDENTITY_FOCUSED = (
     ("test/phase_integrator.py", "phase-integrator-tests"),
     ("test/receipt_seal.py", "receipt-seal-tests"),
 )
+# Exact Full run 34698344794 skippedBroadFallbackPaths that lacked a declared
+# fork mapping. Keep this list path-exact; do not replace it with a prefix.
+PHASE315_SKIPPED_FORK_PATHS = (
+    ("linkbots/lisa/docs/LISA-BACKUP-DEPLOYMENT-RUNBOOK.md", "phase-diff-check"),
+    ("linkbots/lisa/docs/LISA-JOBS-SOURCE-OPERATIONS.md", "phase-diff-check"),
+    ("linkbots/lisa/docs/LISA-MODEL-ROUTING-CONTRACT-2026-08-01.md", "phase-diff-check"),
+    ("linkbots/lisa/docs/LISA-PKT-09-SOURCE-ACCEPTANCE.md", "phase-diff-check"),
+    ("linkbots/lisa/ops/backup/backup.test.ts", "phase-diff-check"),
+    ("linkbots/lisa/ops/backup/vitest.config.ts", "phase-diff-check"),
+    ("linkbots/lisa/ops/deployment/deployment.test.ts", "phase-diff-check"),
+    ("linkbots/lisa/ops/deployment/vitest.config.ts", "phase-diff-check"),
+    ("linkbots/lisa/ops/jobs/lisa-job-catalogue.test.ts", "phase-diff-check"),
+    ("linkbots/lisa/ops/jobs/lisa-job-desired-state.ts", "phase-diff-check"),
+    ("linkbots/lisa/ops/jobs/time-management/procedure.md", "lisa-time-management-tests"),
+    ("linkbots/lisa/ops/model-routing.contract.json", "phase-diff-check"),
+    ("linkbots/lisa/ops/model-routing.test.ts", "phase-diff-check"),
+    ("linkbots/lisa/ops/templates/README.md", "lisa-template-registry-tests"),
+    ("src/commands/agents.config.ts", "agents-config-tests"),
+    ("src/state/lisa-compliance-state-schema.ts", "phase-diff-check"),
+    ("src/state/lisa-principal-task-schema.ts", "phase-diff-check"),
+    ("test/vitest/vitest.linkbots-paths.d.mts", "phase-diff-check"),
+    ("test/vitest/vitest.linkbots-paths.mjs", "phase-diff-check"),
+    ("test/vitest/vitest.tooling.config.ts", "phase-diff-check"),
+)
 OCP01_PATHS = (
     "extensions/codex/src/app-server/client-runtime.ts",
     "extensions/codex/src/app-server/event-projector-terminal-failure.ts",
@@ -1139,6 +1163,77 @@ class ProgressiveValidationTests(unittest.TestCase):
             executed_cmds,
         )
         self.assertIsNone(result["command"])
+
+    def test_phase315_skipped_fork_paths_use_declared_focused_tests(self) -> None:
+        expected = dict(PHASE315_SKIPPED_FORK_PATHS)
+        planner_source = (ROOT / ".linktrend/openclaw-prime/resolve_customization_tests.mts").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('["linkbots/lisa/docs", "phase-diff-check"]', planner_source)
+        self.assertNotIn('["linkbots/lisa/ops", "phase-diff-check"]', planner_source)
+        self.assertNotIn('["src/commands", "agents-config-tests"]', planner_source)
+        self.assertNotIn("linkbots/lisa/docs/*", planner_source)
+        for path, validation in PHASE315_SKIPPED_FORK_PATHS:
+            self.assertEqual(MODULE.NON_VITEST_VALIDATION[path], validation)
+            self.assertEqual(self._planner_source_map()[path], validation)
+            self.assertIn(f'["{path}", "{validation}"]', planner_source)
+        self.assertEqual(
+            MODULE.non_vitest_command("lisa-time-management-tests", OCP01_BASE, OCP01_HEAD),
+            [
+                "node",
+                "scripts/run-vitest.mjs",
+                "linkbots/lisa/ops/jobs/time-management/time-management.test.ts",
+            ],
+        )
+        self.assertEqual(
+            MODULE.non_vitest_command("lisa-template-registry-tests", OCP01_BASE, OCP01_HEAD),
+            [
+                "node",
+                "scripts/run-vitest.mjs",
+                "linkbots/lisa/ops/templates/template-registry.test.ts",
+            ],
+        )
+        self.assertEqual(
+            MODULE.non_vitest_command("agents-config-tests", OCP01_BASE, OCP01_HEAD),
+            ["node", "scripts/run-vitest.mjs", "src/commands/agents.test.ts"],
+        )
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
+            MODULE.non_vitest_command("undeclared-fork-mapping", OCP01_BASE, OCP01_HEAD)
+        changed = sorted(expected)
+        validations = [
+            {"path": path, "validation": MODULE.NON_VITEST_VALIDATION[path]}
+            for path in changed
+        ]
+        payload = {
+            "schemaVersion": 1,
+            "kind": "customization-test-target-plan",
+            "mode": "targets",
+            "targets": [],
+            "skippedBroadFallbackPaths": [],
+            "changedPaths": changed,
+            "changedPathsDigest": MODULE.canonical_digest(changed),
+            "baselineCommit": OCP01_BASE,
+            "headCommit": OCP01_HEAD,
+            "nonVitestValidations": validations,
+        }
+        accepted = MODULE.validate_planner_payload(
+            payload,
+            changed,
+            OCP01_BASE,
+            OCP01_HEAD,
+            ROOT,
+        )
+        self.assertEqual(accepted["skippedBroadFallbackPaths"], [])
+        self.assertEqual(accepted["nonVitestValidations"], validations)
+        self.assertEqual(
+            {item["validation"] for item in accepted["nonVitestValidations"]},
+            {
+                "agents-config-tests",
+                "lisa-template-registry-tests",
+                "lisa-time-management-tests",
+                "phase-diff-check",
+            },
+        )
 
 
 if __name__ == "__main__":
