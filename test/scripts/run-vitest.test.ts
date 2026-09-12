@@ -556,6 +556,16 @@ registerHooks({resolve(specifier, context, nextResolve) {
     expect(resolveTestProjectsDelegationArgs([prefix])).toEqual([prefix]);
   });
 
+  it("delegates Lisa backup and deployment directories to the project router", () => {
+    expect(resolveTestProjectsDelegationArgs(["linkbots/lisa/ops/backup"])).toEqual([
+      "linkbots/lisa/ops/backup",
+    ]);
+    expect(resolveTestProjectsDelegationArgs(["linkbots/lisa/ops/deployment"])).toEqual([
+      "linkbots/lisa/ops/deployment",
+    ]);
+    expect(resolveTestProjectsDelegationArgs(["linkbots/lisa/ops/google-workspace"])).toBeNull();
+  });
+
   it("delegates an existing extension root to the project router", () => {
     const directory = "extensions/codex";
 
