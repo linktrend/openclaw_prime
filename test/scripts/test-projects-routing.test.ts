@@ -4,10 +4,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expectDefined } from "@openclaw/normalization-core";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveVitestCliEntry } from "../../scripts/lib/vitest-build-prerequisites.mts";
 import { resolveVitestNodeArgs } from "../../scripts/lib/vitest-process-env.mts";
 import { withEnv } from "../../src/test-utils/env.js";
+import { createApprovedLinkbotsNodeTestAliasPlugin } from "../../test/vitest/vitest.linkbots-paths.mjs";
 
 const {
   applyParallelVitestCachePaths,
@@ -387,6 +388,24 @@ describe("test-projects args", () => {
         watchMode: false,
       },
     ]);
+  });
+
+  it("remaps node:test to vitest only for the approved Lisa model-routing test", async () => {
+    const plugin = createApprovedLinkbotsNodeTestAliasPlugin();
+    const resolved = { id: "vitest" };
+    const vitestResolve = vi.fn().mockResolvedValue(resolved);
+    const remap = plugin.resolveId.bind({ resolve: vitestResolve });
+
+    await expect(
+      remap("node:test", "/workspace/linkbots/lisa/ops/model-routing.test.ts"),
+    ).resolves.toEqual(resolved);
+    await expect(
+      remap("node:test", "/workspace/linkbots/lisa/ops/model-routing-contract.test.ts"),
+    ).resolves.toBeNull();
+    await expect(
+      remap("node:assert/strict", "linkbots/lisa/ops/model-routing.test.ts"),
+    ).resolves.toBeNull();
+    expect(vitestResolve).toHaveBeenCalledTimes(1);
   });
 
   it("does not broaden linkbots discovery beyond the approved model-routing test", () => {
