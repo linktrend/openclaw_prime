@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { buildLisaCatalogueCronPlan } from "../stage-ops-cron-installer.ts";
 import { buildBatteryPrediction, evaluateHeartbeatBatteryAlert } from "./compliance/battery.ts";
 import type { BatteryObservation, BatteryRate } from "./compliance/compliance-contracts.ts";
 import { classifySelfieReport, shouldSendConditionalSelfieReminder } from "./compliance/selfie.ts";
@@ -13,11 +12,13 @@ import {
   validateLisaJobCatalogue,
 } from "./lisa-job-catalogue.ts";
 import {
+  LISA_DESIRED_DECLARATION_KEYS,
   LISA_JOB_DESIRED_STATE,
   assertValidLisaJobDesiredState,
   diffLisaJobDesiredState,
   validateLisaJobDesiredState,
 } from "./lisa-job-desired-state.ts";
+import { LISA_OPERATIONAL_DECLARATION_KEYS } from "./lisa-live-job-ownership.mjs";
 import {
   createMaintenanceState,
   completeMaintenanceStage,
@@ -26,7 +27,11 @@ import {
 } from "./maintenance/maintenance-contracts.ts";
 import { planMaintenance } from "./maintenance/maintenance.ts";
 import { renderLisaJobTemplate } from "./render-lisa-job-template.ts";
-import type { LisaReportItem } from "./reporting/reporting-contracts.ts";
+import {
+  DIGEST_PREPARATION_DEADLINES,
+  FLASH_PREPARATION_DEADLINES,
+  type LisaReportItem,
+} from "./reporting/reporting-contracts.ts";
 import { renderExecutiveDigest, renderFlashReport } from "./reporting/reporting.ts";
 
 const item = (text: string, kind?: LisaReportItem["kind"]): LisaReportItem => ({
@@ -137,18 +142,24 @@ describe("Lisa ten-family catalogue", () => {
     expect(mismatch.reason).toMatch(/mismatch|missing/i);
   });
 
-  it("builds a disabled source cron plan without turning embedded checkpoints into timers", () => {
-    const plan = buildLisaCatalogueCronPlan();
-    expect(plan.validationErrors).toEqual([]);
-    expect(plan.sourceStatus).toBe("SOURCE_ONLY");
-    expect(plan.enabled).toBe(false);
-    expect(plan.deliveryMode).toBe("none");
-    expect(plan.entries).toHaveLength(21);
-    expect(plan.entries.find((entry) => entry.family === "battery_tracking")?.scheduleKind).toBe(
-      "embedded",
-    );
-    expect(plan.entries.filter((entry) => entry.family === "battery_tracking")).toHaveLength(1);
-    expect(plan.providerDecision.status).toBe("HOLD");
+  it("keeps source entries disabled without turning embedded checkpoints or excluded families into cron", () => {
+    expect(validateLisaJobCatalogue()).toEqual([]);
+    expect(LISA_JOB_CATALOGUE.sourceStatus).toBe("SOURCE_ONLY");
+    expect(LISA_JOB_CATALOGUE.deliveryMode).toBe("none");
+    expect(LISA_JOB_CATALOGUE.entries).toHaveLength(24);
+    expect(
+      LISA_JOB_CATALOGUE.entries.find((entry) => entry.family === "battery_tracking")?.schedule
+        .kind,
+    ).toBe("embedded");
+    expect(
+      LISA_JOB_CATALOGUE.entries.filter((entry) => entry.family === "battery_tracking"),
+    ).toHaveLength(1);
+    expect(
+      LISA_JOB_CATALOGUE.entries
+        .filter((entry) => ["librarian", "backup", "memory_dreaming"].includes(entry.family))
+        .every((entry) => entry.schedule.kind !== "cron" && !entry.schedule.cron),
+    ).toBe(true);
+    expect(checkLisaProviderBindings(undefined).status).toBe("HOLD");
   });
 });
 
@@ -166,6 +177,7 @@ describe("Lisa canonical operational desired state", () => {
       registration: "separate-openclaw-item",
     });
     expect(LISA_JOB_DESIRED_STATE.excludedCronFamilies).toEqual(["librarian", "backup"]);
+    expect([...LISA_DESIRED_DECLARATION_KEYS]).toEqual([...LISA_OPERATIONAL_DECLARATION_KEYS]);
     for (const item of LISA_JOB_DESIRED_STATE.declarations) {
       expect(item.owner).toBe("main");
       expect(item.executor).toBe("lisa-cron");
@@ -206,6 +218,44 @@ describe("Lisa canonical operational desired state", () => {
       ok: false,
       drifted: ["lisa-executive-digest-evening-v1"],
     });
+  });
+
+  it("keeps catalogue timers aligned with desired-state digest, flash, and checkpoint leads", () => {
+    const byId = new Map(LISA_JOB_CATALOGUE.entries.map((entry) => [entry.id, entry]));
+    const morning = byId.get("executive-digest-morning")!;
+    const evening = byId.get("executive-digest-evening")!;
+    expect(morning.schedule.cron).toBe("45 6 * * *");
+    expect(evening.schedule.cron).toBe("45 16 * * *");
+    expect(morning.deadlines.preparationDeadlineLocalTime).toBe(
+      DIGEST_PREPARATION_DEADLINES["07:00"],
+    );
+    expect(evening.deadlines.preparationDeadlineLocalTime).toBe(
+      DIGEST_PREPARATION_DEADLINES["17:00"],
+    );
+    expect(morning.destinationBindingId).toBe("lisa-telegram-binding");
+    expect(evening.destinationBindingId).toBe("lisa-telegram-binding");
+    for (const [deadline, preparation] of Object.entries(FLASH_PREPARATION_DEADLINES)) {
+      const flash = byId.get(`flash-report-${deadline.replace(":", "")}`)!;
+      expect(flash.deadlines.preparationDeadlineLocalTime).toBe(preparation);
+      expect(flash.schedule.cron).toBe(
+        LISA_JOB_DESIRED_STATE.declarations.find(
+          (item) => item.label === `Flash Report ${deadline}`,
+        )?.schedule.expression,
+      );
+    }
+    expect(byId.get("selfie-reminder-1745")?.schedule).toMatchObject({
+      kind: "cron",
+      cron: "40 17 * * *",
+    });
+    expect(byId.get("selfie-conditional-2145")?.schedule).toMatchObject({
+      kind: "cron",
+      cron: "40 21 * * *",
+    });
+    expect(byId.get("private-health-0815")?.destinationBindingId).toBe("lisa-telegram-binding");
+    expect(byId.get("private-health-reassessment")?.destinationBindingId).toBe(
+      "carlos-personal-email-binding",
+    );
+    expect(byId.get("private-health-drive-export")?.schedule.kind).toBe("hook");
   });
 });
 

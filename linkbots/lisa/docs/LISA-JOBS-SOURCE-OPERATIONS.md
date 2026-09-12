@@ -5,7 +5,9 @@ deployable desired state is defined separately in
 `ops/jobs/lisa-job-desired-state.ts`: it contains exactly 19 stable operational
 declaration keys and one separately registered Memory Dreaming dependency.
 Embedded checkpoints are represented by their owning declaration, not by
-duplicate timers.
+duplicate timers. Family inventory still names Librarian, Memory Dreaming, and
+backup so they cannot be rediscovered as missing Lisa jobs, but those three are
+not OpenClaw cron declarations.
 
 Librarian is provider-owned and Memory Dreaming is registered as a separate
 OpenClaw item. General backup is systemd-owned. Neither is an OpenClaw cron
@@ -18,6 +20,9 @@ approved operational declarations execute as `lisa-cron` but must be owned by
 instance identity, preparation trigger, visible deadline, privacy class,
 delivery intent, opaque binding references, exact skill/schema reference,
 dependencies, bounded retry policy, idempotency key, and receipt requirements.
+Executive Digest uses cron-owned Telegram announce plus a separate email
+receipt. Other visible recurring messages use a five-minute preparation lead;
+digest preparation remains 06:45 and 16:45.
 
 `diffLisaJobDesiredState` compares a read-only live-format export against the
 source declarations. It returns missing, unexpected, and drifted keys. Live
