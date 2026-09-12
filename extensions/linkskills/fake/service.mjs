@@ -283,7 +283,25 @@ export class SkillsFakeService {
    * @param {string | undefined} idempotencyKey
    */
   #handle(operation, params, actor, idempotencyKey) {
-    switch (operation) {
+    const aliases = {
+      skills_catalog_list: "skills_list",
+      skills_catalog_search: "skills_search",
+      skills_release_describe: "skills_describe",
+      skills_release_content_get: "skills_fragment_get",
+      skills_release_section_get: "skills_fragment_get",
+      skills_capabilities_get: "skills_list",
+      skills_release_list: "skills_list",
+    };
+    const mapped = aliases[operation];
+    if (mapped !== undefined) {
+      params = {
+        ...params,
+        ...(typeof params.skillId === "string" ? { skill_id: params.skillId } : {}),
+        ...(typeof params.sectionId === "string" ? { fragment_id: params.sectionId } : {}),
+        ...(typeof params.contentId === "string" ? { fragment_id: params.contentId } : {}),
+      };
+    }
+    switch (mapped ?? operation) {
       case "skills_list":
         return { skills: [listItem(this.skill)] };
       case "skills_search": {

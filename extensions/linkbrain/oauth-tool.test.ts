@@ -135,7 +135,7 @@ describe("linkbrain native OAuth bridge", () => {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
     } as never);
     const result = await tool.execute("test", {
-      operation: "brain_search",
+      operation: "v2.knowledge.search",
       arguments: { query: "test", actorId: "spoofed" },
     });
     expect(result.content[0]?.text).toBe("Actor identity is assigned by LiNKbrain.");

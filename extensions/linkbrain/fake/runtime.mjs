@@ -10,6 +10,18 @@ import { fileURLToPath } from "node:url";
 
 export const BRAIN_CONTRACT_VERSION = "1.0.0";
 
+export const BRAIN_V2_TOOL_ALIASES = Object.freeze({
+  "v2.knowledge.browse": "brain_browse",
+  "v2.knowledge.search": "brain_search",
+  "v2.knowledge.load": "brain_load",
+  "v2.inbox.read": "brain_inbox_read",
+  "v2.checkpoint.write": "brain_checkpoint_write",
+  "v2.message.send": "brain_message_send",
+  "v2.handoff.create": "brain_handoff_create",
+  "v2.handoff.accept": "brain_handoff_accept",
+  "v2.finding.submit": "brain_append_finding",
+});
+
 export const BRAIN_TOOL_NAMES = Object.freeze([
   "brain_browse",
   "brain_search",
@@ -278,10 +290,11 @@ export function createBrainFake(options = {}) {
   }
 
   function callTool(toolName, args = {}, meta = {}) {
-    const requestId = meta.requestId ?? `req_${toolName}_${idempotency.size + 1}`;
+    const resolvedName = BRAIN_V2_TOOL_ALIASES[toolName] ?? toolName;
+    const requestId = meta.requestId ?? `req_${resolvedName}_${idempotency.size + 1}`;
     const token = meta.authToken ?? args["_authBearer"] ?? args.authToken;
 
-    if (!BRAIN_TOOL_NAMES.includes(toolName)) {
+    if (!BRAIN_TOOL_NAMES.includes(resolvedName)) {
       return errorResult(
         {
           code: "not_found",
@@ -357,7 +370,7 @@ export function createBrainFake(options = {}) {
       }
       return null;
     })();
-    if (BRAIN_WRITE_TOOLS.has(toolName)) {
+    if (BRAIN_WRITE_TOOLS.has(resolvedName)) {
       if (!idempotencyKey) {
         return errorResult(
           {
@@ -371,7 +384,7 @@ export function createBrainFake(options = {}) {
       }
       const prior = idempotency.get(idempotencyKey);
       if (prior) {
-        if (prior.tool !== toolName) {
+        if (prior.tool !== resolvedName) {
           return errorResult(
             {
               code: "conflict",
@@ -396,13 +409,13 @@ export function createBrainFake(options = {}) {
       }
     }
 
-    const fixture = loadToolResponse(toolName);
+    const fixture = loadToolResponse(resolvedName);
     const result = {
       ...(fixture.result && typeof fixture.result === "object" ? fixture.result : {}),
       replayed: false,
     };
     if (idempotencyKey) {
-      idempotency.set(idempotencyKey, { tool: toolName, result: { ...result } });
+      idempotency.set(idempotencyKey, { tool: resolvedName, result: { ...result } });
     }
 
     return {
