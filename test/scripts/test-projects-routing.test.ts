@@ -8,6 +8,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { resolveVitestCliEntry } from "../../scripts/lib/vitest-build-prerequisites.mts";
 import { resolveVitestNodeArgs } from "../../scripts/lib/vitest-process-env.mts";
 import { withEnv } from "../../src/test-utils/env.js";
+import { rewriteApprovedLinkbotsNodeTestImport } from "../../test/vitest/vitest.linkbots-paths.mjs";
 
 const {
   applyParallelVitestCachePaths,
@@ -146,6 +147,11 @@ describe("test-projects args", () => {
     {
       title: "routes script tests to the tooling config",
       target: "test/scripts/test-projects-routing.test.ts",
+      config: "test/vitest/vitest.tooling.config.ts",
+    },
+    {
+      title: "routes the approved Lisa model-routing test to the tooling config",
+      target: "linkbots/lisa/ops/model-routing.test.ts",
       config: "test/vitest/vitest.tooling.config.ts",
     },
     {
@@ -389,6 +395,46 @@ describe("test-projects args", () => {
         config,
         forwardedArgs: [],
         includePatterns: [target],
+        watchMode: false,
+      },
+    ]);
+  });
+
+  it("rewrites node:test imports only for the approved Lisa model-routing test", () => {
+    const source = 'import { describe, it } from "node:test";\n';
+    expect(
+      rewriteApprovedLinkbotsNodeTestImport(source, "linkbots/lisa/ops/model-routing.test.ts"),
+    ).toBe('import { describe, it } from "vitest";\n');
+    expect(
+      rewriteApprovedLinkbotsNodeTestImport(
+        source,
+        "linkbots/lisa/ops/model-routing-contract.test.ts",
+      ),
+    ).toBeNull();
+    expect(
+      rewriteApprovedLinkbotsNodeTestImport(
+        'import { mock } from "node:test";\n',
+        "test/scripts/managed-child-process.test.ts",
+      ),
+    ).toBeNull();
+  });
+
+  it("does not broaden linkbots discovery beyond the approved model-routing test", () => {
+    expect(buildVitestRunPlans(["linkbots/lisa/ops/model-routing-contract.test.ts"])).toEqual([
+      {
+        config: "test/vitest/vitest.unit.config.ts",
+        forwardedArgs: ["linkbots/lisa/ops/model-routing-contract.test.ts"],
+        includePatterns: null,
+        watchMode: false,
+      },
+    ]);
+    expect(
+      buildVitestRunPlans(["linkbots/lisa/ops/google-workspace/google-workspace.test.ts"]),
+    ).toEqual([
+      {
+        config: "test/vitest/vitest.unit.config.ts",
+        forwardedArgs: ["linkbots/lisa/ops/google-workspace/google-workspace.test.ts"],
+        includePatterns: null,
         watchMode: false,
       },
     ]);

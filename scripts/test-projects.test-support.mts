@@ -60,6 +60,7 @@ import {
 import { isVoiceCallExtensionRoot } from "../test/vitest/vitest.extension-voice-call-paths.mjs";
 import { isWhatsAppExtensionRoot } from "../test/vitest/vitest.extension-whatsapp-paths.mjs";
 import { isZaloExtensionRoot } from "../test/vitest/vitest.extension-zalo-paths.mjs";
+import { isApprovedLinkbotsToolingTestFile } from "../test/vitest/vitest.linkbots-paths.mjs";
 import { narrowIncludePatternsForCli } from "../test/vitest/vitest.pattern-file.ts";
 import { resolveVitestFsModuleCacheRoot } from "../test/vitest/vitest.performance-config.ts";
 import {
@@ -3651,6 +3652,7 @@ function classifyTarget(arg: string, cwd: string) {
     relative === "src/config/doc-baseline.integration.test.ts" ||
     relative === "src/config/schema.base.generated.test.ts" ||
     relative === "src/config/schema.help.quality.test.ts" ||
+    isApprovedLinkbotsToolingTestFile(relative) ||
     LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS.some((root) => isPathAtOrUnder(relative, root))
   ) {
     return "tooling";
