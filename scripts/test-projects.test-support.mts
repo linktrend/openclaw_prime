@@ -68,6 +68,7 @@ import {
   resolvePluginSdkLightIncludePattern,
 } from "../test/vitest/vitest.plugin-sdk-paths.mjs";
 import { fullSuiteVitestShards, tuiPtyTestFiles } from "../test/vitest/vitest.test-shards.mjs";
+import { isApprovedLinkbotsToolingTestFile } from "../test/vitest/vitest.linkbots-paths.mjs";
 import {
   isToolingIsolatedTestFile,
   toolingIsolatedTestFiles,
@@ -3635,7 +3636,8 @@ function classifyTarget(arg: string, cwd: string) {
     relative.startsWith("src/scripts/") ||
     relative === "src/config/doc-baseline.integration.test.ts" ||
     relative === "src/config/schema.base.generated.test.ts" ||
-    relative === "src/config/schema.help.quality.test.ts"
+    relative === "src/config/schema.help.quality.test.ts" ||
+    isApprovedLinkbotsToolingTestFile(relative)
   ) {
     return "tooling";
   }

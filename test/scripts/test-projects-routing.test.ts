@@ -149,6 +149,11 @@ describe("test-projects args", () => {
       config: "test/vitest/vitest.tooling.config.ts",
     },
     {
+      title: "routes the approved Lisa model-routing test to the tooling config",
+      target: "linkbots/lisa/ops/model-routing.test.ts",
+      config: "test/vitest/vitest.tooling.config.ts",
+    },
+    {
       title: "keeps native artifact fixtures in the serial tooling owner",
       target: "test/scripts/mac-elevation-artifact.test.ts",
       config: "test/vitest/vitest.tooling.config.ts",
@@ -379,6 +384,27 @@ describe("test-projects args", () => {
         config,
         forwardedArgs: [],
         includePatterns: [target],
+        watchMode: false,
+      },
+    ]);
+  });
+
+  it("does not broaden linkbots discovery beyond the approved model-routing test", () => {
+    expect(buildVitestRunPlans(["linkbots/lisa/ops/model-routing-contract.test.ts"])).toEqual([
+      {
+        config: "test/vitest/vitest.unit.config.ts",
+        forwardedArgs: ["linkbots/lisa/ops/model-routing-contract.test.ts"],
+        includePatterns: null,
+        watchMode: false,
+      },
+    ]);
+    expect(
+      buildVitestRunPlans(["linkbots/lisa/ops/google-workspace/google-workspace.test.ts"]),
+    ).toEqual([
+      {
+        config: "test/vitest/vitest.unit.config.ts",
+        forwardedArgs: ["linkbots/lisa/ops/google-workspace/google-workspace.test.ts"],
+        includePatterns: null,
         watchMode: false,
       },
     ]);
