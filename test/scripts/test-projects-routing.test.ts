@@ -389,6 +389,11 @@ describe("test-projects args", () => {
       target: "linkbots/lisa/ops/deployment/deployment.test.ts",
       config: "test/vitest/vitest.tooling.config.ts",
     },
+    {
+      title: "routes Lisa Google Workspace tests to the tooling config",
+      target: "linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
+      config: "test/vitest/vitest.tooling.config.ts",
+    },
   ])("$title", ({ target, config }) => {
     expect(buildVitestRunPlans([target])).toEqual([
       {
@@ -400,10 +405,16 @@ describe("test-projects args", () => {
     ]);
   });
 
-  it("rewrites node:test imports only for the approved Lisa model-routing test", () => {
+  it("rewrites node:test imports only for approved Lisa tooling tests", () => {
     const source = 'import { describe, it } from "node:test";\n';
     expect(
       rewriteApprovedLinkbotsNodeTestImport(source, "linkbots/lisa/ops/model-routing.test.ts"),
+    ).toBe('import { describe, it } from "vitest";\n');
+    expect(
+      rewriteApprovedLinkbotsNodeTestImport(
+        source,
+        "linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
+      ),
     ).toBe('import { describe, it } from "vitest";\n');
     expect(
       rewriteApprovedLinkbotsNodeTestImport(
@@ -419,7 +430,7 @@ describe("test-projects args", () => {
     ).toBeNull();
   });
 
-  it("does not broaden linkbots discovery beyond the approved model-routing test", () => {
+  it("does not broaden linkbots discovery beyond the approved model-routing and Google Workspace tests", () => {
     expect(buildVitestRunPlans(["linkbots/lisa/ops/model-routing-contract.test.ts"])).toEqual([
       {
         config: "test/vitest/vitest.unit.config.ts",
@@ -428,12 +439,10 @@ describe("test-projects args", () => {
         watchMode: false,
       },
     ]);
-    expect(
-      buildVitestRunPlans(["linkbots/lisa/ops/google-workspace/google-workspace.test.ts"]),
-    ).toEqual([
+    expect(buildVitestRunPlans(["linkbots/lisa/ops/jobs/lisa-job-catalogue.test.ts"])).toEqual([
       {
         config: "test/vitest/vitest.unit.config.ts",
-        forwardedArgs: ["linkbots/lisa/ops/google-workspace/google-workspace.test.ts"],
+        forwardedArgs: ["linkbots/lisa/ops/jobs/lisa-job-catalogue.test.ts"],
         includePatterns: null,
         watchMode: false,
       },
@@ -947,6 +956,10 @@ describe("test-projects args", () => {
       target: "linkbots/lisa/ops/deployment",
       includePattern: "linkbots/lisa/ops/deployment/**/*.test.ts",
     },
+    {
+      target: "linkbots/lisa/ops/google-workspace",
+      includePattern: "linkbots/lisa/ops/google-workspace/**/*.test.ts",
+    },
   ])("discovers tracked Lisa customization tests from $target", ({ target, includePattern }) => {
     expect(findUnmatchedExplicitTestTargets([target])).toEqual([]);
     expect(buildVitestRunPlans([target])).toEqual([
@@ -959,12 +972,39 @@ describe("test-projects args", () => {
     ]);
   });
 
-  it("keeps unrelated linkbots paths fail-closed", () => {
-    expect(findUnmatchedExplicitTestTargets(["linkbots/lisa/ops/google-workspace"])).toEqual([
+  it("routes inactive blueprint directories to the existing profile-manifest tests", () => {
+    expect(findUnmatchedExplicitTestTargets(["linkbots/blueprints"])).toEqual([]);
+    expect(buildVitestRunPlans(["linkbots/blueprints"])).toEqual([
       {
-        target: "linkbots/lisa/ops/google-workspace",
+        config: "test/vitest/vitest.agents-core.config.ts",
+        forwardedArgs: [],
+        includePatterns: ["src/agents/profile-manifest.test.ts"],
+        watchMode: false,
+      },
+    ]);
+    expect(buildVitestRunPlans(["linkbots/blueprints/business-plan-workflow.ts"])).toEqual([
+      {
+        config: "test/vitest/vitest.agents-core.config.ts",
+        forwardedArgs: [],
+        includePatterns: ["src/agents/profile-manifest.test.ts"],
+        watchMode: false,
+      },
+    ]);
+  });
+
+  it("keeps unrelated linkbots paths fail-closed", () => {
+    expect(findUnmatchedExplicitTestTargets(["linkbots/lisa/ops/jobs"])).toEqual([
+      {
+        target: "linkbots/lisa/ops/jobs",
         reason: "target-matched-no-test-files",
-        includePattern: "linkbots/lisa/ops/google-workspace/**/*.test.ts",
+        includePattern: "linkbots/lisa/ops/jobs/**/*.test.ts",
+      },
+    ]);
+    expect(findUnmatchedExplicitTestTargets(["linkbots/lisa/ops/providers"])).toEqual([
+      {
+        target: "linkbots/lisa/ops/providers",
+        reason: "target-matched-no-test-files",
+        includePattern: "linkbots/lisa/ops/providers/**/*.test.ts",
       },
     ]);
   });

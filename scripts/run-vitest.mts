@@ -17,7 +17,7 @@ import { resolveExtensionTestConfig } from "./lib/extension-test-plan.mts";
 import { createGatewayServerTestTargetChunks } from "./lib/gateway-server-test-plan.mts";
 import { resolveRepoRoot } from "./lib/repo-root.mjs";
 import { spawnTestProjectsRunner } from "./lib/test-projects-delegation.mts";
-import { LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS } from "./test-projects.test-support.mts";
+import { LINKBOTS_APPROVED_PROJECT_ROUTER_DIRECTORY_ROOTS } from "./test-projects.test-support.mts";
 import {
   prepareE2eVitestRuntime,
   resolveVitestCliEntry,
@@ -287,12 +287,13 @@ function isOwnedLisaCustomizationDirectoryTarget(
   cwd: string,
   fsImpl: VitestPathFs,
 ): boolean {
-  // Keep Lisa ops directories on the project router. Direct Vitest workspace
-  // filters find zero files because those tests are outside OpenClaw roots.
+  // Keep approved linkbots directories on the project router. Direct Vitest
+  // workspace filters find zero files because those tests are outside OpenClaw roots.
   const relative = toRepoRelativeArg(arg, cwd).replace(/\/+$/u, "");
   return (
-    LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS.some((root) => isPathAtOrUnder(relative, root)) &&
-    isExplicitDirectoryTargetArg(arg, cwd, fsImpl)
+    LINKBOTS_APPROVED_PROJECT_ROUTER_DIRECTORY_ROOTS.some((root) =>
+      isPathAtOrUnder(relative, root),
+    ) && isExplicitDirectoryTargetArg(arg, cwd, fsImpl)
   );
 }
 

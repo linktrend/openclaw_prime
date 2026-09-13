@@ -1217,7 +1217,24 @@ function toScopedIncludePattern(arg: string, cwd: string) {
 export const LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS = [
   "linkbots/lisa/ops/backup",
   "linkbots/lisa/ops/deployment",
+  "linkbots/lisa/ops/google-workspace",
 ] as const;
+export const LINKBOTS_BLUEPRINTS_TEST_ROOT = "linkbots/blueprints";
+export const LINKBOTS_BLUEPRINTS_EXISTING_TESTS = [
+  "src/agents/profile-manifest.test.ts",
+] as const;
+export const LINKBOTS_APPROVED_PROJECT_ROUTER_DIRECTORY_ROOTS = [
+  ...LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS,
+  LINKBOTS_BLUEPRINTS_TEST_ROOT,
+] as const;
+
+function resolveApprovedLinkbotsMappedTestTargets(targetArg: string, cwd: string) {
+  const relative = toRepoRelativeTarget(targetArg, cwd).replace(/\/+$/u, "");
+  return relative === LINKBOTS_BLUEPRINTS_TEST_ROOT ||
+    isPathAtOrUnder(relative, LINKBOTS_BLUEPRINTS_TEST_ROOT)
+    ? [...LINKBOTS_BLUEPRINTS_EXISTING_TESTS]
+    : null;
+}
 const EXPLICIT_TEST_TARGET_ROOTS = [
   "src",
   "test",
@@ -1351,6 +1368,10 @@ function expandExplicitSourceTestTargets(targetArgs: string[], cwd: string) {
     const prefixTargets = resolveExplicitTestPrefixTargets(targetArg, cwd);
     if (prefixTargets) {
       return prefixTargets;
+    }
+    const mappedLinkbotsTargets = resolveApprovedLinkbotsMappedTestTargets(targetArg, cwd);
+    if (mappedLinkbotsTargets) {
+      return mappedLinkbotsTargets;
     }
     if (relative === "src/commands" && isExistingDirectoryTarget(targetArg, cwd)) {
       return [COMMANDS_LIGHT_VITEST_CONFIG, COMMANDS_VITEST_CONFIG];
@@ -1487,6 +1508,10 @@ export function findUnmatchedExplicitTestTargets(args: string[], cwd = process.c
           reason: "glob-matched-no-files",
         });
       }
+      continue;
+    }
+
+    if (resolveApprovedLinkbotsMappedTestTargets(targetArg, cwd)) {
       continue;
     }
 
