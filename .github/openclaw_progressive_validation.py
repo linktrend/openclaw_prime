@@ -86,8 +86,9 @@ NON_VITEST_VALIDATION = {
     "test/phase_integrator.py": "phase-integrator-tests",
     "test/receipt_seal.py": "receipt-seal-tests",
 }
-# Exact Full run 34738525501 production paths that the TypeScript resolver
-# skipped or left targetless. Keep this list path-exact; no prefixes.
+# Exact Full-run skipped/targetless production paths. Keep this list
+# path-exact; no prefixes. 34738525501 supplied the first overlay set;
+# 34740571871 remaining skips are mapped here or by colocated test files.
 FOCUSED_VITEST_TARGETS = {
     "extensions/linkautowork/api.ts": "extensions/linkautowork/capability-gates.test.ts",
     "extensions/linkautowork/src/capability-gates.ts": "extensions/linkautowork/capability-gates.test.ts",
@@ -113,11 +114,21 @@ FOCUSED_VITEST_TARGETS = {
     "extensions/linkskills/src/oauth-tool.ts": "extensions/linkskills/oauth-tool.test.ts",
     "extensions/linkskills/src/standard-mcp-v2.ts": "extensions/linkskills/standard-mcp-v2.test.ts",
     "extensions/linkskills/src/transport.ts": "extensions/linkskills/transport.test.ts",
+    "linkbots/blueprints/README.md": "linkbots/blueprints/executive-blueprints.test.ts",
     "linkbots/blueprints/vitest.config.ts": "linkbots/blueprints/executive-blueprints.test.ts",
     "linkbots/lisa/ops/backup/backup.ts": "linkbots/lisa/ops/backup/backup.test.ts",
     "linkbots/lisa/ops/browser/browser-runtime-policy.ts": "linkbots/lisa/ops/browser/browser-runtime-policy.test.ts",
     "linkbots/lisa/ops/deployment/deployment.ts": "linkbots/lisa/ops/deployment/deployment.test.ts",
+    "linkbots/lisa/ops/google-workspace/README.md": (
+        "linkbots/lisa/ops/google-workspace/google-workspace.test.ts"
+    ),
+    "linkbots/lisa/ops/google-workspace/gws-wrapper-common.sh": (
+        "linkbots/lisa/ops/google-workspace/google-workspace.test.ts"
+    ),
     "linkbots/lisa/ops/google-workspace/qualification-receipt.mjs": (
+        "linkbots/lisa/ops/google-workspace/qualification-receipt.test.mjs"
+    ),
+    "linkbots/lisa/ops/google-workspace/receipts/pkt-07-pre-vps-readiness.receipt.json": (
         "linkbots/lisa/ops/google-workspace/qualification-receipt.test.mjs"
     ),
     "linkbots/lisa/ops/jobs/lisa-job-catalogue.ts": "linkbots/lisa/ops/jobs/lisa-job-catalogue.test.ts",
@@ -628,9 +639,14 @@ def invoke_planner(
     stdout = executed.stdout or ""
     if executed.returncode != 0:
         combined = stdout + "\n" + (executed.stderr or "")
-        if "relevant_tests_broadened" in combined or any(
-            marker in combined for marker in BROAD_TEST_MARKERS
-        ):
+        # The TypeScript resolver labels leftover skipped paths as
+        # relevant_tests_broadened even when mode is still targets. That is
+        # overlay work, not a full-suite plan. Only a true broad/full-suite
+        # request stays fatal here; otherwise map those exact leftover paths.
+        ts_requested_broad = any(marker in combined for marker in BROAD_TEST_MARKERS) or (
+            '"mode": "broad"' in combined or '"mode":"broad"' in combined.replace(" ", "")
+        )
+        if ts_requested_broad:
             raise RuntimeError("relevant_tests_broadened")
         try:
             return build_focused_customization_plan(root, baseline, head, changed_paths)

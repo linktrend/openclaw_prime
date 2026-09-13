@@ -32,6 +32,46 @@ RECEIPT_IDENTITY_FOCUSED = (
     ("test/phase_integrator.py", "phase-integrator-tests"),
     ("test/receipt_seal.py", "receipt-seal-tests"),
 )
+# Exact Full run 34740571871 TypeScript skippedBroadFallbackPaths that the
+# overlay must map after the resolver labels leftover target-mode skips as
+# broadened. Keep this list path-exact; do not replace it with a prefix.
+PHASE315_REMAINING_SKIPPED_PATHS = (
+    "extensions/linkautowork/api.ts",
+    "extensions/linkautowork/src/capability-gates.ts",
+    "extensions/linkautowork/src/contract-pins.ts",
+    "extensions/linkautowork/src/contract.ts",
+    "extensions/linkbrain/api.ts",
+    "extensions/linkbrain/fake/runtime.mjs",
+    "extensions/linkbrain/src/capability-gates.ts",
+    "extensions/linkbrain/src/oauth-tool.ts",
+    "extensions/linkbrain/src/standard-mcp-v2.ts",
+    "extensions/linklibraries/api.ts",
+    "extensions/linklibraries/src/capability-gates.ts",
+    "extensions/linklibraries/src/revision2-pins.ts",
+    "extensions/linklibraries/src/revision2.ts",
+    "extensions/linkplatform/api.ts",
+    "extensions/linkplatform/src/capability-gates.ts",
+    "extensions/linkplatform/src/claims.ts",
+    "extensions/linkplatform/src/integration-status.ts",
+    "extensions/linkplatform/src/timestamps.ts",
+    "extensions/linkskills/api.ts",
+    "extensions/linkskills/fake/service.mjs",
+    "extensions/linkskills/src/capability-gates.ts",
+    "extensions/linkskills/src/oauth-tool.ts",
+    "extensions/linkskills/src/standard-mcp-v2.ts",
+    "extensions/linkskills/src/transport.ts",
+    "linkbots/blueprints/README.md",
+    "linkbots/blueprints/business-plan-workflow.test.ts",
+    "linkbots/blueprints/executive-blueprints.test.ts",
+    "linkbots/blueprints/vitest.config.ts",
+    "linkbots/lisa/ops/browser/browser-runtime-policy.test.ts",
+    "linkbots/lisa/ops/google-workspace/README.md",
+    "linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
+    "linkbots/lisa/ops/google-workspace/gws-wrapper-common.sh",
+    "linkbots/lisa/ops/google-workspace/qualification-receipt.mjs",
+    "linkbots/lisa/ops/google-workspace/qualification-receipt.test.mjs",
+    "linkbots/lisa/ops/google-workspace/receipts/pkt-07-pre-vps-readiness.receipt.json",
+)
 # Exact Full run 34698344794 skippedBroadFallbackPaths that lacked a declared
 # fork mapping. Keep this list path-exact; do not replace it with a prefix.
 PHASE315_SKIPPED_FORK_PATHS = (
@@ -666,7 +706,21 @@ class ProgressiveValidationTests(unittest.TestCase):
         failed_calls: list[list[str]] = []
 
         def failing_planner(_cmd: list[str]) -> subprocess.CompletedProcess[str]:
-            return self._completed(1, "", "relevant_tests_broadened")
+            return self._completed(
+                1,
+                "",
+                json.dumps(
+                    {
+                        "ok": False,
+                        "reason": "relevant_tests_broadened",
+                        "plan": {
+                            "mode": "broad",
+                            "targets": [],
+                            "skippedBroadFallbackPaths": [],
+                        },
+                    }
+                ),
+            )
 
         def tests_after_fail(cmd: list[str]) -> subprocess.CompletedProcess[str]:
             failed_calls.append(list(cmd))
@@ -1300,6 +1354,75 @@ class ProgressiveValidationTests(unittest.TestCase):
                 "phase-diff-check",
             },
         )
+
+    def test_full_run_34740571871_remaining_skips_use_focused_overlay(self) -> None:
+        changed = list(PHASE315_REMAINING_SKIPPED_PATHS)
+        self.assertEqual(len(changed), 35)
+        self.assertNotIn("src/index.ts", changed)
+        head = MODULE.git(ROOT, "rev-parse", "HEAD")
+        for path in changed:
+            self.assertNotIn(path, MODULE.NON_VITEST_VALIDATION)
+            target = MODULE._discover_focused_vitest_target(path, ROOT, head)
+            self.assertIsNotNone(target, path)
+            self.assertTrue(MODULE._head_blob_exists(ROOT, head, target), path)
+
+        overlay = MODULE.build_focused_customization_plan(
+            ROOT, OCP01_BASE, head, changed
+        )
+        self.assertEqual(overlay["mode"], "targets")
+        self.assertEqual(overlay["skippedBroadFallbackPaths"], [])
+        self.assertEqual(overlay["nonVitestValidations"], [])
+        self.assertTrue(overlay["targets"])
+        expected_targets = sorted(
+            {
+                MODULE._discover_focused_vitest_target(path, ROOT, head)
+                for path in changed
+            }
+        )
+        self.assertEqual(overlay["targets"], expected_targets)
+
+        leftover_skip_stderr = json.dumps(
+            {
+                "ok": False,
+                "reason": "relevant_tests_broadened",
+                "plan": {
+                    "schemaVersion": 1,
+                    "kind": "customization-test-target-plan",
+                    "mode": "targets",
+                    "targets": ["src/agents/agent-create.test.ts"],
+                    "skippedBroadFallbackPaths": changed,
+                    "nonVitestValidations": [],
+                    "changedPaths": changed,
+                },
+            }
+        )
+        recorded: list[list[str]] = []
+        result = MODULE.run_relevant_tests(
+            ROOT,
+            OCP01_BASE,
+            head,
+            changed,
+            execute=True,
+            planner_runner=lambda _cmd: self._completed(1, "", leftover_skip_stderr),
+            test_runner=lambda cmd: recorded.append(list(cmd))
+            or self._completed(0, "\n".join(expected_targets)),
+            validation_runner=lambda command: self._completed(0, "ok"),
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["approvedTestPlan"]["skippedBroadFallbackPaths"], [])
+        self.assertEqual(result["approvedTestPlan"]["targets"], expected_targets)
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0][4:], expected_targets)
+        self.assertNotIn("--changed", recorded[0])
+
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
+            MODULE.invoke_planner(
+                ROOT,
+                OCP01_BASE,
+                head,
+                ["unmapped-fast-ci-probe.ts"],
+                lambda _cmd: self._completed(1, "", leftover_skip_stderr),
+            )
 
     def test_phase_delta_src_scripts_linkbots_gitops_use_focused_overlay(self) -> None:
         changed = [
