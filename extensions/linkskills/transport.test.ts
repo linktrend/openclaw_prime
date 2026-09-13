@@ -51,6 +51,18 @@ const assertionKeyRef = {
   id: "LINKTREND_SKILLS_ASSERTION_PEM",
 };
 
+const skillsSynth = {
+  hiddenFromModel: "fx-hidden",
+  httpBearer: "fx-http",
+  mtAccess: "fx-mtacc",
+  staleAccess: "fx-stale",
+  freshAccess: "fx-fresh",
+  mcpAccess: "fx-mcp",
+  mustNotApply: "fx-noapp",
+  pluginMustNotApply: "fx-nopg",
+  hostInjected: "fx-host",
+};
+
 const writeArgs = {
   toolName: "skills_run_start",
   idempotencyKey: "idem:skills-1",
@@ -63,7 +75,7 @@ describe("linkskills transport modes", () => {
     const acquire = vi.fn(async ({ bindingId }) => ({
       bindingId,
       bindingFingerprint: `fp-${bindingId}`,
-      accessToken: "not-exposed-to-model",
+      accessToken: skillsSynth.hiddenFromModel,
       expiresAt: Date.now() + 60_000,
       tokenType: "Bearer" as const,
     }));
@@ -174,7 +186,7 @@ describe("linkskills transport modes", () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("https://skills.example.test/v1/skills_run_start");
       const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer fake-skills-token");
+      expect(headers.get("authorization")).toBe(`Bearer ${skillsSynth.httpBearer}`);
       expect(headers.get("idempotency-key")).toBe("idem:skills-1");
       expect(headers.get("x-request-id")).toBe("idem:skills-1");
       const rawBody = init?.body;
@@ -210,7 +222,7 @@ describe("linkskills transport modes", () => {
       api: stubApi(),
       config,
       fetchImpl: fetchImpl as unknown as typeof fetch,
-      env: { LINKTREND_SKILLS_FAKE_TOKEN: "fake-skills-token" },
+      env: { LINKTREND_SKILLS_FAKE_TOKEN: skillsSynth.httpBearer },
     });
     const result = await transport.write(writeArgs);
     expect(result.ok).toBe(true);
@@ -347,7 +359,7 @@ describe("linkskills transport modes", () => {
   it("http mode posts with machineToken bearer via injected resolver", async () => {
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer mt-skills-access");
+      expect(headers.get("authorization")).toBe(`Bearer ${skillsSynth.mtAccess}`);
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
     const resolveMachineTokenAccess = vi.fn(async ({ bindingId }) => {
@@ -355,7 +367,7 @@ describe("linkskills transport modes", () => {
       return {
         bindingId,
         bindingFingerprint: `fp-${bindingId}`,
-        accessToken: "mt-skills-access",
+        accessToken: skillsSynth.mtAccess,
         expiresAt: Date.now() + 60_000,
         tokenType: "Bearer" as const,
       };
@@ -408,7 +420,7 @@ describe("linkskills transport modes", () => {
         return {
           bindingId,
           bindingFingerprint: `fp-${bindingId}`,
-          accessToken: resolveCount === 1 ? "stale-token" : "fresh-token",
+          accessToken: resolveCount === 1 ? skillsSynth.staleAccess : skillsSynth.freshAccess,
           expiresAt: Date.now() + 60_000,
           tokenType: "Bearer" as const,
         };
@@ -443,7 +455,7 @@ describe("linkskills transport modes", () => {
     const resolveMachineTokenAccess = vi.fn(async ({ bindingId }) => ({
       bindingId,
       bindingFingerprint: `fp-${bindingId}`,
-      accessToken: "mt-mcp-skills",
+      accessToken: skillsSynth.mcpAccess,
       expiresAt: Date.now() + 60_000,
       tokenType: "Bearer" as const,
     }));
@@ -493,14 +505,14 @@ describe("linkskills transport modes", () => {
     const result = await transport.write(writeArgs);
     expect(result.ok).toBe(true);
     expect(result.errorCode).not.toBe("auth_profile_required");
-    expect(seenHeaders[0]).toMatchObject({ Authorization: "Bearer mt-mcp-skills" });
+    expect(seenHeaders[0]).toMatchObject({ Authorization: `Bearer ${skillsSynth.mcpAccess}` });
   });
 
   it("mcp oauth is not overridden by a present machineToken block", async () => {
     const resolveMachineTokenAccess = vi.fn(async ({ bindingId }) => ({
       bindingId,
       bindingFingerprint: `fp-${bindingId}`,
-      accessToken: "mt-must-not-apply",
+      accessToken: skillsSynth.mustNotApply,
       expiresAt: Date.now() + 60_000,
       tokenType: "Bearer" as const,
     }));
@@ -590,7 +602,7 @@ describe("linkskills transport modes", () => {
     const resolveMachineTokenAccess = vi.fn(async ({ bindingId }) => ({
       bindingId,
       bindingFingerprint: `fp-${bindingId}`,
-      accessToken: "mt-plugin-must-not-apply",
+      accessToken: skillsSynth.pluginMustNotApply,
       expiresAt: Date.now() + 60_000,
       tokenType: "Bearer" as const,
     }));
@@ -710,7 +722,7 @@ describe("linkskills transport modes", () => {
     const resolveMachineTokenAccess = vi.fn(async ({ bindingId }) => ({
       bindingId,
       bindingFingerprint: `fp-${bindingId}`,
-      accessToken: "mt-must-not-apply",
+      accessToken: skillsSynth.mustNotApply,
       expiresAt: Date.now() + 60_000,
       tokenType: "Bearer" as const,
     }));
@@ -795,7 +807,7 @@ describe("linkskills transport modes", () => {
     const resolveMachineTokenAccess = vi.fn(async ({ bindingId }) => ({
       bindingId,
       bindingFingerprint: `fp-${bindingId}`,
-      accessToken: "mt-must-not-apply",
+      accessToken: skillsSynth.mustNotApply,
       expiresAt: Date.now() + 60_000,
       tokenType: "Bearer" as const,
     }));
@@ -866,7 +878,7 @@ describe("linkskills transport modes", () => {
     const acquire = vi.fn(async ({ bindingId }) => ({
       bindingId,
       bindingFingerprint: `fp-${bindingId}`,
-      accessToken: "host-injected-skills-token",
+      accessToken: skillsSynth.hostInjected,
       expiresAt: Date.now() + 60_000,
       tokenType: "Bearer" as const,
     }));
@@ -905,7 +917,7 @@ describe("linkskills transport modes", () => {
     expect(acquire).toHaveBeenCalledOnce();
     const fetchCalls = fetchImpl.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit?]>;
     expect(new Headers(fetchCalls[0]?.[1]?.headers).get("authorization")).toBe(
-      "Bearer host-injected-skills-token",
+      `Bearer ${skillsSynth.hostInjected}`,
     );
   });
 

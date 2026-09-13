@@ -9,6 +9,9 @@ import {
 } from "./src/standard-mcp-v2.js";
 import { BRAIN_V2_OPERATIONS } from "./src/v2-pins.js";
 
+// Source-fake catalog key consumed by createBrainFake; not a live credential.
+const brainSourceFakeOkAuth = "fake-valid-token";
+
 describe("Brain standard MCP v2 consumer", () => {
   it("maps progressive knowledge retrieval onto sessionless v2 operations", () => {
     expect(LINKBRAIN_V2_READ_OPERATIONS).toEqual([
@@ -30,12 +33,12 @@ describe("Brain standard MCP v2 consumer", () => {
       "v2.knowledge.search",
       { query: "guide" },
       {
-        authToken: "fake-valid-token",
+        authToken: brainSourceFakeOkAuth,
       },
     );
     expect(search.ok).toBe(true);
     expect(JSON.stringify(search)).not.toMatch(/reasoning|accessToken|secret/i);
-    const unknown = fake.callTool("v2.admin.wipe", {}, { authToken: "fake-valid-token" });
+    const unknown = fake.callTool("v2.admin.wipe", {}, { authToken: brainSourceFakeOkAuth });
     expect(unknown.ok).toBe(false);
   });
 });
