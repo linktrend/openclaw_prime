@@ -8,7 +8,10 @@ import {
   isGenericProviderInternalError,
   parseApiErrorInfo,
 } from "../../shared/assistant-error-format.js";
-import { classifyOAuthRefreshFailure } from "../auth-profiles/oauth-refresh-failure.js";
+import {
+  classifyOAuthRefreshFailure,
+  failoverReasonForExternalAuthRefreshTerminalFailure,
+} from "../auth-profiles/oauth-refresh-failure.js";
 import {
   isImageDimensionErrorMessage,
   isImageSizeError,
@@ -162,12 +165,16 @@ function classifyFailoverClassificationFromMessage(
   ) {
     return toReasonClassification("server_error");
   }
-  if (isGenericProviderInternalError(raw)) {
-    return toReasonClassification("timeout");
-  }
   // Auth classifiers run before the broad isJsonApiInternalServerError check so that
   // provider errors like {"type":"api_error","message":"invalid api key"} are
   // correctly classified as "auth" rather than "timeout".
+  const externalAuthRefreshReason = failoverReasonForExternalAuthRefreshTerminalFailure(raw);
+  if (externalAuthRefreshReason) {
+    return toReasonClassification(externalAuthRefreshReason);
+  }
+  if (isGenericProviderInternalError(raw)) {
+    return toReasonClassification("timeout");
+  }
   const oauthRefreshFailure = classifyOAuthRefreshFailure(raw);
   if (oauthRefreshFailure?.reason) {
     return toReasonClassification("auth_permanent");

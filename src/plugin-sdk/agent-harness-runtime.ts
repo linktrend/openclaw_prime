@@ -9,6 +9,12 @@ import {
   projectAgentRunAttemptTerminal,
   setAgentRunAttemptTerminalFailure,
 } from "../agents/agent-run-terminal-outcome.js";
+import {
+  classifyExternalAuthRefreshTerminalFailure,
+  failoverReasonForExternalAuthRefreshTerminalFailure,
+  isExternalAuthRefreshFallbackEligible,
+  materializeExternalAuthRefreshPromptError,
+} from "../agents/auth-profiles/oauth-refresh-failure.js";
 import type {
   CodexBundleMcpThreadConfig,
   LoadCodexBundleMcpThreadConfigParams,
@@ -118,6 +124,14 @@ export const agentHarnessAttemptTerminal = {
   normalize: normalizeAgentRunAttemptTerminal,
   project: projectAgentRunAttemptTerminal,
   setFailure: setAgentRunAttemptTerminalFailure,
+  // Existing terminal seam: Codex maps JSON-RPC refresh copy here instead of
+  // four new public SDK callables. Numeric-only -32603 stays ineligible.
+  externalAuthRefresh: Object.freeze({
+    classify: classifyExternalAuthRefreshTerminalFailure,
+    failoverReason: failoverReasonForExternalAuthRefreshTerminalFailure,
+    isFallbackEligible: isExternalAuthRefreshFallbackEligible,
+    materializePromptError: materializeExternalAuthRefreshPromptError,
+  }),
 };
 export { projectAgentHarnessTranscriptMessageForDisplay } from "../agents/harness/transcript-visibility.js";
 export { restorePreparedUserTurnOperationalMetaForRuntime } from "../sessions/user-turn-transcript.metadata.js";
