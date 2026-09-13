@@ -1,7 +1,7 @@
 // Web search tests cover model-facing schema limits, provider-specific time
 // filters, unsupported filter errors, and scoped provider config merging.
 import { Value } from "typebox/value";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { compactToolOutputHint } from "../tool-schema-hints.js";
 import { normalizeWebSearchOutput, WebSearchOutputSchema } from "./web-search-output.js";
 import {
@@ -14,6 +14,27 @@ import {
 } from "./web-search-provider-common.js";
 import { mergeScopedSearchConfig } from "./web-search-provider-config.js";
 import { createWebSearchTool } from "./web-search.js";
+
+const { configureFsSafeNative } = vi.hoisted(() => ({
+  configureFsSafeNative: vi.fn((_config: { mode?: "auto" | "off" | "require" }) => undefined),
+}));
+
+// fs-safe-defaults calls this at import time. Selected-test CI (CI=true,
+// GITHUB_ACTIONS=true, isolate:false) can bind a non-function named export.
+vi.mock("@openclaw/fs-safe/config", () => ({
+  configureFsSafeNative,
+  configureFsSafePython: configureFsSafeNative,
+  getFsSafeNativeConfig: () => ({ mode: "off" as const }),
+  configureFsSafeLocks: vi.fn(),
+  getFsSafeLockConfig: () => ({ staleRecovery: "fail-closed" as const }),
+}));
+
+describe("fs-safe config under selected-test CI", () => {
+  it("exposes configureFsSafeNative as a function", () => {
+    expect(typeof configureFsSafeNative).toBe("function");
+    expect(() => configureFsSafeNative({ mode: "off" })).not.toThrow();
+  });
+});
 
 describe("web_search tool schema", () => {
   it("omits the managed tool when the session disables web search", () => {

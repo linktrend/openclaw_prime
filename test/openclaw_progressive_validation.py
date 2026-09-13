@@ -1926,6 +1926,61 @@ class ProgressiveValidationTests(unittest.TestCase):
                 ),
             )
 
+    def test_full_run_34750878519_web_tool_fs_safe_targets_remain_selected(self) -> None:
+        previous = {
+            "CI": os.environ.get("CI"),
+            "GITHUB_ACTIONS": os.environ.get("GITHUB_ACTIONS"),
+            "RUNNER_OS": os.environ.get("RUNNER_OS"),
+        }
+        os.environ["CI"] = "true"
+        os.environ["GITHUB_ACTIONS"] = "true"
+        os.environ["RUNNER_OS"] = "Linux"
+        try:
+            self.assertEqual(
+                MODULE.FOCUSED_VITEST_TARGETS["src/agents/tools/web-fetch.ts"],
+                "src/agents/tools/web-fetch.test.ts",
+            )
+            self.assertEqual(
+                MODULE.FOCUSED_VITEST_TARGETS["src/agents/tools/web-search.ts"],
+                "src/agents/tools/web-search.test.ts",
+            )
+            plan = MODULE.build_focused_customization_plan(
+                ROOT,
+                OCP01_BASE,
+                "HEAD",
+                ["src/agents/tools/web-fetch.ts", "src/agents/tools/web-search.ts"],
+            )
+            self.assertEqual(
+                plan["targets"],
+                [
+                    "src/agents/tools/web-fetch.test.ts",
+                    "src/agents/tools/web-search.test.ts",
+                ],
+            )
+            self.assertEqual(plan["skippedBroadFallbackPaths"], [])
+            recorded: list[list[str]] = []
+            result = MODULE.run_relevant_tests(
+                ROOT,
+                OCP01_BASE,
+                "HEAD",
+                ["src/agents/tools/web-fetch.ts", "src/agents/tools/web-search.ts"],
+                execute=True,
+                planner_runner=lambda _cmd: self._completed(0, json.dumps(plan)),
+                test_runner=lambda cmd: recorded.append(list(cmd))
+                or self._completed(0, "\n".join(plan["targets"])),
+                validation_runner=lambda _command: self._completed(0, "ok"),
+            )
+            self.assertTrue(result["ok"], result)
+            self.assertEqual(result["selectedTests"], plan["targets"])
+            self.assertEqual(recorded[0][: len(MODULE.TEST_PROJECTS)], list(MODULE.TEST_PROJECTS))
+            self.assertEqual(recorded[0][len(MODULE.TEST_PROJECTS) :], plan["targets"])
+        finally:
+            for key, value in previous.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
 
 if __name__ == "__main__":
     unittest.main()
