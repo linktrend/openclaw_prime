@@ -661,15 +661,6 @@ class ProgressiveValidationTests(unittest.TestCase):
                 "relevant_tests_broadened",
             ),
             (
-                {
-                    **common,
-                    "mode": "targets",
-                    "targets": [],
-                    "skippedBroadFallbackPaths": ["src/index.ts"],
-                },
-                "relevant_tests_broadened",
-            ),
-            (
                 {**common, "mode": "targets", "targets": [], "skippedBroadFallbackPaths": []},
                 "relevant_tests_unresolved",
             ),
@@ -1708,6 +1699,128 @@ class ProgressiveValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
             MODULE.build_focused_customization_plan(
                 ROOT, OCP01_BASE, head, ["unmapped-fast-ci-probe.ts"]
+            )
+
+    def test_full_run_34747336391_profile_inventory_retains_overlay_selected_tests(
+        self,
+    ) -> None:
+        from scripts.gitops.run_delivery_profile import load_profile, run_profile
+
+        config_path, commands = load_profile(ROOT, "full")
+        self.assertEqual(config_path, ROOT / ".github/linktrend-delivery-mode.json")
+        full_command = [
+            "python3",
+            ".github/openclaw_progressive_validation.py",
+            "--profile",
+            "full",
+        ]
+        self.assertIn(full_command, commands)
+
+        head = MODULE.git(ROOT, "rev-parse", "HEAD")
+        identity = MODULE.inspect_phase_diff(ROOT, OCP01_BASE, head)
+        phase_paths = list(identity["existingPaths"]) + list(identity["deletedPaths"])
+        leftover_skip_stdout = json.dumps(
+            {
+                "schemaVersion": 1,
+                "kind": "customization-test-target-plan",
+                "mode": "targets",
+                "targets": ["src/agents/agent-create.test.ts"],
+                "skippedBroadFallbackPaths": list(PHASE315_REMAINING_SKIPPED_PATHS),
+                "nonVitestValidations": [],
+                "changedPaths": phase_paths,
+            }
+        )
+        overlay = MODULE.invoke_planner(
+            ROOT,
+            OCP01_BASE,
+            head,
+            phase_paths,
+            lambda _cmd: self._completed(0, leftover_skip_stdout),
+        )
+        self.assertEqual(overlay["skippedBroadFallbackPaths"], [])
+        self.assertTrue(overlay["targets"])
+        expected_overlay = MODULE.build_focused_customization_plan(
+            ROOT, OCP01_BASE, head, phase_paths
+        )
+        self.assertEqual(overlay["targets"], expected_overlay["targets"])
+
+        recorded: list[list[str]] = []
+        previous_actions = os.environ.get("GITHUB_ACTIONS")
+        os.environ["GITHUB_ACTIONS"] = "true"
+        os.environ["BASELINE_SHA"] = OCP01_BASE
+
+        def executor(command: list[str], root: Path) -> subprocess.CompletedProcess[str]:
+            if list(command) != full_command:
+                return self._completed(0, "")
+            result = MODULE.validate_phase(
+                root=root,
+                profile="full",
+                baseline=OCP01_BASE,
+                head=head,
+                scanner=_ok_scan,
+                execute_tests=True,
+                write_evidence_file=False,
+                planner_runner=lambda _cmd: self._completed(0, leftover_skip_stdout),
+                test_runner=lambda cmd: recorded.append(list(cmd))
+                or self._completed(0, "\n".join(cmd[len(MODULE.TEST_PROJECTS) :])),
+                validation_runner=lambda _command: self._completed(0, "ok"),
+            )
+            payload = {key: value for key, value in result.items() if key != "evidence"}
+            stdout = json.dumps(payload, sort_keys=True, indent=2) + "\ncustomization-scoped full: ok\n"
+            return self._completed(0 if result["ok"] else 1, stdout)
+
+        try:
+            inventory = run_profile(
+                ROOT,
+                "full",
+                config_path=config_path,
+                commands=commands,
+                executor=executor,
+            )
+        finally:
+            if previous_actions is None:
+                os.environ.pop("GITHUB_ACTIONS", None)
+            else:
+                os.environ["GITHUB_ACTIONS"] = previous_actions
+            os.environ.pop("BASELINE_SHA", None)
+
+        self.assertTrue(inventory["ok"], inventory)
+        self.assertTrue(inventory["selectedTests"], inventory)
+        self.assertTrue(recorded)
+        self.assertEqual(recorded[0][: len(MODULE.TEST_PROJECTS)], list(MODULE.TEST_PROJECTS))
+        self.assertEqual(recorded[0][len(MODULE.TEST_PROJECTS) :], expected_overlay["targets"])
+        self.assertEqual(inventory["selectedTests"], expected_overlay["targets"])
+        self.assertNotIn("--changed", recorded[0])
+        self.assertNotIn("src/index.ts", inventory["selectedTests"])
+
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_broadened"):
+            MODULE.invoke_planner(
+                ROOT,
+                OCP01_BASE,
+                head,
+                list(PHASE315_REMAINING_SKIPPED_PATHS),
+                lambda _cmd: self._completed(
+                    0,
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "reason": "relevant_tests_broadened",
+                            "plan": {
+                                "mode": "broad",
+                                "targets": [],
+                                "skippedBroadFallbackPaths": [],
+                            },
+                        }
+                    ),
+                ),
+            )
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
+            MODULE.invoke_planner(
+                ROOT,
+                OCP01_BASE,
+                head,
+                ["unmapped-fast-ci-probe.ts"],
+                lambda _cmd: self._completed(0, leftover_skip_stdout),
             )
 
 

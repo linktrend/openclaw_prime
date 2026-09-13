@@ -689,6 +689,25 @@ def _overlay_focused_plan(
         raise RuntimeError("relevant_tests_unresolved") from exc
 
 
+def _planner_payload_from_output(stdout: str, stderr: str) -> dict[str, Any] | None:
+    """Return the planner JSON object, including a nested leftover target plan."""
+    try:
+        loaded = json.loads(stdout) if stdout.strip().startswith("{") else None
+    except json.JSONDecodeError:
+        loaded = None
+    if isinstance(loaded, Mapping):
+        plan = _planner_plan_from_payload(loaded)
+        if plan is not None:
+            return dict(plan)
+        if loaded.get("kind") == "customization-test-target-plan" or loaded.get("mode"):
+            return dict(loaded)
+    for payload in _json_objects_from_text(stderr) + _json_objects_from_text(stdout):
+        plan = _planner_plan_from_payload(payload)
+        if plan is not None:
+            return dict(plan)
+    return None
+
+
 def invoke_planner(
     root: Path,
     baseline: str,
@@ -700,19 +719,17 @@ def invoke_planner(
     executed = (runner or (lambda cmd: _run_captured(cmd, root)))(command)
     stdout = executed.stdout or ""
     stderr = executed.stderr or ""
-    if executed.returncode != 0:
-        # The TypeScript resolver labels leftover skipped paths as
-        # relevant_tests_broadened even when mode is still targets. That is
-        # overlay work, not a full-suite plan. Only a true broad/full-suite
-        # request stays fatal here; otherwise map those exact leftover paths.
-        if planner_requested_full_suite(stdout, stderr):
-            raise RuntimeError("relevant_tests_broadened")
-        return _overlay_focused_plan(root, baseline, head, changed_paths)
-    try:
-        payload = json.loads(stdout)
-    except json.JSONDecodeError:
-        # Hosted Node can prepend loader text. Overlay the exact delta instead
-        # of treating that as an unmapped production path.
+    if planner_requested_full_suite(stdout, stderr):
+        raise RuntimeError("relevant_tests_broadened")
+    payload = _planner_payload_from_output(stdout, stderr)
+    leftover_target_skips = bool(
+        payload
+        and payload.get("mode") == "targets"
+        and payload.get("skippedBroadFallbackPaths")
+    )
+    # Leftover target-mode skips are overlay work even when the resolver exits
+    # 0 or prints the plan on stdout. Only a true broad plan stays fatal above.
+    if executed.returncode != 0 or payload is None or leftover_target_skips:
         return _overlay_focused_plan(root, baseline, head, changed_paths)
     return validate_planner_payload(payload, changed_paths, baseline, head, root)
 
@@ -863,6 +880,24 @@ def run_relevant_tests(
         }
     approved = invoke_planner(root, baseline, head, changed_paths, planner_runner)
     targets = list(approved["targets"])
+    # Retain the overlay command list before any later non-Vitest check can
+    # raise. Run 34747336391 left inventory selectedTests=[] after a later
+    # hold even though the focused overlay was already known.
+    selected = list(targets)
+    run_cmd: list[str] | None = None
+    run_output_digest: str | None = None
+    if targets:
+        run_cmd = list(TEST_PROJECTS) + targets
+        if "--changed" in run_cmd or len(run_cmd) <= len(TEST_PROJECTS):
+            raise RuntimeError("relevant_tests_broadened")
+        executed = (test_runner or (lambda command: _run_captured(command, root)))(run_cmd)
+        run_output = (executed.stdout or "") + "\n" + (executed.stderr or "")
+        if test_plan_is_broad(run_output, changed_paths):
+            raise RuntimeError("relevant_tests_broadened")
+        if executed.returncode != 0:
+            raise RuntimeError("relevant_tests_failed")
+        selected = parse_test_list(run_output) or list(targets)
+        run_output_digest = canonical_digest(run_output)
     non_vitest_results = run_non_vitest_validations(
         root,
         baseline,
@@ -870,28 +905,6 @@ def run_relevant_tests(
         approved["nonVitestValidations"],
         validation_runner,
     )
-    if not targets:
-        return {
-            "command": None,
-            "mode": "execute",
-            "selectedTests": [],
-            "nonVitestResults": non_vitest_results,
-            "approvedTestPlan": approved,
-            "broadFallback": False,
-            "skippedChangedPaths": False,
-            "ok": True,
-            "runOutputDigest": None,
-        }
-    run_cmd = list(TEST_PROJECTS) + targets
-    if "--changed" in run_cmd or len(run_cmd) <= len(TEST_PROJECTS):
-        raise RuntimeError("relevant_tests_broadened")
-    executed = (test_runner or (lambda command: _run_captured(command, root)))(run_cmd)
-    run_output = (executed.stdout or "") + "\n" + (executed.stderr or "")
-    if test_plan_is_broad(run_output, changed_paths):
-        raise RuntimeError("relevant_tests_broadened")
-    if executed.returncode != 0:
-        raise RuntimeError("relevant_tests_failed")
-    selected = parse_test_list(run_output) or list(targets)
     return {
         "command": run_cmd,
         "mode": "execute",
@@ -901,7 +914,7 @@ def run_relevant_tests(
         "broadFallback": False,
         "skippedChangedPaths": False,
         "ok": True,
-        "runOutputDigest": canonical_digest(run_output),
+        "runOutputDigest": run_output_digest,
     }
 
 
