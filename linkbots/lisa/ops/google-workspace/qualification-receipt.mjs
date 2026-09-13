@@ -237,6 +237,37 @@ export function validateQualifiedSkillsReceipt(source, candidate) {
   return { ok: true };
 }
 
+/**
+ * Consume the committed source receipt as an inert catalog. This never loads
+ * skill bodies, never contacts LiNKskills, and never enables wrapper execution.
+ */
+export function consumeInertQualifiedSkills(source) {
+  if (!isRecord(source)) return fail("receipt_not_object");
+  if (source.schema !== SCHEMA) return fail("schema_mismatch");
+  const sourceShape = validateReceiptShape(source, "source");
+  if (sourceShape) return sourceShape;
+  if (source.status !== "qualification-required") return fail("source_status_mismatch");
+  if (
+    source.qualification.state !== "unavailable" ||
+    source.qualification.executionGate !== "fail-closed; no provider skill activation"
+  ) {
+    return fail("source_qualification_not_inert");
+  }
+  if (source.retrieval.copiedSkillBodies !== false) return fail("skill_bodies_copied");
+  if (source.retrieval.providerRuntime !== "not executed by OpenClaw") {
+    return fail("retrieval_runtime_claimed");
+  }
+  if (source.privacy.liveGoogleCallsPerformed !== false) return fail("live_google_calls_claimed");
+  return {
+    ok: true,
+    mode: "inert-source-catalog",
+    skillIds: source.skills.map((skill) => skill.id),
+    executionEnabled: false,
+    copiedSkillBodies: false,
+    providerRuntime: source.retrieval.providerRuntime,
+  };
+}
+
 export function validateQualifiedSkillsReceiptFiles(sourcePath, candidatePath) {
   try {
     const source = JSON.parse(fs.readFileSync(sourcePath, "utf8"));

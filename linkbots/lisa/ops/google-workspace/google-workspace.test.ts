@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   statSync,
@@ -15,6 +16,10 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+import {
+  consumeInertQualifiedSkills,
+  validateQualifiedSkillsReceipt,
+} from "./qualification-receipt.mjs";
 
 const root = path.resolve("linkbots/lisa/ops/google-workspace");
 const lisaSafe = path.join(root, "tools/bin/lisa-safe");
@@ -47,20 +52,38 @@ function makeFixture() {
     readFileSync(path.join(root, "receipts/qualified-skills.receipt.json"), "utf8"),
   ) as {
     catalogueIndexBinding: { requiredSkillIds: string[]; [key: string]: unknown };
+    qualification: Record<string, unknown>;
+    retrieval: Record<string, unknown>;
+    privacy: Record<string, unknown>;
+    skills: Array<Record<string, unknown>>;
+    unsupportedByDesign: unknown[];
     [key: string]: unknown;
   };
+  const syntheticQualified = {
+    ...sourceSkillsReceipt,
+    status: "qualified",
+    catalogueBinding: { ...(sourceSkillsReceipt.catalogueBinding as Record<string, unknown>) },
+    catalogueIndexBinding: {
+      ...sourceSkillsReceipt.catalogueIndexBinding,
+      presentSkillIds: [...sourceSkillsReceipt.catalogueIndexBinding.requiredSkillIds],
+      status: "qualified",
+    },
+    retrieval: { ...sourceSkillsReceipt.retrieval },
+    qualification: {
+      ...sourceSkillsReceipt.qualification,
+      state: "qualified",
+      executionGate: "enabled",
+    },
+    privacy: { ...sourceSkillsReceipt.privacy },
+    skills: sourceSkillsReceipt.skills.map((skill) => ({ ...skill })),
+    unsupportedByDesign: [...sourceSkillsReceipt.unsupportedByDesign],
+  };
+  assert.deepEqual(validateQualifiedSkillsReceipt(sourceSkillsReceipt, syntheticQualified), {
+    ok: true,
+  });
   writeFileSync(
     path.join(configRoot, "qualified-skills.receipt.json"),
-    JSON.stringify({
-      ...sourceSkillsReceipt,
-      status: "qualified",
-      qualification: { state: "qualified", executionGate: "enabled" },
-      catalogueIndexBinding: {
-        ...sourceSkillsReceipt.catalogueIndexBinding,
-        presentSkillIds: sourceSkillsReceipt.catalogueIndexBinding.requiredSkillIds,
-        status: "qualified",
-      },
-    }),
+    JSON.stringify(syntheticQualified),
     { mode: 0o600 },
   );
   const fakeGws = path.join(directory, "gws");
@@ -355,6 +378,49 @@ describe("VPS Lisa Google Workspace wrappers", () => {
       assert.equal(inheritedScope.status, 64);
       assert.match(inheritedScope.stderr, /inherited auth\/config environment/);
       assert.equal(inheritedScope.stdout, "");
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed on source-only or flags-only Skills receipts before gws", () => {
+    const fixture = makeFixture();
+    const receiptPath = path.join(fixture.configRoot, "qualified-skills.receipt.json");
+    const sourceReceipt = JSON.parse(
+      readFileSync(path.join(root, "receipts/qualified-skills.receipt.json"), "utf8"),
+    ) as {
+      catalogueIndexBinding: { requiredSkillIds: string[]; [key: string]: unknown };
+      [key: string]: unknown;
+    };
+    try {
+      writeFileSync(receiptPath, JSON.stringify(sourceReceipt), { mode: 0o600 });
+      const sourceOnly = run(lisaSafe, ["docs-read", "--document", "document_1"], fixture);
+      assert.equal(sourceOnly.status, 64);
+      assert.match(sourceOnly.stderr, /qualified Skills receipt prerequisite is unavailable/);
+      assert.equal(sourceOnly.stdout, "");
+
+      writeFileSync(
+        receiptPath,
+        JSON.stringify({
+          ...sourceReceipt,
+          status: "qualified",
+          qualification: { state: "qualified", executionGate: "enabled" },
+          catalogueIndexBinding: {
+            ...sourceReceipt.catalogueIndexBinding,
+            presentSkillIds: sourceReceipt.catalogueIndexBinding.requiredSkillIds,
+            status: "qualified",
+          },
+        }),
+        { mode: 0o600 },
+      );
+      const flagsOnly = run(
+        lisaSafe,
+        ["sheets-read", "--spreadsheet", "sheet_1", "--range", "Summary!A1"],
+        fixture,
+      );
+      assert.equal(flagsOnly.status, 64);
+      assert.match(flagsOnly.stderr, /qualified Skills receipt prerequisite is unavailable/);
+      assert.equal(flagsOnly.stdout, "");
     } finally {
       rmSync(fixture.directory, { recursive: true, force: true });
     }
@@ -1031,19 +1097,18 @@ describe("VPS Lisa Google Workspace wrappers", () => {
       readFileSync(path.join(root, "receipts/pkt-07-pre-vps-readiness.receipt.json"), "utf8"),
     ) as {
       status: string;
-      consumer: { commit: string; tree: string; ownedPath: string };
-      providerObservations: Array<{
-        ref: string;
-        commit: string;
-        tree: string;
-        catalogue: {
-          requiredSkillIds: string[];
-          presentSkillIds: string[];
-          qualificationState: string;
-        };
-      }>;
+      consumer: { ownedPath: string };
+      inertSkillsConsumption: {
+        mode: string;
+        copiedSkillBodies: boolean;
+        providerRuntime: string;
+        upstreamScanPerformed: boolean;
+        liveAuditPerformed: boolean;
+        sourceReceipt: string;
+      };
       openclawOwnedProof: {
-        offlineFocusedTests: { passed: number; failed: number };
+    canonicalFocusedTest: { command: string; status: string; reason: string };
+    offlineFocusedTests: { command: string; passed: number; failed: number };
         shellSyntax: { passed: number; failed: number };
         oauthPerformed: boolean;
         liveGoogleCallsPerformed: boolean;
@@ -1051,28 +1116,60 @@ describe("VPS Lisa Google Workspace wrappers", () => {
         productionTouched: boolean;
       };
       qualification: { required: boolean; state: string; executionGate: string };
+      providerObservations?: unknown;
     };
-    assert.equal(preVpsReadiness.status, "external-hold");
-    assert.equal(preVpsReadiness.consumer.commit, "c75c8fb8f7d2e0b0ef801cef03e7cbc70bbb85f7");
-    assert.equal(preVpsReadiness.consumer.tree, "1072bcbdd236e2bcb0a67e7556cb35adbf0ff157");
+    const inertCatalog = consumeInertQualifiedSkills(qualifiedSkills);
+    assert.deepEqual(inertCatalog, {
+      ok: true,
+      mode: "inert-source-catalog",
+      skillIds: qualifiedSkills.skills.map((skill) => skill.id),
+      executionEnabled: false,
+      copiedSkillBodies: false,
+      providerRuntime: "not executed by OpenClaw",
+    });
+    assert.equal(
+      readdirSync(root, { recursive: true }).filter((entry) =>
+        String(entry).endsWith("SKILL.md"),
+      ).length,
+      0,
+    );
+    assert.match(
+      readFileSync(path.join(root, "gws-wrapper-common.sh"), "utf8"),
+      /qualification-receipt\.mjs/,
+    );
+    assert.doesNotMatch(
+      readFileSync(path.join(root, "gws-wrapper-common.sh"), "utf8"),
+      /receipt\.status === "qualified"/,
+    );
+    assert.equal(preVpsReadiness.status, "source-only-fail-closed");
     assert.equal(preVpsReadiness.consumer.ownedPath, "linkbots/lisa/ops/google-workspace");
-    assert.deepEqual(
-      preVpsReadiness.providerObservations.map((observation) => observation.ref),
-      ["refs/heads/development", "refs/heads/main"],
+    assert.equal(preVpsReadiness.inertSkillsConsumption.mode, "exact-release-and-digest");
+    assert.equal(preVpsReadiness.inertSkillsConsumption.copiedSkillBodies, false);
+    assert.equal(preVpsReadiness.inertSkillsConsumption.providerRuntime, "not executed by OpenClaw");
+    assert.equal(preVpsReadiness.inertSkillsConsumption.upstreamScanPerformed, false);
+    assert.equal(preVpsReadiness.inertSkillsConsumption.liveAuditPerformed, false);
+    assert.equal(
+      preVpsReadiness.inertSkillsConsumption.sourceReceipt,
+      "receipts/qualified-skills.receipt.json",
     );
-    assert.ok(
-      preVpsReadiness.providerObservations.every((observation) =>
-        observation.catalogue.requiredSkillIds.every(
-          (skillId) => !observation.catalogue.presentSkillIds.includes(skillId),
-        ),
-      ),
+    assert.equal(preVpsReadiness.providerObservations, undefined);
+    assert.equal(
+      preVpsReadiness.openclawOwnedProof.canonicalFocusedTest.command,
+      "node scripts/run-vitest.mjs linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
     );
-    assert.ok(
-      preVpsReadiness.providerObservations.every(
-        (observation) => observation.catalogue.qualificationState === "required-entries-absent",
-      ),
+    assert.equal(
+      preVpsReadiness.openclawOwnedProof.canonicalFocusedTest.status,
+      "failed-no-test-files",
     );
-    assert.equal(preVpsReadiness.openclawOwnedProof.offlineFocusedTests.passed, 18);
+    assert.match(
+      preVpsReadiness.openclawOwnedProof.canonicalFocusedTest.reason,
+      /unit include does not cover linkbots/,
+    );
+    assert.equal(
+      preVpsReadiness.openclawOwnedProof.offlineFocusedTests.command,
+      "node --test linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
+    );
+    assert.equal(preVpsReadiness.openclawOwnedProof.offlineFocusedTests.passed, 19);
     assert.equal(preVpsReadiness.openclawOwnedProof.offlineFocusedTests.failed, 0);
     assert.equal(preVpsReadiness.openclawOwnedProof.shellSyntax.passed, 5);
     assert.equal(preVpsReadiness.openclawOwnedProof.shellSyntax.failed, 0);

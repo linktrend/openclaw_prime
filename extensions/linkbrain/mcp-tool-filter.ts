@@ -40,7 +40,7 @@ const LINKBRAIN_MCP_COORDINATION_TOOLS = Object.freeze([
   "brain_task_close",
 ] as const);
 
-/** Full frozen Brain MCP include list for Lisa. */
+/** Full frozen Brain MCP include list retained as the named v1 compatibility contract. */
 export const LINKBRAIN_MCP_TOOL_ALLOWLIST = Object.freeze([
   ...LINKBRAIN_MCP_KNOWLEDGE_TOOLS,
   ...LINKBRAIN_MCP_PRIVATE_TOOLS,

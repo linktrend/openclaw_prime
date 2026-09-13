@@ -87,3 +87,24 @@ export {
   type BrainV2TransportFailure,
   type BrainV2TransportRequest,
 } from "./src/v2.js";
+export {
+  isStandardBrainMcpOperation,
+  isStandardBrainReadOperation,
+  LINKBRAIN_STANDARD_MCP_OPERATIONS,
+  LINKBRAIN_V2_CONTENT_OPERATIONS,
+  LINKBRAIN_V2_READ_OPERATIONS,
+} from "./src/standard-mcp-v2.js";
+export {
+  BRAIN_DECLARED_CAPABILITIES,
+  BRAIN_IDENTITY,
+  authorizeBrainCapability,
+  evaluatePlatformEligibilityGate,
+  evaluateProfileActivationGate,
+  evaluateSkillsQualificationGate,
+  prepareProviderRuntimeFacts,
+} from "./src/capability-gates.js";
+export type {
+  CapabilityAuthorization,
+  GateDecision,
+  PreparedRuntimeFacts,
+} from "./src/capability-gates.js";
