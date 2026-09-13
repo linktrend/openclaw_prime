@@ -1610,9 +1610,31 @@ class ProgressiveValidationTests(unittest.TestCase):
         head = MODULE.git(ROOT, "rev-parse", "HEAD")
         identity = MODULE.inspect_phase_diff(ROOT, OCP01_BASE, head)
         phase_paths = list(identity["existingPaths"]) + list(identity["deletedPaths"])
-        planner_cmd = list(MODULE.PLANNER) + ["--base", OCP01_BASE, "--head", head]
-        self.assertEqual(planner_cmd[:4], list(MODULE.PLANNER))
-        executed = subprocess.run(planner_cmd, cwd=ROOT, capture_output=True, text=True)
+        # Fast CI is Python-only: prove the exact leftover plan with native Node
+        # type-stripping, not scripts/tsx.mjs / pnpm product install.
+        planner_cmd = [*self._native_planner(), "--base", OCP01_BASE, "--head", head]
+        self.assertEqual(planner_cmd[:3], self._native_planner())
+        self.assertNotIn("./scripts/tsx.mjs", planner_cmd)
+        self.assertNotIn("tsx", planner_cmd)
+        env = os.environ.copy()
+        for git_env in (
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_COMMON_DIR",
+            "NODE_OPTIONS",
+        ):
+            env.pop(git_env, None)
+        executed = subprocess.run(
+            planner_cmd,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
         self.assertNotEqual(executed.returncode, 0, executed.stdout)
         self.assertFalse(MODULE.planner_requested_full_suite(executed.stdout or "", executed.stderr or ""))
         leftover = None
@@ -1621,6 +1643,8 @@ class ProgressiveValidationTests(unittest.TestCase):
                 leftover = json.loads(line)
                 break
         self.assertIsNotNone(leftover, executed.stderr[:2000])
+        self.assertNotIn("tsx/esm", executed.stderr)
+        self.assertNotIn("Cannot find module 'tsx/esm'", executed.stderr)
         self.assertEqual(leftover["reason"], "relevant_tests_broadened")
         self.assertEqual(leftover["plan"]["mode"], "targets")
         skipped = leftover["plan"]["skippedBroadFallbackPaths"]
@@ -1638,6 +1662,7 @@ class ProgressiveValidationTests(unittest.TestCase):
                 scanner=_ok_scan,
                 execute_tests=True,
                 write_evidence_file=False,
+                planner_runner=lambda _cmd: executed,
                 test_runner=lambda cmd: recorded.append(list(cmd))
                 or self._completed(0, "\n".join(cmd[len(MODULE.TEST_PROJECTS) :])),
                 validation_runner=lambda command: self._completed(0, "ok"),
