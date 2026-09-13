@@ -11,6 +11,7 @@ import {
   truncateSanitizedExternalContent,
   wrapWebContent,
 } from "../../security/external-content.js";
+import { admitGovernedWebSearch } from "../../web-search/governed-runtime.js";
 import { runWebSearch } from "../../web-search/runtime.js";
 import type { AnyAgentTool } from "./common.js";
 import { asToolParamsRecord, jsonResult, textResult } from "./common.js";
@@ -121,6 +122,7 @@ export function createWebSearchTool(options?: {
         );
       }
       const toolArgs = asToolParamsRecord(args);
+      admitGovernedWebSearch({ query: toolArgs.query });
       const result = await runWebSearch({
         config,
         agentDir: options?.agentDir,
