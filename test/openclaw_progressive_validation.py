@@ -2020,6 +2020,20 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertFalse(shaped[0]["realistic"])
         self.assertEqual(shaped[0]["rule"], "assignment.secret")
 
+    def test_full_run_34753825165_qualification_receipt_mjs_is_vitest_collectable(
+        self,
+    ) -> None:
+        path = "linkbots/lisa/ops/google-workspace/qualification-receipt.test.mjs"
+        self.assertEqual(
+            MODULE.FOCUSED_VITEST_TARGETS[
+                "linkbots/lisa/ops/google-workspace/qualification-receipt.mjs"
+            ],
+            path,
+        )
+        text = (ROOT / path).read_text(encoding="utf-8")
+        self.assertRegex(text, r'from\s+["\']vitest["\']')
+        self.assertNotRegex(text, r'from\s+["\']node:test["\']')
+
 
 if __name__ == "__main__":
     unittest.main()

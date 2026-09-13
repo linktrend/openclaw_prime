@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, it } from "node:test";
+// Vitest tooling rewrites node:test only for approved Lisa .ts files.
+// This overlay target is a .mjs, so a node:test import is collected as no
+// Vitest suite (Full run 34753825165) while node:test still runs as a sidecar.
+import { describe, it } from "vitest";
 import {
   consumeInertQualifiedSkills,
   validateQualifiedSkillsReceipt,
