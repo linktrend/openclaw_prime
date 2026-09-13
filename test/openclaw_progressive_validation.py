@@ -1424,6 +1424,90 @@ class ProgressiveValidationTests(unittest.TestCase):
                 lambda _cmd: self._completed(1, "", leftover_skip_stderr),
             )
 
+    def test_full_run_34743076651_phase_diff_overlay_selects_remaining_fork_paths(
+        self,
+    ) -> None:
+        head = MODULE.git(ROOT, "rev-parse", "HEAD")
+        identity = MODULE.inspect_phase_diff(ROOT, OCP01_BASE, head)
+        phase_paths = list(identity["existingPaths"]) + list(identity["deletedPaths"])
+        remaining = list(PHASE315_REMAINING_SKIPPED_PATHS)
+        self.assertTrue(set(remaining).issubset(set(phase_paths)))
+        self.assertNotIn("src/index.ts", remaining)
+        self.assertNotIn("src/index.ts", phase_paths)
+
+        live = MODULE.invoke_planner(ROOT, OCP01_BASE, head, phase_paths)
+        self.assertEqual(live["mode"], "targets")
+        self.assertEqual(live["skippedBroadFallbackPaths"], [])
+        self.assertTrue(live["targets"])
+        for path in remaining:
+            target = MODULE._discover_focused_vitest_target(path, ROOT, head)
+            self.assertIsNotNone(target, path)
+            self.assertIn(target, live["targets"], path)
+
+        leftover_skip_stderr = json.dumps(
+            {
+                "ok": False,
+                "reason": "relevant_tests_broadened",
+                "plan": {
+                    "schemaVersion": 1,
+                    "kind": "customization-test-target-plan",
+                    "mode": "targets",
+                    "targets": ["src/agents/agent-create.test.ts"],
+                    "skippedBroadFallbackPaths": remaining,
+                    "nonVitestValidations": [],
+                    "changedPaths": phase_paths,
+                },
+            }
+        )
+        # Resolver source names this helper. Leaked stderr must still overlay.
+        contaminated = leftover_skip_stderr + "\nbuildFullSuiteVitestRunPlans\n"
+        self.assertFalse(MODULE.planner_requested_full_suite("", contaminated))
+        recorded: list[list[str]] = []
+        result = MODULE.run_relevant_tests(
+            ROOT,
+            OCP01_BASE,
+            head,
+            phase_paths,
+            execute=True,
+            planner_runner=lambda _cmd: self._completed(1, "", contaminated),
+            test_runner=lambda cmd: recorded.append(list(cmd))
+            or self._completed(0, "\n".join(live["targets"])),
+            validation_runner=lambda command: self._completed(0, "ok"),
+        )
+        self.assertTrue(result["ok"], result)
+        approved = result["approvedTestPlan"]
+        self.assertEqual(approved["skippedBroadFallbackPaths"], [])
+        self.assertTrue(approved["targets"])
+        self.assertTrue(result["selectedTests"])
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0][4:], approved["targets"])
+        self.assertNotIn("--changed", recorded[0])
+        for path in remaining:
+            self.assertIn(
+                MODULE._discover_focused_vitest_target(path, ROOT, head),
+                approved["targets"],
+                path,
+            )
+
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_broadened"):
+            MODULE.invoke_planner(
+                ROOT,
+                OCP01_BASE,
+                head,
+                phase_paths,
+                lambda _cmd: self._completed(
+                    1,
+                    "",
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "reason": "relevant_tests_broadened",
+                            "plan": {"mode": "broad", "targets": [], "skippedBroadFallbackPaths": []},
+                        }
+                    ),
+                ),
+            )
+
     def test_phase_delta_src_scripts_linkbots_gitops_use_focused_overlay(self) -> None:
         changed = [
             "scripts/gitops/receipt_seal.py",

@@ -37,6 +37,7 @@ BROAD_TEST_MARKERS = (
     "broad local run will start",
     "buildFullSuiteVitestRunPlans",
 )
+LIVE_BROAD_SUITE_MARKER = "broad local run will start"
 NON_VITEST_VALIDATION = {
     ".github/linktrend-delivery-mode.json": "progressive-validation-tests",
     ".github/linktrend-gitops-consumer.json": "progressive-validation-tests",
@@ -627,6 +628,66 @@ def validate_planner_payload(
     return dict(payload)
 
 
+def _json_objects_from_text(text: str) -> list[dict[str, Any]]:
+    objects: list[dict[str, Any]] = []
+    for line in text.splitlines():
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, Mapping):
+            objects.append(dict(payload))
+    return objects
+
+
+def _planner_plan_from_payload(payload: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    plan = payload.get("plan")
+    if isinstance(plan, Mapping):
+        return plan
+    if payload.get("kind") == "customization-test-target-plan":
+        return payload
+    return None
+
+
+def planner_requested_full_suite(stdout: str, stderr: str) -> bool:
+    """True only for an actual broad/full-suite request.
+
+    Leftover target-mode skips are overlay work. The resolver source names
+    `buildFullSuiteVitestRunPlans`; leaked stderr must not disable overlay.
+    """
+    combined = f"{stdout}\n{stderr}"
+    if LIVE_BROAD_SUITE_MARKER in combined:
+        return True
+    saw_targets_mode = False
+    for payload in _json_objects_from_text(stderr) + _json_objects_from_text(stdout):
+        plan = _planner_plan_from_payload(payload)
+        if plan is None:
+            continue
+        mode = plan.get("mode")
+        if mode == "broad":
+            return True
+        if mode == "targets":
+            saw_targets_mode = True
+    if saw_targets_mode:
+        return False
+    return '"mode":"broad"' in combined.replace(" ", "")
+
+
+def _overlay_focused_plan(
+    root: Path,
+    baseline: str,
+    head: str,
+    changed_paths: Sequence[str],
+) -> dict[str, Any]:
+    try:
+        return build_focused_customization_plan(root, baseline, head, changed_paths)
+    except RuntimeError as exc:
+        raise RuntimeError("relevant_tests_unresolved") from exc
+
+
 def invoke_planner(
     root: Path,
     baseline: str,
@@ -637,21 +698,15 @@ def invoke_planner(
     command = list(PLANNER) + ["--base", baseline, "--head", head]
     executed = (runner or (lambda cmd: _run_captured(cmd, root)))(command)
     stdout = executed.stdout or ""
+    stderr = executed.stderr or ""
     if executed.returncode != 0:
-        combined = stdout + "\n" + (executed.stderr or "")
         # The TypeScript resolver labels leftover skipped paths as
         # relevant_tests_broadened even when mode is still targets. That is
         # overlay work, not a full-suite plan. Only a true broad/full-suite
         # request stays fatal here; otherwise map those exact leftover paths.
-        ts_requested_broad = any(marker in combined for marker in BROAD_TEST_MARKERS) or (
-            '"mode": "broad"' in combined or '"mode":"broad"' in combined.replace(" ", "")
-        )
-        if ts_requested_broad:
+        if planner_requested_full_suite(stdout, stderr):
             raise RuntimeError("relevant_tests_broadened")
-        try:
-            return build_focused_customization_plan(root, baseline, head, changed_paths)
-        except RuntimeError as exc:
-            raise RuntimeError("relevant_tests_unresolved") from exc
+        return _overlay_focused_plan(root, baseline, head, changed_paths)
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
