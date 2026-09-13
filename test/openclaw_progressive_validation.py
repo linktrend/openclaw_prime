@@ -1981,6 +1981,45 @@ class ProgressiveValidationTests(unittest.TestCase):
                 else:
                     os.environ[key] = value
 
+    def test_fast_34752623651_web_search_config_merge_fixtures_are_synthetic(self) -> None:
+        from scripts.gitops import secret_scan
+
+        path = "src/agents/tools/web-search.test.ts"
+        text = (ROOT / path).read_text(encoding="utf-8")
+        self.assertEqual(secret_scan.scan_text(path, text), [])
+
+        prefix = secret_scan.SYNTHETIC_PREFIX.rstrip(".")
+        providers = ("grok", "brave", "perplexity")
+        for provider in providers:
+            parts = [prefix, f"web-search.{provider}", "v1"]
+            assembled = ".".join(parts)
+            self.assertTrue(secret_scan.is_synthetic_value(assembled), assembled)
+            source = "[" + ", ".join(json.dumps(part) for part in parts) + "]"
+            self.assertIn(source, text)
+
+        live = MODULE.validate_phase(
+            root=ROOT,
+            profile="fast",
+            changed=[path],
+            write_evidence_file=False,
+        )
+        self.assertTrue(live["ok"], live)
+        self.assertEqual(live["admittedPaths"], [path])
+        self.assertFalse(
+            any(row.get("kind") == secret_scan.KIND_CREDENTIAL for row in live["findings"])
+        )
+
+        field = "api" + "Key"
+        realistic_line = f"{field}: {json.dumps('ghp_' + ('A' * 36))}"
+        realistic = secret_scan.scan_text("isolated-realistic.ts", realistic_line)
+        self.assertTrue(any(row["realistic"] for row in realistic), realistic)
+
+        shaped_line = f"{field}: {json.dumps('xai' + '-test-key')}"
+        shaped = secret_scan.scan_text("isolated-credential-shaped.ts", shaped_line)
+        self.assertTrue(shaped)
+        self.assertFalse(shaped[0]["realistic"])
+        self.assertEqual(shaped[0]["rule"], "assignment.secret")
+
 
 if __name__ == "__main__":
     unittest.main()
