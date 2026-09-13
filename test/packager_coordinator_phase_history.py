@@ -20,6 +20,7 @@ from scripts.gitops.packager_coordinator import (
     MemoryGitHub,
     _read_isolated_state_pair,
     _unique_phase_commits,
+    _validate_source,
     assemble_phase,
     hydrate_existing_phase_state,
 )
@@ -328,6 +329,68 @@ class ExistingPhaseStateHydrationTests(unittest.TestCase):
                 github=self.fx.github,
                 expected_repository="owner/name",
             )
+
+
+class SourceTipValidationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fx = HydrationFixture()
+        self.addCleanup(self.fx.cleanup)
+
+    def _validate(self, source: AcceptedSource) -> None:
+        _validate_source(
+            self.fx.work,
+            source,
+            github=self.fx.github,
+            remote="origin",
+            require_evidence=False,
+        )
+
+    def test_missing_local_issue_ref_is_not_treated_as_sha(self) -> None:
+        source = self.fx.accept_issue(348, "missing-local.txt", "missing-local\n")
+        git(self.fx.work, "branch", "-D", source.branch)
+        missing = subprocess.run(
+            ["git", "rev-parse", "--verify", f"refs/heads/{source.branch}"],
+            cwd=self.fx.work,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(missing.returncode, 0)
+        echoed = subprocess.run(
+            ["git", "rev-parse", f"refs/heads/{source.branch}"],
+            cwd=self.fx.work,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertIn(f"refs/heads/{source.branch}", echoed.stdout)
+        self._validate(source)
+
+    def test_matching_local_and_remote_tips_are_accepted(self) -> None:
+        source = self.fx.accept_issue(349, "matching-tips.txt", "matching\n")
+        self._validate(source)
+
+    def test_divergent_local_tip_is_stale(self) -> None:
+        source = self.fx.accept_issue(350, "local-stale.txt", "stale\n")
+        git(self.fx.work, "checkout", "-q", source.branch)
+        write(self.fx.work / "local-stale-extra.txt", "extra\n")
+        git(self.fx.work, "add", "local-stale-extra.txt")
+        git(self.fx.work, "commit", "-qm", "divergent local")
+        git(self.fx.work, "checkout", "-q", "development")
+        with self.assertRaisesRegex(CoordinatorError, "stale_commit"):
+            self._validate(source)
+
+    def test_divergent_remote_tip_without_local_ref_is_stale(self) -> None:
+        source = self.fx.accept_issue(351, "remote-stale.txt", "stale\n")
+        git(self.fx.work, "checkout", "-q", source.branch)
+        write(self.fx.work / "remote-stale-extra.txt", "extra\n")
+        git(self.fx.work, "add", "remote-stale-extra.txt")
+        git(self.fx.work, "commit", "-qm", "divergent remote")
+        git(self.fx.work, "push", "-q", "origin", source.branch)
+        git(self.fx.work, "checkout", "-q", "development")
+        git(self.fx.work, "branch", "-D", source.branch)
+        with self.assertRaisesRegex(CoordinatorError, "stale_commit"):
+            self._validate(source)
 
 
 class IsolatedStateCompletePairReaderTests(unittest.TestCase):
