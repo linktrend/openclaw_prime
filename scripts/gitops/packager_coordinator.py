@@ -689,20 +689,23 @@ def _validate_source(
 ) -> None:
     if not _object_exists(repo, source.sha):
         raise CoordinatorError("missing_commit", source.sha)
-    local = _git(repo, "rev-parse", f"refs/heads/{source.branch}", check=False)
+    # Missing refs/heads/<issue> must not be treated as a SHA: bare rev-parse
+    # echoes the ref name on stdout. _local_sha requires --verify + is_valid_sha.
+    local = _local_sha(repo, source.branch)
     current = _git(repo, "rev-parse", "--abbrev-ref", "HEAD", check=False)
     porcelain = _git(repo, "status", "--porcelain", "--untracked-files=all", check=False)
     if current == source.branch and porcelain:
         raise CoordinatorError("uncommitted", source.branch)
-    if local and normalize_sha(local) != source.sha:
-        raise CoordinatorError("stale_commit", f"{source.branch}:local={local}:accepted={source.sha}")
+    accepted = normalize_sha(source.sha)
+    if local and local != accepted:
+        raise CoordinatorError("stale_commit", f"{source.branch}:local={local}:accepted={accepted}")
     remote_sha = _remote_sha(repo, remote, source.branch)
     if not remote_sha:
         raise CoordinatorError("unpushed", source.branch)
-    if remote_sha != source.sha:
-        if local and normalize_sha(local) == source.sha:
-            raise CoordinatorError("unpushed", f"{source.branch}:local={source.sha}:remote={remote_sha}")
-        raise CoordinatorError("stale_commit", f"{source.branch}:remote={remote_sha}:accepted={source.sha}")
+    if remote_sha != accepted:
+        if local and local == accepted:
+            raise CoordinatorError("unpushed", f"{source.branch}:local={accepted}:remote={remote_sha}")
+        raise CoordinatorError("stale_commit", f"{source.branch}:remote={remote_sha}:accepted={accepted}")
     if not _is_ancestor(repo, source.sha, remote_sha) and remote_sha != source.sha:
         raise CoordinatorError("stale_commit", source.branch)
     if require_evidence:
