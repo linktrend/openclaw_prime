@@ -1,81 +1,28 @@
 {
   "schema": "lisa_google_workspace_pkt07_pre_vps_readiness_receipt_v1",
-  "status": "external-hold",
+  "status": "source-only-fail-closed",
   "scope": "OpenClaw-owned Workspace contract and offline evidence only",
   "consumer": {
     "repository": "linktrend/openclaw_prime",
-    "commit": "c75c8fb8f7d2e0b0ef801cef03e7cbc70bbb85f7",
-    "tree": "1072bcbdd236e2bcb0a67e7556cb35adbf0ff157",
     "ownedPath": "linkbots/lisa/ops/google-workspace"
   },
-  "providerObservations": [
-    {
-      "repository": "linktrend/LiNKskills",
-      "ref": "refs/heads/development",
-      "commit": "dd8f0548cc32f379bcbf3a6aa60953cf6a7d6ec9",
-      "tree": "86692eb8c0fb4205bb32d0a3f6aa7d7d6a6c0485",
-      "catalogue": {
-        "interfacePath": "tools/gws/interface.json",
-        "interfaceSha256": "sha256:65e8d5ac49cbc15cf93347d4fa85c65187ce9d4a55116ab95dcc2e99babe8637",
-        "indexPath": "catalog/index.json",
-        "indexSha256": "sha256:1c2292ed5aa28d06097749eac5c8dcd5ee34891ac973df9b1a7351ea607967e3",
-        "catalogueGitSha": "af70f7ff04b2f148d04fe450a4e20c88df06fc36",
-        "sourceTreeSha256": "sha256:fd4e17edf08e88ff976f504749f0f0235c4b4b53db02db24260c07d1f25e1788",
-        "requiredSkillIds": [
-          "gws-shared",
-          "gws-docs",
-          "gws-docs-write",
-          "gws-sheets",
-          "gws-sheets-read",
-          "gws-sheets-append",
-          "gws-slides"
-        ],
-        "presentSkillIds": [],
-        "qualificationState": "required-entries-absent"
-      }
-    },
-    {
-      "repository": "linktrend/LiNKskills",
-      "ref": "refs/heads/main",
-      "commit": "ded1baa63939db92f7616ac7393401a702d881de",
-      "tree": "d03e551d9c0189a3f22d67663a53cb68235f3c1d",
-      "catalogue": {
-        "indexPath": "catalog/index.json",
-        "indexSha256": "sha256:1c2292ed5aa28d06097749eac5c8dcd5ee34891ac973df9b1a7351ea607967e3",
-        "catalogueGitSha": "af70f7ff04b2f148d04fe450a4e20c88df06fc36",
-        "sourceTreeSha256": "sha256:fd4e17edf08e88ff976f504749f0f0235c4b4b53db02db24260c07d1f25e1788",
-        "requiredSkillIds": [
-          "gws-shared",
-          "gws-docs",
-          "gws-docs-write",
-          "gws-sheets",
-          "gws-sheets-read",
-          "gws-sheets-append",
-          "gws-slides"
-        ],
-        "presentSkillIds": [],
-        "qualificationState": "required-entries-absent"
-      }
-    }
-  ],
-  "skillSourceDigests": [
-    { "id": "gws-shared", "path": "tools/gws/vendor/link-gws-cli/skills/gws-shared/SKILL.md", "sha256": "sha256:b22a7817480a48ac03e1d086cdb5047e1f55c7299a028192dd6138c82fb5d569" },
-    { "id": "gws-docs", "path": "tools/gws/vendor/link-gws-cli/skills/gws-docs/SKILL.md", "sha256": "sha256:449b32ad53e889e44278343997e886f5fdb892f9aa90769fcabc6800983a174a" },
-    { "id": "gws-docs-write", "path": "tools/gws/vendor/link-gws-cli/skills/gws-docs-write/SKILL.md", "sha256": "sha256:beed0deac0bf543bf4a05f124461cbcb48d5e488a114d7b6be38574c3aa7d819" },
-    { "id": "gws-sheets", "path": "tools/gws/vendor/link-gws-cli/skills/gws-sheets/SKILL.md", "sha256": "sha256:31c92ae4b8572e96b49157be41880b35509eb52a59930dec2992e32ab5102f85" },
-    { "id": "gws-sheets-read", "path": "tools/gws/vendor/link-gws-cli/skills/gws-sheets-read/SKILL.md", "sha256": "sha256:ece438ead0d676fa246183caf95194f4786095eb80ef2c7bd7f9de22a24cc920" },
-    { "id": "gws-sheets-append", "path": "tools/gws/vendor/link-gws-cli/skills/gws-sheets-append/SKILL.md", "sha256": "sha256:475aa1201991d6d4b604b785a1dbd404294741bd4a2e32a20b5353a161a4ef0f" },
-    { "id": "gws-slides", "path": "tools/gws/vendor/link-gws-cli/skills/gws-slides/SKILL.md", "sha256": "sha256:e9600f047c546f0f33065f646e8e3f06bd2e475b95389471fa6603ea865bda98" }
-  ],
+  "inertSkillsConsumption": {
+    "mode": "exact-release-and-digest",
+    "copiedSkillBodies": false,
+    "providerRuntime": "not executed by OpenClaw",
+    "upstreamScanPerformed": false,
+    "liveAuditPerformed": false,
+    "sourceReceipt": "receipts/qualified-skills.receipt.json"
+  },
   "openclawOwnedProof": {
     "workspaceContract": "pass",
     "negativeAccessAndScopeAssertions": "pass",
     "canonicalFocusedTest": {
       "command": "node scripts/run-vitest.mjs linkbots/lisa/ops/google-workspace/google-workspace.test.ts",
-      "status": "blocked-before-test",
-      "reason": "ERR_MODULE_NOT_FOUND: p-map is unavailable in the isolated worktree"
+      "status": "failed-no-test-files",
+      "reason": "scripts/run-vitest.mjs defaults to test/vitest/vitest.unit.config.ts; unit include does not cover linkbots. Adding linkbots/**/*.test.ts to unitTestIncludePatterns is outside PKT-07 owned paths. These tests use node:test and pass under node --test."
     },
-    "offlineFocusedTests": { "command": "node --test linkbots/lisa/ops/google-workspace/google-workspace.test.ts", "passed": 18, "failed": 0 },
+    "offlineFocusedTests": { "command": "node --test linkbots/lisa/ops/google-workspace/google-workspace.test.ts", "passed": 19, "failed": 0 },
     "shellSyntax": { "scripts": 5, "passed": 5, "failed": 0 },
     "providerRuntimeExecuted": false,
     "oauthPerformed": false,
@@ -88,11 +35,10 @@
     "state": "unavailable",
     "executionGate": "fail-closed; no provider skill activation",
     "missingExternalActions": [
-      "LiNKskills must publish an exact qualified release identity for the required Google Workspace skill set.",
-      "LiNKskills must publish a catalogue index digest containing all seven required skill IDs.",
-      "LiNKskills must provide an independent qualification receipt binding release, source/catalogue digests, evaluator/proof, and enabled execution state."
+      "A later human-controlled gate must supply an exact qualified Skills receipt that matches the committed source contract.",
+      "Do not guess, scan, or copy skill bodies to enable wrappers."
     ],
-    "nextOpenClawAction": "Replace the source-only qualified-skills receipt with the provider-supplied qualified receipt, then rerun the focused PKT-07 test before any Workspace activation."
+    "nextOpenClawAction": "Keep wrappers fail-closed on the committed source receipt until a provider-supplied qualified receipt is installed privately at the Workspace config root."
   },
-  "rollback": "No runtime mutation occurred; revert this evidence-only checkpoint if rejected. Never enable wrappers from an unavailable or guessed qualification receipt."
+  "rollback": "No runtime mutation occurred; revert this source-only checkpoint if rejected. Never enable wrappers from an unavailable or guessed qualification receipt."
 }

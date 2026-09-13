@@ -69,11 +69,13 @@ function httpConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const skillsNativeAccess = "fx-sk-acc";
+
 function resolvedToken(bindingId: string) {
   return {
     bindingId,
     bindingFingerprint: `fp-${bindingId}`,
-    accessToken: "test-access-token",
+    accessToken: skillsNativeAccess,
     expiresAt: Date.now() + 60_000,
     tokenType: "Bearer" as const,
   };
@@ -83,14 +85,14 @@ describe("linkskills native OAuth bridge", () => {
   it("calls the production loopback HTTP Gateway with a host-owned machine token", async () => {
     const acquire = vi.fn(async ({ bindingId }: { bindingId: string }) => resolvedToken(bindingId));
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      expect(String(url)).toBe("http://127.0.0.1:18788/v1/skills_tool_invoke");
+      expect(String(url)).toBe("http://127.0.0.1:18788/v1/skills_catalog_search");
       const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer test-access-token");
+      expect(headers.get("authorization")).toBe(`Bearer ${skillsNativeAccess}`);
       const idempotencyKey = headers.get("idempotency-key");
       expect(idempotencyKey).toMatch(/^openclaw:[a-f0-9-]{36}$/u);
       expect(headers.get("x-request-id")).toBe(idempotencyKey);
       expect(JSON.parse(String(init?.body))).toEqual({
-        params: { tool_id: "published.echo", input: { text: "hello" } },
+        params: { query: "echo" },
         idempotency_key: idempotencyKey,
         request_id: idempotencyKey,
       });
@@ -103,12 +105,12 @@ describe("linkskills native OAuth bridge", () => {
     });
 
     const result = await tool.execute("tool-call-1", {
-      operation: "skills_tool_invoke",
-      arguments: { tool_id: "published.echo", input: { text: "hello" } },
+      operation: "skills_catalog_search",
+      arguments: { query: "echo" },
     });
 
     expect(result.details).toMatchObject({ ok: true });
-    expect(JSON.stringify(result)).not.toContain("test-access-token");
+    expect(JSON.stringify(result)).not.toContain(skillsNativeAccess);
     expect(acquire).toHaveBeenCalledWith({ bindingId: "linkskills-production" });
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
@@ -125,12 +127,12 @@ describe("linkskills native OAuth bridge", () => {
     });
 
     await tool.execute("reused-tool-call", {
-      operation: "skills_tool_invoke",
-      arguments: { tool_id: "published.echo", input: { text: "first" } },
+      operation: "skills_catalog_search",
+      arguments: { query: "first" },
     });
     await tool.execute("reused-tool-call", {
-      operation: "skills_tool_invoke",
-      arguments: { tool_id: "published.echo", input: { text: "second" } },
+      operation: "skills_catalog_search",
+      arguments: { query: "second" },
     });
 
     expect(requestIds).toHaveLength(2);
@@ -152,7 +154,7 @@ describe("linkskills native OAuth bridge", () => {
     );
 
     const result = await tool.execute("tool-call-refresh", {
-      operation: "skills_search",
+      operation: "skills_catalog_search",
       arguments: { query: "approved" },
     });
 
@@ -174,7 +176,7 @@ describe("linkskills native OAuth bridge", () => {
     );
 
     const result = await tool.execute("tool-call-refresh-denied", {
-      operation: "skills_search",
+      operation: "skills_catalog_search",
       arguments: { query: "approved" },
     });
 
@@ -199,7 +201,7 @@ describe("linkskills native OAuth bridge", () => {
     );
 
     const result = await tool.execute("tool-call-no-auth", {
-      operation: "skills_list",
+      operation: "skills_catalog_list",
       arguments: {},
     });
 
@@ -222,7 +224,7 @@ describe("linkskills native OAuth bridge", () => {
     );
 
     const result = await tool.execute("tool-call-loopback", {
-      operation: "skills_list",
+      operation: "skills_catalog_list",
       arguments: {},
     });
 
@@ -240,12 +242,28 @@ describe("linkskills native OAuth bridge", () => {
     );
 
     const result = await tool.execute("tool-call-disabled", {
-      operation: "skills_search",
+      operation: "skills_catalog_search",
       arguments: { query: "test" },
     });
 
     expect(result).toMatchObject({ details: { ok: false, reason: "disabled" } });
     expect(acquire).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("does not select provider-side skill execution on the native consumer", async () => {
+    const acquire = vi.fn(async ({ bindingId }: { bindingId: string }) => resolvedToken(bindingId));
+    const fetchImpl = vi.fn();
+    const tool = createLinkskillsTool(createApi({ pluginConfig: httpConfig(), acquire }), {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const result = await tool.execute("tool-call-invoke", {
+      operation: "skills_tool_invoke",
+      arguments: { tool_id: "published.echo" },
+    });
+    expect(result).toMatchObject({
+      details: { ok: false, reason: "legacy_execution_disabled" },
+    });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -262,7 +280,7 @@ describe("linkskills native OAuth bridge", () => {
     });
 
     expect(result).toMatchObject({
-      details: { ok: false, reason: "operation_not_allowed" },
+      details: { ok: false, reason: "legacy_execution_disabled" },
     });
     expect(acquire).not.toHaveBeenCalled();
     expect(fetchImpl).not.toHaveBeenCalled();
@@ -273,7 +291,7 @@ describe("linkskills native OAuth bridge", () => {
       createApi({ pluginConfig: { mcpDiscoveryRead: true, transportMode: "mcp" } }),
     );
     const result = await tool.execute("test", {
-      operation: "skills_search",
+      operation: "skills_catalog_search",
       arguments: { query: "test", actor_id: "spoofed" },
     });
     expect(result.content[0]?.text).toBe("Actor identity is assigned by LiNKskills.");

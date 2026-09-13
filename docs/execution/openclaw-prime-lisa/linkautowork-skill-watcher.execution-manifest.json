@@ -41,7 +41,7 @@
     { "id": "ISS-01", "packetId": "AW-01", "title": "Produce signed idempotent Skills update candidates without release authority" }
   ],
   "controls": {
-    "validationPolicyDigest": "sha256:fa3f448e33fbc05e4b9676628a8be1f67bb020cc0baf58da6dd8fe720d0c26f0",
+    "validationPolicyDigest": "sha256:445953e776fa6594bc96f047794616164ec75b213a07c0e9300630db1ec24a17",
     "exactCandidateInvalidation": { "enabled": true, "identityFields": ["repository", "commit", "tree"] },
     "boundedRetry": { "ordinarySourceRepairs": 3, "infrastructureAttemptsPerCandidate": 2, "codeFailureRetries": 0 },
     "orchestrationLease": { "required": true, "scope": "packet-repository", "ttlSeconds": 3600 },

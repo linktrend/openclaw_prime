@@ -24,6 +24,11 @@ import {
   type LisaJobId,
   type LisaPrivacyClass,
 } from "./lisa-job-contracts.ts";
+import {
+  DIGEST_PREPARATION_DEADLINES,
+  FLASH_DEADLINES,
+  FLASH_PREPARATION_DEADLINES,
+} from "./reporting/reporting-contracts.ts";
 
 export const LISA_CATALOGUE_VERSION = 1 as const;
 export const LISA_CATALOGUE_DELIVERY_MODE = "none" as const;
@@ -225,9 +230,17 @@ function subtractMinutes(time: string, minutes: number): string {
   return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
 }
 
-function reportDeadline(time: string): LisaCatalogueDeadlines {
+function digestDeadline(time: keyof typeof DIGEST_PREPARATION_DEADLINES): LisaCatalogueDeadlines {
   return {
-    preparationDeadlineLocalTime: subtractMinutes(time, 10),
+    preparationDeadlineLocalTime: DIGEST_PREPARATION_DEADLINES[time],
+    visibleDeliveryDeadlineLocalTime: time,
+    completionDeadlineLocalTime: time,
+  };
+}
+
+function flashDeadline(time: keyof typeof FLASH_PREPARATION_DEADLINES): LisaCatalogueDeadlines {
+  return {
+    preparationDeadlineLocalTime: FLASH_PREPARATION_DEADLINES[time],
     visibleDeliveryDeadlineLocalTime: time,
     completionDeadlineLocalTime: time,
   };
@@ -245,7 +258,7 @@ const entries: readonly LisaCatalogueEntry[] = [
     family: "librarian",
     label: "Librarian cycle",
     privacyClass: "work",
-    schedule: { kind: "cron", localTimes: ["03:30"], cron: "30 3 * * *" },
+    schedule: { kind: "hook", localTimes: ["03:30"] },
     deadlines: maintenanceDeadline.librarian,
     tools: TOOLS.maintenance,
     providerDependencies: [dependency(PROVIDER.librarian)],
@@ -258,7 +271,7 @@ const entries: readonly LisaCatalogueEntry[] = [
     family: "memory_dreaming",
     label: "Memory Dreaming",
     privacyClass: "work",
-    schedule: { kind: "cron", localTimes: ["04:30"], cron: "30 4 * * *" },
+    schedule: { kind: "hook", localTimes: ["04:30"] },
     deadlines: maintenanceDeadline.dreaming,
     tools: TOOLS.maintenance,
     providerDependencies: [dependency(PROVIDER.dreaming), dependency(PROVIDER.librarian)],
@@ -271,7 +284,7 @@ const entries: readonly LisaCatalogueEntry[] = [
     family: "backup",
     label: "Off-VPS encrypted backup",
     privacyClass: "work",
-    schedule: { kind: "cron", localTimes: ["05:30"], cron: "30 5 * * *" },
+    schedule: { kind: "hook", localTimes: ["05:30"] },
     deadlines: maintenanceDeadline.backup,
     tools: TOOLS.maintenance,
     providerDependencies: [dependency(PROVIDER.backup), dependency(PROVIDER.dreaming)],
@@ -285,10 +298,10 @@ const entries: readonly LisaCatalogueEntry[] = [
     label: "Executive Digest morning",
     privacyClass: "work",
     schedule: { kind: "cron", localTimes: ["07:00"], cron: "45 6 * * *" },
-    deadlines: reportDeadline("07:00"),
+    deadlines: digestDeadline("07:00"),
     tools: TOOLS.report,
     providerDependencies: [dependency(PROVIDER.reporting), dependency(PROVIDER.librarian)],
-    destinationBindingId: "carlos-work-email-binding",
+    destinationBindingId: "lisa-telegram-binding",
     timeoutSeconds: 600,
     sourceProcedure: "jobs/reporting/procedure.md",
   }),
@@ -298,14 +311,14 @@ const entries: readonly LisaCatalogueEntry[] = [
     label: "Executive Digest evening",
     privacyClass: "work",
     schedule: { kind: "cron", localTimes: ["17:00"], cron: "45 16 * * *" },
-    deadlines: reportDeadline("17:00"),
+    deadlines: digestDeadline("17:00"),
     tools: TOOLS.report,
     providerDependencies: [dependency(PROVIDER.reporting)],
-    destinationBindingId: "carlos-work-email-binding",
+    destinationBindingId: "lisa-telegram-binding",
     timeoutSeconds: 600,
     sourceProcedure: "jobs/reporting/procedure.md",
   }),
-  ...["10:45", "12:45", "14:45", "20:45", "22:45"].map((time) =>
+  ...FLASH_DEADLINES.map((time) =>
     entry({
       id: `flash-report-${time.replace(":", "")}`,
       family: "flash_report",
@@ -316,7 +329,7 @@ const entries: readonly LisaCatalogueEntry[] = [
         localTimes: [time],
         cron: preparationCron(time),
       },
-      deadlines: reportDeadline(time),
+      deadlines: flashDeadline(time),
       tools: TOOLS.report,
       providerDependencies: [dependency(PROVIDER.reporting), dependency(PROVIDER.compliance)],
       destinationBindingId: "lisa-telegram-binding",
@@ -329,13 +342,9 @@ const entries: readonly LisaCatalogueEntry[] = [
     family: "selfie",
     label: "Selfie reminder",
     privacyClass: "personal_compliance",
-    schedule: {
-      kind: "embedded",
-      localTimes: ["17:45"],
-      embeddedIn: ["message:selfie-battery-1745"],
-    },
+    schedule: { kind: "cron", localTimes: ["17:45"], cron: "40 17 * * *" },
     deadlines: {
-      preparationDeadlineLocalTime: "17:35",
+      preparationDeadlineLocalTime: "17:40",
       visibleDeliveryDeadlineLocalTime: "17:45",
       completionDeadlineLocalTime: "23:59",
     },
@@ -350,13 +359,9 @@ const entries: readonly LisaCatalogueEntry[] = [
     family: "selfie",
     label: "Conditional selfie reminder",
     privacyClass: "personal_compliance",
-    schedule: {
-      kind: "conditional",
-      localTimes: ["21:45"],
-      embeddedIn: ["flash-report-2045", "flash-report-2245"],
-    },
+    schedule: { kind: "cron", localTimes: ["21:45"], cron: "40 21 * * *" },
     deadlines: {
-      preparationDeadlineLocalTime: "21:35",
+      preparationDeadlineLocalTime: "21:40",
       visibleDeliveryDeadlineLocalTime: "21:45",
       completionDeadlineLocalTime: "23:59",
     },
@@ -483,24 +488,71 @@ const entries: readonly LisaCatalogueEntry[] = [
     sourceProcedure: "jobs/time-management/procedure.md",
   }),
   entry({
-    id: "private-health-checkpoints",
+    id: "private-health-0815",
     family: "private_health",
-    label: "Private health checkpoints",
+    label: "Private health morning checkpoint",
     privacyClass: "private_health",
-    schedule: {
-      kind: "embedded",
-      localTimes: ["08:15", "13:15", "22:45"],
-      embeddedIn: ["executive-digest-morning", "flash-report-1245", "flash-report-2245"],
-    },
+    schedule: { kind: "cron", localTimes: ["08:15"], cron: "10 8 * * *" },
     deadlines: {
-      preparationDeadlineLocalTime: "08:05",
+      preparationDeadlineLocalTime: "08:10",
       visibleDeliveryDeadlineLocalTime: "08:15",
+      completionDeadlineLocalTime: "08:15",
+    },
+    tools: TOOLS.privateHealth,
+    providerDependencies: [dependency(PROVIDER.health)],
+    destinationBindingId: "lisa-telegram-binding",
+    timeoutSeconds: 600,
+    sourceProcedure: "jobs/health/procedure.md",
+  }),
+  entry({
+    id: "private-health-1315",
+    family: "private_health",
+    label: "Private health midday checkpoint",
+    privacyClass: "private_health",
+    schedule: { kind: "cron", localTimes: ["13:15"], cron: "10 13 * * *" },
+    deadlines: {
+      preparationDeadlineLocalTime: "13:10",
+      visibleDeliveryDeadlineLocalTime: "13:15",
+      completionDeadlineLocalTime: "13:15",
+    },
+    tools: TOOLS.privateHealth,
+    providerDependencies: [dependency(PROVIDER.health)],
+    destinationBindingId: "lisa-telegram-binding",
+    timeoutSeconds: 600,
+    sourceProcedure: "jobs/health/procedure.md",
+  }),
+  entry({
+    id: "private-health-2245",
+    family: "private_health",
+    label: "Private health evening checkpoint",
+    privacyClass: "private_health",
+    schedule: { kind: "cron", localTimes: ["22:45"], cron: "40 22 * * *" },
+    deadlines: {
+      preparationDeadlineLocalTime: "22:40",
+      visibleDeliveryDeadlineLocalTime: "22:45",
       completionDeadlineLocalTime: "22:45",
     },
     tools: TOOLS.privateHealth,
     providerDependencies: [dependency(PROVIDER.health)],
-    destinationBindingId: "carlos-personal-email-binding",
+    destinationBindingId: "lisa-telegram-binding",
     timeoutSeconds: 600,
+    sourceProcedure: "jobs/health/procedure.md",
+  }),
+  entry({
+    id: "private-health-drive-export",
+    family: "private_health",
+    label: "Private health encrypted Drive export",
+    privacyClass: "private_health",
+    schedule: { kind: "hook", localTimes: ["after nightly ledger write"] },
+    deadlines: {
+      preparationDeadlineLocalTime: "after lisa-private-health-2245-v1 succeeds",
+      visibleDeliveryDeadlineLocalTime: null,
+      completionDeadlineLocalTime: "23:59",
+    },
+    tools: ["health.export_encrypted", "health.verify_export"],
+    providerDependencies: [dependency(PROVIDER.health)],
+    destinationBindingId: "carlos-personal-email-binding",
+    timeoutSeconds: 900,
     sourceProcedure: "jobs/health/procedure.md",
   }),
   entry({
@@ -516,7 +568,7 @@ const entries: readonly LisaCatalogueEntry[] = [
     },
     tools: TOOLS.privateHealth,
     providerDependencies: [dependency(PROVIDER.health)],
-    destinationBindingId: null,
+    destinationBindingId: "carlos-personal-email-binding",
     timeoutSeconds: 900,
     sourceProcedure: "jobs/health/procedure.md",
   }),
@@ -600,6 +652,14 @@ export function validateLisaJobCatalogue(
       errors.push(`${item.id}: delivery.mode must be none`);
     if (item.privacyClass === "private_health" && item.family !== "private_health")
       errors.push(`${item.id}: private health family mismatch`);
+    if (
+      (item.family === "librarian" ||
+        item.family === "backup" ||
+        item.family === "memory_dreaming") &&
+      (item.schedule.kind === "cron" || Boolean(item.schedule.cron))
+    ) {
+      errors.push(`${item.id}: ${item.family} must not be an OpenClaw cron declaration`);
+    }
     if (item.destinationBindingId !== null) {
       try {
         assertDestinationBindingId(item.destinationBindingId);

@@ -11,6 +11,7 @@ import { resolveLegacyInheritedAuthDir } from "./legacy-inherited-auth-dir.js";
 import { findModelInCatalog } from "./model-catalog-lookup.js";
 import type { ModelCatalogEntry, ModelCatalogSnapshot } from "./model-catalog.types.js";
 import { modelTransportRoutesMatch } from "./model-compat-catalog.js";
+import { resolveSourceOnlyNonCodingCatalog, type NonCodingRouteConfig } from "./noncoding-route.js";
 import { resolvePublishedModelCatalogOwner } from "./prepared-model-catalog-owner.js";
 import { PreparedModelCatalogConfigReplacedError } from "./prepared-model-catalog.errors.js";
 import type { ResolvedPublishedModelCatalogOwner } from "./prepared-model-catalog.types.js";
@@ -483,4 +484,12 @@ export async function loadPublishedPreparedModelCatalog(
   params: LoadPreparedModelCatalogParams = {},
 ): Promise<ModelCatalogEntry[]> {
   return (await loadPublishedPreparedModelCatalogOwnerSnapshot(params)).modelCatalog.entries;
+}
+
+/**
+ * PKT-04 catalog adapter. Source-only slots; never starts provider discovery,
+ * never activates paid document routes, and never mutates a published catalog.
+ */
+export function resolveNonCodingCatalogSlotsWithoutDiscovery(config: NonCodingRouteConfig) {
+  return resolveSourceOnlyNonCodingCatalog(config);
 }

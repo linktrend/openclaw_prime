@@ -324,8 +324,56 @@ def classify_recovery(
     return {"safe": True, "code": "healthy", "action": "continue", "reuse": True}
 
 
+def extract_selected_tests(*texts: str) -> list[str]:
+    """Lift focused overlay tests out of a command's JSON stdout/stderr.
+
+    Full validation prints pretty-printed JSON plus a summary line. Line
+    parsers and stdout tails drop ``selectedTests`` (runs 34747336391 and
+    34748629707). Failed Full JSON must still carry the overlay list.
+    """
+    decoder = json.JSONDecoder()
+    selected: list[str] = []
+    for text in texts:
+        if not text:
+            continue
+        idx = 0
+        length = len(text)
+        while idx < length:
+            while idx < length and text[idx].isspace():
+                idx += 1
+            if idx >= length or text[idx] != "{":
+                idx += 1
+                continue
+            try:
+                payload, end = decoder.raw_decode(text, idx)
+            except json.JSONDecodeError:
+                idx += 1
+                continue
+            idx = end
+            if not isinstance(payload, dict):
+                continue
+            value = payload.get("selectedTests")
+            if (
+                isinstance(value, list)
+                and value
+                and all(isinstance(item, str) and item and not item.startswith("-") for item in value)
+            ):
+                selected = list(value)
+    return selected
+
+
 def _tail(value: str, limit: int = 2000) -> str:
-    return value[-limit:] if value else ""
+    """Keep the start and end of captured output.
+
+    Full validation prints JSON with ``errors`` first. A pure suffix of 2000
+    characters can drop that diagnosis (run 34744312470).
+    """
+    if not value:
+        return ""
+    if len(value) <= limit:
+        return value
+    keep = max(1, limit // 2)
+    return f"{value[:keep]}\n…\n{value[-keep:]}"
 
 
 def _tracked_workspace_digest(root: Path) -> str | None:
@@ -383,6 +431,7 @@ def run_profile(
     before_workspace = _tracked_workspace_digest(root)
     started = clock()
     rows: list[dict[str, Any]] = []
+    selected_tests: list[str] = []
     failed = False
     mutated = False
     preflight_result: Mapping[str, Any] | None = None
@@ -464,6 +513,9 @@ def run_profile(
         )
         if return_code != 0:
             failed = True
+        lifted = extract_selected_tests(stdout, stderr)
+        if lifted:
+            selected_tests = lifted
         after_workspace = _tracked_workspace_digest(root)
         if before_workspace is not None and after_workspace != before_workspace:
             mutated = True
@@ -486,6 +538,7 @@ def run_profile(
         "workspaceMutated": mutated,
         "identity": dict(identity) if identity is not None else None,
         "identityDigest": resolved_identity_digest,
+        "selectedTests": selected_tests,
     }
     inventory["inventoryDigest"] = digest_json(
         {key: inventory[key] for key in ("profile", "boundary", "risk", "commands", "identityDigest")}

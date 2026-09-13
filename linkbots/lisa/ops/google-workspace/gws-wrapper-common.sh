@@ -247,28 +247,16 @@ gws_exec_route() {
 gws_require_qualified_skills() {
   local source_receipt="$GWS_PACKAGE_ROOT/receipts/qualified-skills.receipt.json"
   local receipt="${GWS_CONFIG_ROOT:-}/qualified-skills.receipt.json"
-  local state
+  local validator="$GWS_PACKAGE_ROOT/qualification-receipt.mjs"
+  # The committed source receipt is inert. Only the exact validator may enable
+  # a provider-supplied runtime receipt; a flags-only copy must not.
   [[ -r "$source_receipt" && ! -L "$source_receipt" ]] ||
     gws_die "source Skills receipt prerequisite is missing"
+  [[ -r "$validator" && ! -L "$validator" ]] ||
+    gws_die "qualified Skills receipt validator is missing"
   [[ -r "$receipt" && ! -L "$receipt" ]] ||
     gws_die "qualified Skills receipt prerequisite is missing"
-  state=$("$GWS_JSON_NODE_BIN" -e '
-    const fs = require("node:fs");
-    const source = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-    const receipt = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-    const required = source.catalogueIndexBinding?.requiredSkillIds ?? [];
-    const present = new Set(receipt.catalogueIndexBinding?.presentSkillIds ?? []);
-    const qualified = receipt.status === "qualified" &&
-      receipt.qualification?.state === "qualified" &&
-      receipt.qualification?.executionGate === "enabled" &&
-      receipt.provider?.commit === source.provider?.commit &&
-      receipt.provider?.tree === source.provider?.tree &&
-      receipt.catalogueBinding?.sha256 === source.catalogueBinding?.sha256 &&
-      receipt.catalogueIndexBinding?.sha256 === source.catalogueIndexBinding?.sha256 &&
-      required.length > 0 && required.every((id) => present.has(id));
-    process.stdout.write(qualified ? "qualified" : "unavailable");
-  ' "$source_receipt" "$receipt" 2>/dev/null) || gws_die "qualified Skills receipt prerequisite is invalid"
-  [[ "$state" == qualified ]] ||
+  "$GWS_JSON_NODE_BIN" "$validator" "$source_receipt" "$receipt" >/dev/null 2>&1 ||
     gws_die "qualified Skills receipt prerequisite is unavailable; provider activation is blocked"
 }
 

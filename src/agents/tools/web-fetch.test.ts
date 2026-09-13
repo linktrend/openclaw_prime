@@ -1,7 +1,28 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getToolTerminalPresentation } from "../tool-terminal-presentation.js";
 import { createWebFetchTool } from "./web-fetch.js";
 import { sanitizeWebFetchUrl } from "./web-fetch.test-support.js";
+
+const { configureFsSafeNative } = vi.hoisted(() => ({
+  configureFsSafeNative: vi.fn((_config: { mode?: "auto" | "off" | "require" }) => undefined),
+}));
+
+// fs-safe-defaults calls this at import time. Selected-test CI (CI=true,
+// GITHUB_ACTIONS=true, isolate:false) can bind a non-function named export.
+vi.mock("@openclaw/fs-safe/config", () => ({
+  configureFsSafeNative,
+  configureFsSafePython: configureFsSafeNative,
+  getFsSafeNativeConfig: () => ({ mode: "off" as const }),
+  configureFsSafeLocks: vi.fn(),
+  getFsSafeLockConfig: () => ({ staleRecovery: "fail-closed" as const }),
+}));
+
+describe("fs-safe config under selected-test CI", () => {
+  it("exposes configureFsSafeNative as a function", () => {
+    expect(typeof configureFsSafeNative).toBe("function");
+    expect(() => configureFsSafeNative({ mode: "off" })).not.toThrow();
+  });
+});
 
 describe("sanitizeWebFetchUrl", () => {
   it("removes whitespace between scheme and authority (reported bug)", () => {

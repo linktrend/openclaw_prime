@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 export const LISA_BACKUP_SERVICE = "linktrend-lisa-backup.service" as const;
 export const LISA_BACKUP_TIMER = "linktrend-lisa-backup.timer" as const;
 export const LISA_PRIVATE_RESTORE_SERVICE =
@@ -200,6 +204,31 @@ export function buildDeploymentPlan(input: {
       `restore the prior reviewed unit files and restart only ${LISA_BACKUP_SERVICE} when approved`,
     ]),
   });
+}
+
+export function readCommittedDeploymentUnits(): readonly DeploymentUnit[] {
+  const unitDirectory = dirname(fileURLToPath(import.meta.url));
+  return Object.freeze(
+    [LISA_BACKUP_SERVICE, LISA_BACKUP_TIMER, LISA_PRIVATE_RESTORE_SERVICE].map((name) =>
+      Object.freeze({
+        name,
+        contents: readFileSync(join(unitDirectory, name), "utf8"),
+      }),
+    ),
+  );
+}
+
+export function assertCommittedUnitsMatchPlan(plan: DeploymentPlan): true {
+  const committed = Object.fromEntries(
+    readCommittedDeploymentUnits().map((unit) => [unit.name, unit.contents]),
+  );
+  for (const unit of plan.units) {
+    if (committed[unit.name] !== unit.contents) {
+      fail(`committed_unit_drift:${unit.name}`);
+    }
+  }
+  validateDeploymentPlan(plan);
+  return true;
 }
 
 export function validateDeploymentPlan(plan: DeploymentPlan): DeploymentValidation {
