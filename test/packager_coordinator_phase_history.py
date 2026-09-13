@@ -161,7 +161,7 @@ class RemoteOnlyIssueRefTests(unittest.TestCase):
     def test_revise_phase_skips_overlap_among_already_included_tips(self) -> None:
         one = self.fx.accept_issue(81, "shared.txt", "one\n")
         git(self.fx.work, "checkout", "-B", "issue/82-shared", "development")
-        write(self.fx.work / "shared.txt", "two\n")
+        write(self.fx.work / "shared.txt", "one\n")
         git(self.fx.work, "add", "shared.txt")
         git(self.fx.work, "commit", "-qm", "issue 82")
         two_sha = git(self.fx.work, "rev-parse", "HEAD")
