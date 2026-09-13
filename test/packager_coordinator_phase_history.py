@@ -18,6 +18,7 @@ from scripts.gitops.packager_coordinator import (
     CoordinatorError,
     GitPushAdapter,
     MemoryGitHub,
+    _merge_base,
     _read_isolated_state_pair,
     _unique_phase_commits,
     assemble_phase,
@@ -538,6 +539,54 @@ class IsolatedStateAtomicPublicationTests(unittest.TestCase):
             json.loads((state_dir / ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME).read_text(encoding="utf-8")),
             typed,
         )
+
+
+class RecoveredParallelTipOverlapTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fx = HydrationFixture()
+        self.addCleanup(self.fx.cleanup)
+
+    def _branch_from(self, parent: str, number: int, filename: str, content: str) -> AcceptedSource:
+        branch = f"issue/{number}-{filename.split('.')[0]}"
+        git(self.fx.work, "checkout", "-B", branch, parent)
+        write(self.fx.work / filename, content)
+        git(self.fx.work, "add", filename)
+        git(self.fx.work, "commit", "-qm", f"issue {number}")
+        sha = git(self.fx.work, "rev-parse", "HEAD")
+        git(self.fx.work, "push", "-q", "-u", "origin", branch)
+        git(self.fx.work, "checkout", "development")
+        source = AcceptedSource(branch=branch, sha=sha, order=number)
+        self.fx.github.ready_shas.add(sha)
+        self.fx.github.evidence[sha] = {
+            "schemaVersion": 1,
+            "headSha": sha,
+            "classification": "tests",
+        }
+        return source
+
+    def test_parallel_tips_sharing_post_development_history_assemble(self) -> None:
+        parent = self.fx.accept_issue(60, "shared-history.txt", "shared\n")
+        left = self._branch_from(parent.sha, 61, "pkt-a.txt", "a\n")
+        right = self._branch_from(parent.sha, 62, "pkt-b.txt", "b\n")
+        self.assertEqual(_merge_base(self.fx.work, left.sha, right.sha), parent.sha)
+        result = self.fx.assemble([left, right])
+        self.assertEqual(result["action"], "created")
+        for sha in (left.sha, right.sha):
+            self.assertEqual(
+                subprocess.run(
+                    ["git", "merge-base", "--is-ancestor", sha, result["headSha"]],
+                    cwd=self.fx.work,
+                    check=False,
+                ).returncode,
+                0,
+            )
+
+    def test_unique_path_collision_after_shared_parent_still_overlaps(self) -> None:
+        parent = self.fx.accept_issue(63, "shared-history.txt", "shared\n")
+        left = self._branch_from(parent.sha, 64, "same.txt", "left\n")
+        right = self._branch_from(parent.sha, 65, "same.txt", "right\n")
+        with self.assertRaisesRegex(CoordinatorError, "overlapping_commits"):
+            self.fx.assemble([left, right])
 
 
 if __name__ == "__main__":

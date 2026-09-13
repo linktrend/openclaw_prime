@@ -612,6 +612,19 @@ def _changed_paths(repo: Path, base: str, sha: str) -> set[str]:
     return {line.strip() for line in output.splitlines() if line.strip()}
 
 
+def _merge_base(repo: Path, left: str, right: str) -> str:
+    """Exact shared ancestor for unique-delta overlap, not the protected base.
+
+    Recovered parallel tips share post-development history. Comparing each
+    against development would treat that shared ancestry as an overlap and
+    reject a mergeable Phase. If this helper is removed, those packets fail
+    closed with overlapping_commits even when unique paths are disjoint.
+    """
+
+    value = _git(repo, "merge-base", left, right, check=False)
+    return normalize_sha(value) if is_valid_sha(value) else ""
+
+
 def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
     result = subprocess.run(
         ["git", "merge-base", "--is-ancestor", ancestor, descendant],
@@ -631,7 +644,8 @@ def _probe_conflicts(repo: Path, development: str, sources: list[AcceptedSource]
         related = _is_ancestor(repo, left.sha, right.sha) or _is_ancestor(repo, right.sha, left.sha)
         if related:
             continue
-        shared = sorted(_changed_paths(repo, development, left.sha) & _changed_paths(repo, development, right.sha))
+        common = _merge_base(repo, left.sha, right.sha) or normalize_sha(development)
+        shared = sorted(_changed_paths(repo, common, left.sha) & _changed_paths(repo, common, right.sha))
         if shared:
             overlapping.append(
                 {
