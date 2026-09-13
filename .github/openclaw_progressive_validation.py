@@ -781,15 +781,26 @@ def non_vitest_command(validation: str, baseline: str, head: str) -> list[str]:
             "-s", "test", "-p", "receipt_seal.py",
         ],
         "phase-diff-check": ["git", "diff", "--check", baseline, head],
+        # These files sit outside the approved Lisa tooling roots, so a bare
+        # run-vitest target lands on unit config and reports no test files.
+        # backup/vitest.config.ts is the existing local include (**/*.test.ts);
+        # --dir keeps the shard on the named owner instead of the backup tree.
         "lisa-time-management-tests": [
             "node",
             "scripts/run-vitest.mjs",
-            "linkbots/lisa/ops/jobs/time-management/time-management.test.ts",
+            "--config",
+            "linkbots/lisa/ops/backup/vitest.config.ts",
+            "--dir",
+            "linkbots/lisa/ops/jobs/time-management",
+            "time-management.test.ts",
         ],
         "lisa-template-registry-tests": [
             "node",
             "scripts/run-vitest.mjs",
-            "linkbots/lisa/ops/templates/template-registry.test.ts",
+            "--config",
+            "linkbots/lisa/ops/backup/vitest.config.ts",
+            "--dir",
+            "linkbots/lisa/ops/templates",
         ],
         "agents-config-tests": [
             "node",

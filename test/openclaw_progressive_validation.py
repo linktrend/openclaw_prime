@@ -1293,7 +1293,11 @@ class ProgressiveValidationTests(unittest.TestCase):
             [
                 "node",
                 "scripts/run-vitest.mjs",
-                "linkbots/lisa/ops/jobs/time-management/time-management.test.ts",
+                "--config",
+                "linkbots/lisa/ops/backup/vitest.config.ts",
+                "--dir",
+                "linkbots/lisa/ops/jobs/time-management",
+                "time-management.test.ts",
             ],
         )
         self.assertEqual(
@@ -1301,7 +1305,10 @@ class ProgressiveValidationTests(unittest.TestCase):
             [
                 "node",
                 "scripts/run-vitest.mjs",
-                "linkbots/lisa/ops/templates/template-registry.test.ts",
+                "--config",
+                "linkbots/lisa/ops/backup/vitest.config.ts",
+                "--dir",
+                "linkbots/lisa/ops/templates",
             ],
         )
         self.assertEqual(
