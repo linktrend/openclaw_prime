@@ -93,3 +93,17 @@ export {
   validateSkillsV2Request,
 } from "./src/v2.js";
 export type { SkillsV2Operation, SkillsV2Request, SkillsV2TrustedAuthorization } from "./src/v2.js";
+export {
+  SKILLS_DECLARED_CAPABILITIES,
+  SKILLS_IDENTITY,
+  authorizeSkillsCapability,
+  evaluatePlatformEligibilityGate,
+  evaluateProfileActivationGate,
+  evaluateSkillsQualificationGate,
+  prepareProviderRuntimeFacts,
+} from "./src/capability-gates.js";
+export type {
+  CapabilityAuthorization,
+  GateDecision,
+  PreparedRuntimeFacts,
+} from "./src/capability-gates.js";
