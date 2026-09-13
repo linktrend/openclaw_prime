@@ -556,14 +556,20 @@ registerHooks({resolve(specifier, context, nextResolve) {
     expect(resolveTestProjectsDelegationArgs([prefix])).toEqual([prefix]);
   });
 
-  it("delegates Lisa backup and deployment directories to the project router", () => {
+  it("delegates Lisa backup, deployment, Google Workspace, and blueprint directories to the project router", () => {
     expect(resolveTestProjectsDelegationArgs(["linkbots/lisa/ops/backup"])).toEqual([
       "linkbots/lisa/ops/backup",
     ]);
     expect(resolveTestProjectsDelegationArgs(["linkbots/lisa/ops/deployment"])).toEqual([
       "linkbots/lisa/ops/deployment",
     ]);
-    expect(resolveTestProjectsDelegationArgs(["linkbots/lisa/ops/google-workspace"])).toBeNull();
+    expect(resolveTestProjectsDelegationArgs(["linkbots/lisa/ops/google-workspace"])).toEqual([
+      "linkbots/lisa/ops/google-workspace",
+    ]);
+    expect(resolveTestProjectsDelegationArgs(["linkbots/blueprints"])).toEqual([
+      "linkbots/blueprints",
+    ]);
+    expect(resolveTestProjectsDelegationArgs(["linkbots/lisa/ops/jobs"])).toBeNull();
   });
 
   it("delegates an existing extension root to the project router", () => {
