@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
+  consumeInertQualifiedSkills,
   validateQualifiedSkillsReceipt,
   validateQualifiedSkillsReceiptFiles,
 } from "./qualification-receipt.mjs";
@@ -112,6 +113,17 @@ describe("PKT-07 qualified Skills receipt validator", () => {
     assert.deepEqual(validateQualifiedSkillsReceipt(source, candidate), {
       ok: false,
       reason: "required_skill_ids_not_present",
+    });
+  });
+
+  it("consumes the committed receipt as an inert catalog", () => {
+    assert.deepEqual(consumeInertQualifiedSkills(source), {
+      ok: true,
+      mode: "inert-source-catalog",
+      skillIds: source.skills.map((skill) => skill.id),
+      executionEnabled: false,
+      copiedSkillBodies: false,
+      providerRuntime: "not executed by OpenClaw",
     });
   });
 
