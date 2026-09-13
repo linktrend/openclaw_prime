@@ -86,6 +86,71 @@ NON_VITEST_VALIDATION = {
     "test/phase_integrator.py": "phase-integrator-tests",
     "test/receipt_seal.py": "receipt-seal-tests",
 }
+# Exact Full run 34738525501 production paths that the TypeScript resolver
+# skipped or left targetless. Keep this list path-exact; no prefixes.
+FOCUSED_VITEST_TARGETS = {
+    "extensions/linkautowork/api.ts": "extensions/linkautowork/capability-gates.test.ts",
+    "extensions/linkautowork/src/capability-gates.ts": "extensions/linkautowork/capability-gates.test.ts",
+    "extensions/linkautowork/src/contract-pins.ts": "extensions/linkautowork/contract.test.ts",
+    "extensions/linkautowork/src/contract.ts": "extensions/linkautowork/contract.test.ts",
+    "extensions/linkbrain/api.ts": "extensions/linkbrain/capability-gates.test.ts",
+    "extensions/linkbrain/fake/runtime.mjs": "extensions/linkbrain/runtime.test.ts",
+    "extensions/linkbrain/src/capability-gates.ts": "extensions/linkbrain/capability-gates.test.ts",
+    "extensions/linkbrain/src/oauth-tool.ts": "extensions/linkbrain/oauth-tool.test.ts",
+    "extensions/linkbrain/src/standard-mcp-v2.ts": "extensions/linkbrain/standard-mcp-v2.test.ts",
+    "extensions/linklibraries/api.ts": "extensions/linklibraries/capability-gates.test.ts",
+    "extensions/linklibraries/src/capability-gates.ts": "extensions/linklibraries/capability-gates.test.ts",
+    "extensions/linklibraries/src/revision2-pins.ts": "extensions/linklibraries/revision2-contract.test.ts",
+    "extensions/linklibraries/src/revision2.ts": "extensions/linklibraries/revision2-contract.test.ts",
+    "extensions/linkplatform/api.ts": "extensions/linkplatform/capability-gates.test.ts",
+    "extensions/linkplatform/src/capability-gates.ts": "extensions/linkplatform/capability-gates.test.ts",
+    "extensions/linkplatform/src/claims.ts": "extensions/linkplatform/claims.test.ts",
+    "extensions/linkplatform/src/integration-status.ts": "extensions/linkplatform/integration-status.test.ts",
+    "extensions/linkplatform/src/timestamps.ts": "extensions/linkplatform/integration-status.test.ts",
+    "extensions/linkskills/api.ts": "extensions/linkskills/capability-gates.test.ts",
+    "extensions/linkskills/fake/service.mjs": "extensions/linkskills/capability-gates.test.ts",
+    "extensions/linkskills/src/capability-gates.ts": "extensions/linkskills/capability-gates.test.ts",
+    "extensions/linkskills/src/oauth-tool.ts": "extensions/linkskills/oauth-tool.test.ts",
+    "extensions/linkskills/src/standard-mcp-v2.ts": "extensions/linkskills/standard-mcp-v2.test.ts",
+    "extensions/linkskills/src/transport.ts": "extensions/linkskills/transport.test.ts",
+    "linkbots/blueprints/vitest.config.ts": "linkbots/blueprints/executive-blueprints.test.ts",
+    "linkbots/lisa/ops/backup/backup.ts": "linkbots/lisa/ops/backup/backup.test.ts",
+    "linkbots/lisa/ops/browser/browser-runtime-policy.ts": "linkbots/lisa/ops/browser/browser-runtime-policy.test.ts",
+    "linkbots/lisa/ops/deployment/deployment.ts": "linkbots/lisa/ops/deployment/deployment.test.ts",
+    "linkbots/lisa/ops/google-workspace/qualification-receipt.mjs": (
+        "linkbots/lisa/ops/google-workspace/qualification-receipt.test.mjs"
+    ),
+    "linkbots/lisa/ops/jobs/lisa-job-catalogue.ts": "linkbots/lisa/ops/jobs/lisa-job-catalogue.test.ts",
+    "linkbots/lisa/ops/jobs/lisa-job-contracts.ts": "linkbots/lisa/ops/jobs/lisa-job-catalogue.test.ts",
+    "linkbots/lisa/ops/model-routing.ts": "linkbots/lisa/ops/model-routing.test.ts",
+    "scripts/run-vitest.mts": "test/scripts/run-vitest.test.ts",
+    "scripts/test-projects.test-support.mts": "test/scripts/test-projects-routing.test.ts",
+    "src/agents/agent-create.ts": "src/agents/agent-create.test.ts",
+    "src/agents/agent-scope.ts": "src/agents/agent-scope.test.ts",
+    "src/agents/noncoding-route.ts": "src/agents/noncoding-route.test.ts",
+    "src/agents/prepared-model-catalog.ts": "src/agents/prepared-model-catalog.test.ts",
+    "src/agents/prepared-model-runtime.ts": "src/agents/prepared-model-runtime.test.ts",
+    "src/agents/profile-manifest.ts": "src/agents/profile-manifest.test.ts",
+    "src/agents/sandbox/browser-policy.ts": "src/agents/sandbox/browser-policy.test.ts",
+    "src/agents/tools/web-fetch.ts": "src/agents/tools/web-fetch.test.ts",
+    "src/agents/tools/web-search.ts": "src/agents/tools/web-search.test.ts",
+    "src/state/lisa-compliance-state-store.ts": "src/state/lisa-compliance-state-store.test.ts",
+    "src/state/lisa-principal-task-store.ts": "src/state/lisa-principal-task-store.test.ts",
+    "src/web-fetch/governed-runtime.ts": "src/web-fetch/governed-runtime.test.ts",
+    "src/web-search/governed-runtime.ts": "src/web-search/governed-runtime.test.ts",
+}
+TEST_FILE_SUFFIXES = (
+    ".test.ts",
+    ".test.mts",
+    ".test.tsx",
+    ".test.cts",
+    ".test.js",
+    ".test.mjs",
+    ".test.cjs",
+    ".spec.ts",
+    ".spec.mts",
+    ".spec.js",
+)
 TEST_PROJECTS = (
     "node",
     "--import",
@@ -392,6 +457,102 @@ def _unsafe_target(path: str) -> bool:
     return _unsafe_path(path) or path.startswith("-") or path == "--changed"
 
 
+def _is_test_file(path: str) -> bool:
+    return path.endswith(TEST_FILE_SUFFIXES)
+
+
+def _head_blob_exists(root: Path, head_commit: str, path: str) -> bool:
+    probe = subprocess.run(
+        ["git", "cat-file", "-e", f"{head_commit}:{path}"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return probe.returncode == 0
+
+
+def _discover_focused_vitest_target(path: str, root: Path, head_commit: str) -> str | None:
+    """Return one HEAD-existing focused test, or None when the path stays unmapped."""
+    declared = FOCUSED_VITEST_TARGETS.get(path)
+    if declared is not None:
+        if not _head_blob_exists(root, head_commit, declared):
+            raise RuntimeError("relevant_tests_unresolved")
+        return declared
+    if _is_test_file(path):
+        return path
+    parent, _, name = path.rpartition("/")
+    stem = name.rsplit(".", 1)[0] if "." in name else name
+    candidates = [
+        f"{parent}/{stem}.test.ts" if parent else f"{stem}.test.ts",
+        f"{parent}/{stem}.test.mts" if parent else f"{stem}.test.mts",
+        f"{parent}/{stem}.test.mjs" if parent else f"{stem}.test.mjs",
+    ]
+    if parent.endswith("/src"):
+        pkg = parent[: -len("/src")]
+        candidates.extend(
+            [
+                f"{pkg}/{stem}.test.ts",
+                f"{pkg}/{stem}.test.mjs",
+            ]
+        )
+    if path.startswith("scripts/"):
+        script_stem = path[len("scripts/") :].rsplit(".", 1)[0]
+        dashed = script_stem.replace("/", "-")
+        candidates.extend(
+            [
+                f"test/scripts/{script_stem}.test.ts",
+                f"test/scripts/{dashed}.test.ts",
+                f"test/scripts/{stem}.test.ts",
+            ]
+        )
+    for candidate in candidates:
+        if candidate and _head_blob_exists(root, head_commit, candidate):
+            return candidate
+    return None
+
+
+def declared_non_vitest_validations(changed_paths: Sequence[str]) -> list[dict[str, str]]:
+    return [
+        {"path": path, "validation": NON_VITEST_VALIDATION[path]}
+        for path in changed_paths
+        if path in NON_VITEST_VALIDATION
+    ]
+
+
+def build_focused_customization_plan(
+    root: Path,
+    baseline_commit: str,
+    head_commit: str,
+    changed_paths: Sequence[str],
+) -> dict[str, Any]:
+    """Map each changed path to a declared non-Vitest check or one focused test."""
+    expected_paths = sorted(set(changed_paths))
+    targets: list[str] = []
+    for path in expected_paths:
+        if path in NON_VITEST_VALIDATION:
+            continue
+        target = _discover_focused_vitest_target(path, root, head_commit)
+        if target:
+            targets.append(target)
+            continue
+        if path.endswith(CODE_SUFFIXES):
+            raise RuntimeError("relevant_tests_unresolved")
+    payload = {
+        "schemaVersion": 1,
+        "kind": "customization-test-target-plan",
+        "mode": "targets",
+        "targets": sorted(set(targets)),
+        "skippedBroadFallbackPaths": [],
+        "nonVitestValidations": declared_non_vitest_validations(expected_paths),
+        "changedPaths": expected_paths,
+        "changedPathsDigest": canonical_digest(expected_paths),
+        "baselineCommit": baseline_commit,
+        "headCommit": head_commit,
+    }
+    return validate_planner_payload(payload, expected_paths, baseline_commit, head_commit, root)
+
+
 def validate_planner_payload(
     payload: Any,
     changed_paths: Sequence[str],
@@ -423,11 +584,7 @@ def validate_planner_payload(
         raise RuntimeError("relevant_tests_identity_mismatch")
     if payload.get("changedPathsDigest") != canonical_digest(expected_paths):
         raise RuntimeError("relevant_tests_identity_mismatch")
-    expected_non_vitest = [
-        {"path": path, "validation": NON_VITEST_VALIDATION[path]}
-        for path in expected_paths
-        if path in NON_VITEST_VALIDATION
-    ]
+    expected_non_vitest = declared_non_vitest_validations(expected_paths)
     if payload.get("nonVitestValidations") != expected_non_vitest:
         raise RuntimeError("relevant_tests_unresolved")
     skipped = payload.get("skippedBroadFallbackPaths")
@@ -475,7 +632,10 @@ def invoke_planner(
             marker in combined for marker in BROAD_TEST_MARKERS
         ):
             raise RuntimeError("relevant_tests_broadened")
-        raise RuntimeError("relevant_tests_unresolved")
+        try:
+            return build_focused_customization_plan(root, baseline, head, changed_paths)
+        except RuntimeError as exc:
+            raise RuntimeError("relevant_tests_unresolved") from exc
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:

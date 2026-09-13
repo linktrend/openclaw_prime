@@ -687,6 +687,23 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertIn("relevant_tests_broadened", failed["errors"])
         self.assertEqual(failed_calls, [])
 
+        with tempfile.TemporaryDirectory() as tmp:
+            probe_root = Path(tmp)
+            subprocess.run(["git", "init"], cwd=probe_root, capture_output=True, check=True)
+            probe = "unmapped-fast-ci-probe.ts"
+            (probe_root / probe).write_text("export const probe = 1;\n", encoding="utf-8")
+            subprocess.run(["git", "add", probe], cwd=probe_root, capture_output=True, check=True)
+            _git(probe_root, "commit", "-m", "unmapped probe")
+            head = _git(probe_root, "rev-parse", "HEAD")
+            with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
+                MODULE.invoke_planner(
+                    probe_root,
+                    head,
+                    head,
+                    [probe],
+                    lambda _cmd: self._completed(1, "", "relevant_tests_unresolved"),
+                )
+
     def test_explicit_target_execution_cannot_become_full_suite(self) -> None:
         plan = {
             "schemaVersion": 1,
@@ -1283,6 +1300,93 @@ class ProgressiveValidationTests(unittest.TestCase):
                 "phase-diff-check",
             },
         )
+
+    def test_phase_delta_src_scripts_linkbots_gitops_use_focused_overlay(self) -> None:
+        changed = [
+            "scripts/gitops/receipt_seal.py",
+            "scripts/run-vitest.mts",
+            "scripts/test-projects.test-support.mts",
+            "src/agents/agent-create.ts",
+            "src/agents/noncoding-route.ts",
+            "linkbots/lisa/ops/model-routing.ts",
+            "test/receipt_seal.py",
+        ]
+        expected_targets = [
+            "linkbots/lisa/ops/model-routing.test.ts",
+            "src/agents/agent-create.test.ts",
+            "src/agents/noncoding-route.test.ts",
+            "test/scripts/run-vitest.test.ts",
+            "test/scripts/test-projects-routing.test.ts",
+        ]
+        for path in changed:
+            if path in MODULE.NON_VITEST_VALIDATION:
+                continue
+            self.assertIn(path, MODULE.FOCUSED_VITEST_TARGETS)
+            self.assertTrue(
+                MODULE._head_blob_exists(ROOT, "HEAD", MODULE.FOCUSED_VITEST_TARGETS[path]),
+                path,
+            )
+
+        def unresolved_planner(_cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            return self._completed(1, "", '{"ok":false,"reason":"relevant_tests_unresolved"}')
+
+        recorded: list[list[str]] = []
+        result = MODULE.run_relevant_tests(
+            ROOT,
+            OCP01_BASE,
+            "HEAD",
+            changed,
+            execute=True,
+            planner_runner=unresolved_planner,
+            test_runner=lambda cmd: recorded.append(list(cmd))
+            or self._completed(0, "\n".join(expected_targets)),
+            validation_runner=lambda command: self._completed(0, "ok"),
+        )
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["approvedTestPlan"]["skippedBroadFallbackPaths"], [])
+        self.assertEqual(result["approvedTestPlan"]["targets"], expected_targets)
+        self.assertEqual(
+            result["approvedTestPlan"]["nonVitestValidations"],
+            MODULE.declared_non_vitest_validations(sorted(changed)),
+        )
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0][:4], list(MODULE.TEST_PROJECTS))
+        self.assertEqual(recorded[0][4:], expected_targets)
+        self.assertNotIn("--changed", recorded[0])
+
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
+            MODULE.build_focused_customization_plan(
+                ROOT,
+                OCP01_BASE,
+                "HEAD",
+                ["unmapped-fast-ci-probe.ts"],
+            )
+
+        head = MODULE.git(ROOT, "rev-parse", "HEAD")
+        phase_paths = [
+            line
+            for line in MODULE.git(
+                ROOT, "diff", "--name-only", "--no-renames", OCP01_BASE, head
+            ).splitlines()
+            if line
+        ]
+        overlay = MODULE.build_focused_customization_plan(
+            ROOT, OCP01_BASE, head, phase_paths
+        )
+        self.assertEqual(overlay["skippedBroadFallbackPaths"], [])
+        self.assertTrue(overlay["targets"])
+        for path in phase_paths:
+            if path in MODULE.NON_VITEST_VALIDATION or not path.endswith(MODULE.CODE_SUFFIXES):
+                continue
+            covered = path in overlay["targets"] or any(
+                target == MODULE.FOCUSED_VITEST_TARGETS.get(path)
+                or (MODULE._is_test_file(path) and target == path)
+                for target in overlay["targets"]
+            )
+            self.assertTrue(
+                covered or MODULE._discover_focused_vitest_target(path, ROOT, head) in overlay["targets"],
+                path,
+            )
 
 
 if __name__ == "__main__":
