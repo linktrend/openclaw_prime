@@ -92,6 +92,12 @@ export {
   validateSkillsQualificationIdentity,
   validateSkillsV2Request,
 } from "./src/v2.js";
+export {
+  isLegacySkillsExecutionOperation,
+  isStandardSkillsMcpOperation,
+  rejectNonStandardSkillsMcpOperation,
+  SKILLS_STANDARD_MCP_OPERATIONS,
+} from "./src/standard-mcp-v2.js";
 export type { SkillsV2Operation, SkillsV2Request, SkillsV2TrustedAuthorization } from "./src/v2.js";
 export {
   SKILLS_DECLARED_CAPABILITIES,

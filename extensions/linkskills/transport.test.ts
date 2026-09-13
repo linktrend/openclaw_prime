@@ -106,7 +106,7 @@ describe("linkskills transport modes", () => {
         },
       },
       config,
-      toolName: "skills_search",
+      toolName: "skills_catalog_search",
       arguments: { query: "approved test" },
       createMcpSession: async () => ({ callTool, close: async () => undefined }),
     });
@@ -114,7 +114,7 @@ describe("linkskills transport modes", () => {
     expect(acquire).toHaveBeenCalledWith(
       expect.objectContaining({ bindingId: "linkskills-stage" }),
     );
-    expect(callTool).toHaveBeenCalledWith("skills_search", { query: "approved test" });
+    expect(callTool).toHaveBeenCalledWith("skills_catalog_search", { query: "approved test" });
   });
 
   it("defaults transportMode to disabled and returns transport_disabled", async () => {
