@@ -8,10 +8,50 @@ payload, or live-provider result.
 
 - Repository: `linktrend/openclaw_prime`
 - Protected base: `origin/development`
-- Base commit: `c75c8fb8f7d2e0b0ef801cef03e7cbc70bbb85f7`
-- Base tree: `1072bcbdd236e2bcb0a67e7556cb35adbf0ff157`
-- Packet/Issue: `PKT-09` / `ISS-09`
+- Base commit: `8aba2013cffade07ce55f199bca1c5a6a24b46e4`
+- Base tree: `e6f99b43529b1c34ba3b1090fa9ce19fb065a897`
+- Packet/Issue: `PKT-09` / `ISS-09` / GitHub `#292`
 - Owned paths: `linkbots/lisa/ops/backup`, `linkbots/lisa/ops/deployment`, and `linkbots/lisa/docs`
+- PKT-01 dependency: backup remains in `excludedCronFamilies` and is systemd-scheduled at `05:30` Asia/Taipei. This packet does not mutate PKT-01 job files or `src/state`.
+
+## Repository-owned proof
+
+The source package provides deterministic company-archive enumeration with
+private-health and credential exclusions, online SQLite snapshot/quick-check
+hooks, AES-256-GCM encryption using only a runtime Secret Manager reference,
+ciphertext hash/size verification, disposable decrypt verification, retention
+of the previous verified object, Linux systemd service/timer/restore templates,
+clean-host path and unit hardening validation, and an injected rollback
+sequence.
+
+The offline composition rehearsal is:
+
+```sh
+node --experimental-strip-types --test linkbots/lisa/ops/deployment/pre-vps-rehearsal.test.mjs
+```
+
+It uses synthetic source and private-health bytes, injected key/upload
+adapters, a network-disabled restore verification contract, and an in-memory
+rollback executor. It does not open a Lisa profile, access a VPS, call Google,
+upload an object, install systemd units, start a service, or send a channel
+message. The exact result is recorded in
+`linkbots/lisa/ops/receipts/pkt-09-source-acceptance.receipt.json`.
+
+## External holds
+
+The following cannot be proven by this source-only checkpoint and remain
+explicit holds:
+
+- clean-host installation and service/timer readback on the target Linux host;
+- live encrypted backup upload and object verification;
+- disposable restore against the real protected backup;
+- live rollback verification;
+- VPS deployment, production canary, and Principal acceptance.
+
+The required operator sequence and inverse rollback are documented in
+`LISA-BACKUP-DEPLOYMENT-RUNBOOK.md` and `LISA-DIRECT-MIGRATION.md`. No schedule,
+service, VPS, production, upstream, provider, credential, or private-state
+mutation occurred for this source package.
 
 ## Repository-owned proof
 

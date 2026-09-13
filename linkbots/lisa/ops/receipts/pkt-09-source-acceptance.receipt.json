@@ -4,13 +4,14 @@
   "packet": {
     "id": "PKT-09",
     "issue": "ISS-09",
+    "githubIssue": 292,
     "executionState": "PLAN"
   },
   "sourceBase": {
     "repository": "linktrend/openclaw_prime",
     "ref": "origin/development",
-    "commit": "c75c8fb8f7d2e0b0ef801cef03e7cbc70bbb85f7",
-    "tree": "1072bcbdd236e2bcb0a67e7556cb35adbf0ff157"
+    "commit": "8aba2013cffade07ce55f199bca1c5a6a24b46e4",
+    "tree": "e6f99b43529b1c34ba3b1090fa9ce19fb065a897"
   },
   "ownedPaths": [
     "linkbots/lisa/ops/backup",
@@ -50,12 +51,12 @@
       },
       {
         "path": "linkbots/lisa/ops/deployment/deployment.ts",
-        "sha256": "5f9d0df24da4b0d5c30ecf2a87b51a60cec95a3e3cce2b09bff2bfbee52ce9ef"
+        "sha256": "28d96d4dad0ee7c216bf45045e78bc9cd5d8743a9ffa2bc50a2d8e3ea889765f"
       }
     ],
     "offlineRehearsal": {
       "path": "linkbots/lisa/ops/deployment/pre-vps-rehearsal.test.mjs",
-      "sha256": "f7f08eda2a2a280c8162f9912ff358c71bae3ff7631f6d380c52508fb16fb077",
+      "sha256": "afa7966aabf86127adf849438c90691bb11398180219382e73c8e1bd99489cd2",
       "command": "node --experimental-strip-types --test linkbots/lisa/ops/deployment/pre-vps-rehearsal.test.mjs",
       "status": "passed",
       "tests": 1,
@@ -103,5 +104,5 @@
     "liveRestorePerformed": false,
     "approvalRequired": true
   },
-  "receiptDigestSha256": "b2a83ce967434812e37e7136e3866066070924e7e0b1c566ce4f00349ef520d6"
+  "receiptDigestSha256": "87b57d527d0a34ef367bce2e15baf79649110416aa324c363f56d139ec4e2eff"
 }

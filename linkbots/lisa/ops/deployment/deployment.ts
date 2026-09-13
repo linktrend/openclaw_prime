@@ -6,6 +6,8 @@ export const LISA_BACKUP_SERVICE = "linktrend-lisa-backup.service" as const;
 export const LISA_BACKUP_TIMER = "linktrend-lisa-backup.timer" as const;
 export const LISA_PRIVATE_RESTORE_SERVICE =
   "linktrend-lisa-private-health-restore.service" as const;
+/** Matches PKT-01 backup schedule metadata; backup remains systemd-owned, not cron. */
+export const LISA_BACKUP_ONCALENDAR = "*-*-* 05:30:00 Asia/Taipei" as const;
 
 export type DeploymentUnitName =
   | typeof LISA_BACKUP_SERVICE
@@ -121,7 +123,7 @@ export const BACKUP_TIMER_TEMPLATE = `[Unit]
 Description=Lisa encrypted off-host backup schedule
 
 [Timer]
-OnCalendar=*-*-* 05:30:00 Asia/Taipei
+OnCalendar=${LISA_BACKUP_ONCALENDAR}
 Persistent=true
 Unit=${LISA_BACKUP_SERVICE}
 
@@ -259,7 +261,7 @@ export function validateDeploymentPlan(plan: DeploymentPlan): DeploymentValidati
     }
   }
   const timer = plan.units.find((unit) => unit.name === LISA_BACKUP_TIMER);
-  if (!timer?.contents.includes("OnCalendar=*-*-* 05:30:00 Asia/Taipei")) {
+  if (!timer?.contents.includes(`OnCalendar=${LISA_BACKUP_ONCALENDAR}`)) {
     fail("invalid_backup_schedule");
   }
   return Object.freeze({
