@@ -158,6 +158,35 @@ class RemoteOnlyIssueRefTests(unittest.TestCase):
         self.assertEqual(result["acceptedCommits"][0]["sha"], one.sha)
         self.assertEqual(result["acceptedCommits"][0]["branch"], one.branch)
 
+    def test_revise_phase_skips_overlap_among_already_included_tips(self) -> None:
+        one = self.fx.accept_issue(81, "shared.txt", "one\n")
+        git(self.fx.work, "checkout", "-B", "issue/82-shared", "development")
+        write(self.fx.work / "shared.txt", "two\n")
+        git(self.fx.work, "add", "shared.txt")
+        git(self.fx.work, "commit", "-qm", "issue 82")
+        two_sha = git(self.fx.work, "rev-parse", "HEAD")
+        git(self.fx.work, "push", "-q", "-u", "origin", "issue/82-shared")
+        two = AcceptedSource(branch="issue/82-shared", sha=two_sha, order=2)
+        self.fx.github.ready_shas.add(two_sha)
+        self.fx.github.evidence[two_sha] = {"schemaVersion": 1, "headSha": two_sha, "classification": "tests"}
+        git(self.fx.work, "checkout", "-B", "phase/next", "development")
+        git(self.fx.work, "merge", "--no-ff", "--no-edit", one.sha)
+        git(self.fx.work, "merge", "--no-ff", "--no-edit", two.sha)
+        git(self.fx.work, "push", "-q", "-u", "origin", "phase/next")
+        git(self.fx.work, "checkout", "-B", "issue/83-later", "phase/next")
+        write(self.fx.work / "later.txt", "later\n")
+        git(self.fx.work, "add", "later.txt")
+        git(self.fx.work, "commit", "-qm", "issue 83")
+        three_sha = git(self.fx.work, "rev-parse", "HEAD")
+        git(self.fx.work, "push", "-q", "-u", "origin", "issue/83-later")
+        three = AcceptedSource(branch="issue/83-later", sha=three_sha, order=3)
+        self.fx.github.ready_shas.add(three_sha)
+        self.fx.github.evidence[three_sha] = {"schemaVersion": 1, "headSha": three_sha, "classification": "tests"}
+        git(self.fx.work, "checkout", "development")
+        result = self.fx.assemble([one, two, three])
+        self.assertEqual(result["action"], "updated")
+        self.assertEqual([item["branch"] for item in result["acceptedCommits"]], [one.branch, two.branch, three.branch])
+
 
 class ExistingPhaseStateHydrationTests(unittest.TestCase):
     def setUp(self) -> None:

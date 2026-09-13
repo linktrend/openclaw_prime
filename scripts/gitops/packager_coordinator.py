@@ -623,13 +623,28 @@ def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
     return result.returncode == 0
 
 
-def _probe_conflicts(repo: Path, development: str, sources: list[AcceptedSource]) -> None:
+def _probe_conflicts(
+    repo: Path,
+    development: str,
+    sources: list[AcceptedSource],
+    existing_phase: str | None = None,
+) -> None:
+    included = {
+        source.sha
+        for source in sources
+        if existing_phase and _is_ancestor(repo, source.sha, existing_phase)
+    }
     overlapping: list[dict[str, Any]] = []
     for left, right in (
         (sources[i], sources[j]) for i in range(len(sources)) for j in range(i + 1, len(sources))
     ):
         related = _is_ancestor(repo, left.sha, right.sha) or _is_ancestor(repo, right.sha, left.sha)
         if related:
+            continue
+        # Recovered Phase revisions already merged unrelated recoveries in
+        # order. Replaying their development-relative path overlap would
+        # block adding a later descendant tip.
+        if left.sha in included and right.sha in included:
             continue
         shared = sorted(_changed_paths(repo, development, left.sha) & _changed_paths(repo, development, right.sha))
         if shared:
@@ -643,12 +658,16 @@ def _probe_conflicts(repo: Path, development: str, sources: list[AcceptedSource]
     if overlapping:
         raise CoordinatorError("overlapping_commits", json.dumps(overlapping, sort_keys=True))
 
+    start = existing_phase or development
+    remaining = _remaining_sources(repo, start, sources) if existing_phase else list(sources)
+    if not remaining:
+        return
     with tempfile.TemporaryDirectory() as tmp:
         probe = Path(tmp) / "probe"
-        _git(repo, "worktree", "add", "--detach", str(probe), development)
+        _git(repo, "worktree", "add", "--detach", str(probe), start)
         try:
-            _git(probe, "checkout", "-B", "phase-probe", development)
-            for source in sources:
+            _git(probe, "checkout", "-B", "phase-probe", start)
+            for source in remaining:
                 merge = subprocess.run(
                     ["git", "merge", "--no-ff", "--no-edit", source.sha],
                     cwd=probe,
@@ -1392,8 +1411,6 @@ def assemble_phase(
     if normalize_sha(live_development) != normalize_sha(development_sha):
         raise CoordinatorError("stale_commit", f"{development}:local={live_development}:remote={development_sha}")
 
-    _probe_conflicts(repo, development_sha, ordered)
-
     state_dir = _coordinator_state_dir(repo, phase_branch)
     pair = _existing_isolated_state_pair(state_dir)
     previous = None
@@ -1404,6 +1421,7 @@ def assemble_phase(
 
     local_phase, remote_phase = _existing_phase_shas(repo, remote, phase_branch)
     existing_phase = remote_phase or local_phase
+    _probe_conflicts(repo, development_sha, ordered, existing_phase=existing_phase or None)
     accepted_shas = {source.sha for source in ordered}
     if existing_phase:
         unique = _unique_phase_commits(
