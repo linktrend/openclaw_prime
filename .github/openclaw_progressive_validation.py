@@ -202,6 +202,20 @@ class SecretScanHold(RuntimeError):
         self.payload = dict(payload)
 
 
+class RelevantTestsError(RuntimeError):
+    """Focused overlay was already known when a later test HOLD fired.
+
+    Run 34748629707 printed inventory selectedTests=[] because validate_phase
+    kept the empty default after Vitest/non-Vitest raised. Unmapped/broad
+    planner HOLDs still raise before this result exists.
+    """
+
+    def __init__(self, code: str, result: Mapping[str, Any]) -> None:
+        super().__init__(code)
+        self.code = code
+        self.result = dict(result)
+
+
 def git(root: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", *args],
@@ -880,42 +894,50 @@ def run_relevant_tests(
         }
     approved = invoke_planner(root, baseline, head, changed_paths, planner_runner)
     targets = list(approved["targets"])
-    # Retain the overlay command list before any later non-Vitest check can
-    # raise. Run 34747336391 left inventory selectedTests=[] after a later
-    # hold even though the focused overlay was already known.
+    # Retain the overlay command list before any later Vitest or non-Vitest
+    # check can raise. Run 34748629707 left inventory selectedTests=[] after the
+    # focused overlay was already known.
     selected = list(targets)
     run_cmd: list[str] | None = None
     run_output_digest: str | None = None
-    if targets:
-        run_cmd = list(TEST_PROJECTS) + targets
-        if "--changed" in run_cmd or len(run_cmd) <= len(TEST_PROJECTS):
-            raise RuntimeError("relevant_tests_broadened")
-        executed = (test_runner or (lambda command: _run_captured(command, root)))(run_cmd)
-        run_output = (executed.stdout or "") + "\n" + (executed.stderr or "")
-        if test_plan_is_broad(run_output, changed_paths):
-            raise RuntimeError("relevant_tests_broadened")
-        if executed.returncode != 0:
-            raise RuntimeError("relevant_tests_failed")
-        selected = parse_test_list(run_output) or list(targets)
-        run_output_digest = canonical_digest(run_output)
-    non_vitest_results = run_non_vitest_validations(
-        root,
-        baseline,
-        head,
-        approved["nonVitestValidations"],
-        validation_runner,
-    )
-    return {
-        "command": run_cmd,
-        "mode": "execute",
-        "selectedTests": selected,
-        "nonVitestResults": non_vitest_results,
-        "approvedTestPlan": approved,
-        "broadFallback": False,
-        "skippedChangedPaths": False,
-        "ok": True,
-        "runOutputDigest": run_output_digest,
-    }
+    non_vitest_results: list[dict[str, Any]] = []
+
+    def overlay_result(*, ok: bool) -> dict[str, Any]:
+        return {
+            "command": run_cmd,
+            "mode": "execute",
+            "selectedTests": selected,
+            "nonVitestResults": non_vitest_results,
+            "approvedTestPlan": approved,
+            "broadFallback": False,
+            "skippedChangedPaths": False,
+            "ok": ok,
+            "runOutputDigest": run_output_digest,
+        }
+
+    try:
+        if targets:
+            run_cmd = list(TEST_PROJECTS) + targets
+            if "--changed" in run_cmd or len(run_cmd) <= len(TEST_PROJECTS):
+                raise RuntimeError("relevant_tests_broadened")
+            executed = (test_runner or (lambda command: _run_captured(command, root)))(run_cmd)
+            run_output = (executed.stdout or "") + "\n" + (executed.stderr or "")
+            if test_plan_is_broad(run_output, changed_paths):
+                raise RuntimeError("relevant_tests_broadened")
+            if executed.returncode != 0:
+                raise RuntimeError("relevant_tests_failed")
+            selected = parse_test_list(run_output) or list(targets)
+            run_output_digest = canonical_digest(run_output)
+        non_vitest_results = run_non_vitest_validations(
+            root,
+            baseline,
+            head,
+            approved["nonVitestValidations"],
+            validation_runner,
+        )
+    except RuntimeError as exc:
+        raise RelevantTestsError(str(exc), overlay_result(ok=False)) from exc
+    return overlay_result(ok=True)
 
 
 def run_diff_check(root: Path, baseline: str, head: str) -> None:
@@ -1057,9 +1079,13 @@ def validate_phase(
                 test_runner=test_runner,
                 validation_runner=validation_runner,
             )
+        except RelevantTestsError as exc:
+            errors.append(exc.code)
+            hold = f"HOLD: {exc.code}"
+            test_result = exc.result
         except RuntimeError as exc:
             errors.append(str(exc))
-            hold = HOLD_TESTS
+            hold = f"HOLD: {exc}"
 
     evidence = {
         "schemaVersion": 1,

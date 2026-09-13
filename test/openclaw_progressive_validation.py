@@ -690,7 +690,7 @@ class ProgressiveValidationTests(unittest.TestCase):
                 test_runner=tests,
             )
             self.assertFalse(result["ok"], result)
-            self.assertEqual(result["hold"], MODULE.HOLD_TESTS)
+            self.assertEqual(result["hold"], f"HOLD: {error}")
             self.assertIn(error, result["errors"])
             self.assertEqual(test_calls, [])
 
@@ -1821,6 +1821,109 @@ class ProgressiveValidationTests(unittest.TestCase):
                 head,
                 ["unmapped-fast-ci-probe.ts"],
                 lambda _cmd: self._completed(0, leftover_skip_stdout),
+            )
+
+    def test_full_run_34748629707_profile_inventory_keeps_overlay_selected_tests(
+        self,
+    ) -> None:
+        from scripts.gitops.run_delivery_profile import load_profile, run_profile
+
+        config_path, commands = load_profile(ROOT, "full")
+        self.assertEqual(config_path, ROOT / ".github/linktrend-delivery-mode.json")
+        full_command = [
+            "python3",
+            ".github/openclaw_progressive_validation.py",
+            "--profile",
+            "full",
+        ]
+        self.assertIn(full_command, commands)
+        self.assertEqual(commands[-1], full_command)
+
+        head = MODULE.git(ROOT, "rev-parse", "HEAD")
+        identity = MODULE.inspect_phase_diff(ROOT, OCP01_BASE, head)
+        phase_paths = list(identity["existingPaths"]) + list(identity["deletedPaths"])
+        expected_overlay = MODULE.build_focused_customization_plan(
+            ROOT, OCP01_BASE, head, phase_paths
+        )
+        self.assertTrue(expected_overlay["targets"])
+
+        recorded: list[list[str]] = []
+        previous_actions = os.environ.get("GITHUB_ACTIONS")
+        os.environ["GITHUB_ACTIONS"] = "true"
+        os.environ["BASELINE_SHA"] = OCP01_BASE
+
+        def executor(command: list[str], root: Path) -> subprocess.CompletedProcess[str]:
+            if list(command) != full_command:
+                return self._completed(0, "")
+            result = MODULE.validate_phase(
+                root=root,
+                profile="full",
+                baseline=OCP01_BASE,
+                head=head,
+                scanner=_ok_scan,
+                execute_tests=True,
+                write_evidence_file=False,
+                test_runner=lambda cmd: recorded.append(list(cmd))
+                or self._completed(1, "Test Files  2 failed | 5 passed (7)\n[test] FAILED (exit 1)\n"),
+                validation_runner=lambda _command: self._completed(0, "ok"),
+            )
+            payload = {key: value for key, value in result.items() if key != "evidence"}
+            stdout = json.dumps(payload, sort_keys=True, indent=2) + "\n"
+            return self._completed(0 if result["ok"] else 1, stdout, result.get("hold") or "")
+
+        try:
+            inventory = run_profile(
+                ROOT,
+                "full",
+                config_path=config_path,
+                commands=commands,
+                executor=executor,
+            )
+        finally:
+            if previous_actions is None:
+                os.environ.pop("GITHUB_ACTIONS", None)
+            else:
+                os.environ["GITHUB_ACTIONS"] = previous_actions
+            os.environ.pop("BASELINE_SHA", None)
+
+        self.assertFalse(inventory["ok"], inventory)
+        self.assertEqual(inventory["failedCount"], 1)
+        self.assertTrue(inventory["selectedTests"], inventory)
+        self.assertEqual(inventory["selectedTests"], expected_overlay["targets"])
+        self.assertTrue(recorded)
+        self.assertEqual(recorded[0][: len(MODULE.TEST_PROJECTS)], list(MODULE.TEST_PROJECTS))
+        self.assertEqual(recorded[0][len(MODULE.TEST_PROJECTS) :], expected_overlay["targets"])
+        self.assertNotIn("--changed", recorded[0])
+        self.assertNotIn("src/index.ts", inventory["selectedTests"])
+        full_row = next(row for row in inventory["commands"] if row["argv"] == full_command)
+        self.assertEqual(full_row["status"], "failed")
+        self.assertIn("HOLD: relevant_tests_failed", full_row["stderrTail"])
+
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
+            MODULE.build_focused_customization_plan(
+                ROOT, OCP01_BASE, head, ["unmapped-fast-ci-probe.ts"]
+            )
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_broadened"):
+            MODULE.invoke_planner(
+                ROOT,
+                OCP01_BASE,
+                head,
+                phase_paths,
+                lambda _cmd: self._completed(
+                    1,
+                    "",
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "reason": "relevant_tests_broadened",
+                            "plan": {
+                                "mode": "broad",
+                                "targets": [],
+                                "skippedBroadFallbackPaths": [],
+                            },
+                        }
+                    ),
+                ),
             )
 
 
