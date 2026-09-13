@@ -25,6 +25,26 @@ const root = path.resolve("linkbots/lisa/ops/google-workspace");
 const lisaSafe = path.join(root, "tools/bin/lisa-safe");
 const tasks = path.join(root, "tools/bin/lisa-carlos-tasks");
 const installer = path.join(root, "gws-linux-install.sh");
+// Keep this list aligned with gws_reject_inherited_auth_env. Selected
+// run-vitest tooling workers inherit XDG_* from the non-isolated runner
+// (and CI may supply Google ADC/config). Wrappers must not see those
+// values unless a test injects them on purpose.
+const WRAPPER_REJECTED_INHERITED_ENV = [
+  "GOOGLE_WORKSPACE_CLI_TOKEN",
+  "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "GOOGLE_WORKSPACE_CLI_CLIENT_ID",
+  "GOOGLE_WORKSPACE_CLI_CLIENT_SECRET",
+  "GOOGLE_WORKSPACE_PROJECT_ID",
+  "GOOGLE_CLOUD_PROJECT",
+  "GOOGLE_CLOUD_QUOTA_PROJECT",
+  "GOOGLE_WORKSPACE_CLI_CONFIG_DIR",
+  "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND",
+  "GOOGLE_WORKSPACE_CLI_SCOPES",
+  "GOOGLE_WORKSPACE_SCOPES",
+  "CLOUDSDK_CONFIG",
+  "XDG_CONFIG_HOME",
+] as const;
 
 function makeFixture() {
   const directory = mkdtempSync(path.join(tmpdir(), "lisa-gws-wrapper-"));
@@ -102,10 +122,14 @@ function run(
   fixture: ReturnType<typeof makeFixture>,
   extraEnv: Record<string, string> = {},
 ) {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const name of WRAPPER_REJECTED_INHERITED_ENV) {
+    delete env[name];
+  }
   return spawnSync(script, args, {
     encoding: "utf8",
     env: {
-      ...process.env,
+      ...env,
       LISA_GOOGLE_WORKSPACE_CONFIG_ROOT: fixture.configRoot,
       LISA_GOOGLE_WORKSPACE_WORK_DIR: fixture.workRoot,
       LISA_GOOGLE_WORKSPACE_EXEC_CWD: fixture.executionRoot,
@@ -118,6 +142,25 @@ function run(
 }
 
 describe("VPS Lisa Google Workspace wrappers", () => {
+  it("keeps wrapper execution independent of inherited Vitest-runner XDG_CONFIG_HOME", () => {
+    const fixture = makeFixture();
+    const previousXdg = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = path.join(fixture.directory, "hostile-xdg");
+    try {
+      const result = run(lisaSafe, ["drive-list"], fixture);
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /drive\nfiles\nlist/);
+      assert.doesNotMatch(result.stderr, /inherited auth\/config environment/);
+    } finally {
+      if (previousXdg === undefined) {
+        delete process.env.XDG_CONFIG_HOME;
+      } else {
+        process.env.XDG_CONFIG_HOME = previousXdg;
+      }
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
   it("routes Lisa Calendar through the Lisa config and never through a Mac path", () => {
     const fixture = makeFixture();
     try {
@@ -634,20 +677,7 @@ describe("VPS Lisa Google Workspace wrappers", () => {
   it("rejects inherited auth sources and hostile dotenv before gws starts", () => {
     const fixture = makeFixture();
     try {
-      for (const name of [
-        "GOOGLE_WORKSPACE_CLI_TOKEN",
-        "GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE",
-        "GOOGLE_APPLICATION_CREDENTIALS",
-        "GOOGLE_WORKSPACE_CLI_CLIENT_ID",
-        "GOOGLE_WORKSPACE_CLI_CLIENT_SECRET",
-        "GOOGLE_WORKSPACE_PROJECT_ID",
-        "GOOGLE_CLOUD_PROJECT",
-        "GOOGLE_CLOUD_QUOTA_PROJECT",
-        "GOOGLE_WORKSPACE_CLI_CONFIG_DIR",
-        "GOOGLE_WORKSPACE_CLI_KEYRING_BACKEND",
-        "CLOUDSDK_CONFIG",
-        "XDG_CONFIG_HOME",
-      ]) {
+      for (const name of WRAPPER_REJECTED_INHERITED_ENV) {
         const result = run(lisaSafe, ["drive-list"], fixture, { [name]: "injected" });
         assert.equal(result.status, 64, `${name} must fail closed`);
         assert.equal(result.stdout, "", `${name} must not reach gws`);
