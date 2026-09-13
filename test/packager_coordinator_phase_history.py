@@ -146,6 +146,19 @@ class HydrationFixture:
         )
 
 
+class RemoteOnlyIssueRefTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fx = HydrationFixture()
+        self.addCleanup(self.fx.cleanup)
+
+    def test_assemble_without_local_issue_ref_uses_remote_tip(self) -> None:
+        one = self.fx.accept_issue(80, "remote-only.txt", "remote-only\n")
+        git(self.fx.work, "branch", "-D", one.branch)
+        result = self.fx.assemble([one])
+        self.assertEqual(result["acceptedCommits"][0]["sha"], one.sha)
+        self.assertEqual(result["acceptedCommits"][0]["branch"], one.branch)
+
+
 class ExistingPhaseStateHydrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.fx = HydrationFixture()
