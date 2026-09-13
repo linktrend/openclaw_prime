@@ -325,7 +325,17 @@ def classify_recovery(
 
 
 def _tail(value: str, limit: int = 2000) -> str:
-    return value[-limit:] if value else ""
+    """Keep the start and end of captured output.
+
+    Full validation prints JSON with ``errors`` first. A pure suffix of 2000
+    characters can drop that diagnosis (run 34744312470).
+    """
+    if not value:
+        return ""
+    if len(value) <= limit:
+        return value
+    keep = max(1, limit // 2)
+    return f"{value[:keep]}\n…\n{value[-keep:]}"
 
 
 def _tracked_workspace_digest(root: Path) -> str | None:

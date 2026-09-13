@@ -163,11 +163,12 @@ TEST_FILE_SUFFIXES = (
     ".spec.mts",
     ".spec.js",
 )
+# Focused Full execution must stay on the explicit-file Vitest wrapper.
+# scripts/test-projects.mts is the changed-path / full-suite router; leftover
+# fork files that overlay maps would still miss its default include set.
 TEST_PROJECTS = (
     "node",
-    "--import",
-    "./scripts/tsx.mjs",
-    "scripts/test-projects.mts",
+    "scripts/run-vitest.mjs",
 )
 PLANNER = (
     "node",
@@ -709,8 +710,10 @@ def invoke_planner(
         return _overlay_focused_plan(root, baseline, head, changed_paths)
     try:
         payload = json.loads(stdout)
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("relevant_tests_unresolved") from exc
+    except json.JSONDecodeError:
+        # Hosted Node can prepend loader text. Overlay the exact delta instead
+        # of treating that as an unmapped production path.
+        return _overlay_focused_plan(root, baseline, head, changed_paths)
     return validate_planner_payload(payload, changed_paths, baseline, head, root)
 
 

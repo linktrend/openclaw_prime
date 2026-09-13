@@ -784,8 +784,8 @@ class ProgressiveValidationTests(unittest.TestCase):
 
         def tests(cmd: list[str]) -> subprocess.CompletedProcess[str]:
             recorded.append(list(cmd))
-            self.assertEqual(cmd[:4], list(MODULE.TEST_PROJECTS))
-            self.assertEqual(cmd[4:], plan["targets"])
+            self.assertEqual(cmd[: len(MODULE.TEST_PROJECTS)], list(MODULE.TEST_PROJECTS))
+            self.assertEqual(cmd[len(MODULE.TEST_PROJECTS) :], plan["targets"])
             self.assertNotIn("--changed", cmd)
             self.assertGreater(len(cmd), len(MODULE.TEST_PROJECTS))
             return self._completed(0, "\n".join(plan["targets"]))
@@ -1412,7 +1412,7 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertEqual(result["approvedTestPlan"]["skippedBroadFallbackPaths"], [])
         self.assertEqual(result["approvedTestPlan"]["targets"], expected_targets)
         self.assertEqual(len(recorded), 1)
-        self.assertEqual(recorded[0][4:], expected_targets)
+        self.assertEqual(recorded[0][len(MODULE.TEST_PROJECTS) :], expected_targets)
         self.assertNotIn("--changed", recorded[0])
 
         with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
@@ -1480,7 +1480,7 @@ class ProgressiveValidationTests(unittest.TestCase):
         self.assertTrue(approved["targets"])
         self.assertTrue(result["selectedTests"])
         self.assertEqual(len(recorded), 1)
-        self.assertEqual(recorded[0][4:], approved["targets"])
+        self.assertEqual(recorded[0][len(MODULE.TEST_PROJECTS) :], approved["targets"])
         self.assertNotIn("--changed", recorded[0])
         for path in remaining:
             self.assertIn(
@@ -1557,8 +1557,8 @@ class ProgressiveValidationTests(unittest.TestCase):
             MODULE.declared_non_vitest_validations(sorted(changed)),
         )
         self.assertEqual(len(recorded), 1)
-        self.assertEqual(recorded[0][:4], list(MODULE.TEST_PROJECTS))
-        self.assertEqual(recorded[0][4:], expected_targets)
+        self.assertEqual(recorded[0][: len(MODULE.TEST_PROJECTS)], list(MODULE.TEST_PROJECTS))
+        self.assertEqual(recorded[0][len(MODULE.TEST_PROJECTS) :], expected_targets)
         self.assertNotIn("--changed", recorded[0])
 
         with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
@@ -1593,6 +1593,96 @@ class ProgressiveValidationTests(unittest.TestCase):
             self.assertTrue(
                 covered or MODULE._discover_focused_vitest_target(path, ROOT, head) in overlay["targets"],
                 path,
+            )
+
+    def test_full_run_34744312470_exact_planner_selects_focused_overlay(self) -> None:
+        from scripts.gitops.run_delivery_profile import load_profile
+
+        config_path, commands = load_profile(ROOT, "full")
+        self.assertEqual(config_path, ROOT / ".github/linktrend-delivery-mode.json")
+        self.assertIn(
+            ["python3", ".github/openclaw_progressive_validation.py", "--profile", "full"],
+            commands,
+        )
+        self.assertEqual(list(MODULE.TEST_PROJECTS), ["node", "scripts/run-vitest.mjs"])
+        self.assertNotIn("scripts/test-projects.mts", MODULE.TEST_PROJECTS)
+
+        head = MODULE.git(ROOT, "rev-parse", "HEAD")
+        identity = MODULE.inspect_phase_diff(ROOT, OCP01_BASE, head)
+        phase_paths = list(identity["existingPaths"]) + list(identity["deletedPaths"])
+        planner_cmd = list(MODULE.PLANNER) + ["--base", OCP01_BASE, "--head", head]
+        self.assertEqual(planner_cmd[:4], list(MODULE.PLANNER))
+        executed = subprocess.run(planner_cmd, cwd=ROOT, capture_output=True, text=True)
+        self.assertNotEqual(executed.returncode, 0, executed.stdout)
+        self.assertFalse(MODULE.planner_requested_full_suite(executed.stdout or "", executed.stderr or ""))
+        leftover = None
+        for line in (executed.stderr or "").splitlines():
+            if line.startswith("{"):
+                leftover = json.loads(line)
+                break
+        self.assertIsNotNone(leftover, executed.stderr[:2000])
+        self.assertEqual(leftover["reason"], "relevant_tests_broadened")
+        self.assertEqual(leftover["plan"]["mode"], "targets")
+        skipped = leftover["plan"]["skippedBroadFallbackPaths"]
+        self.assertEqual(sorted(PHASE315_REMAINING_SKIPPED_PATHS), sorted(skipped))
+
+        recorded: list[list[str]] = []
+        previous_actions = os.environ.get("GITHUB_ACTIONS")
+        os.environ["GITHUB_ACTIONS"] = "true"
+        try:
+            result = MODULE.validate_phase(
+                root=ROOT,
+                profile="full",
+                baseline=OCP01_BASE,
+                head=head,
+                scanner=_ok_scan,
+                execute_tests=True,
+                write_evidence_file=False,
+                test_runner=lambda cmd: recorded.append(list(cmd))
+                or self._completed(0, "\n".join(cmd[len(MODULE.TEST_PROJECTS) :])),
+                validation_runner=lambda command: self._completed(0, "ok"),
+            )
+        finally:
+            if previous_actions is None:
+                os.environ.pop("GITHUB_ACTIONS", None)
+            else:
+                os.environ["GITHUB_ACTIONS"] = previous_actions
+
+        self.assertTrue(result["ok"], result)
+        approved = result["evidence"]["approvedTestPlan"]
+        self.assertEqual(approved["skippedBroadFallbackPaths"], [])
+        self.assertTrue(approved["targets"])
+        self.assertEqual(recorded[0][: len(MODULE.TEST_PROJECTS)], list(MODULE.TEST_PROJECTS))
+        self.assertEqual(recorded[0][len(MODULE.TEST_PROJECTS) :], approved["targets"])
+        self.assertNotIn("--changed", recorded[0])
+        for path in PHASE315_REMAINING_SKIPPED_PATHS:
+            if path in MODULE.NON_VITEST_VALIDATION:
+                continue
+            target = MODULE._discover_focused_vitest_target(path, ROOT, head)
+            self.assertIsNotNone(target, path)
+            self.assertIn(target, approved["targets"], path)
+
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_broadened"):
+            MODULE.invoke_planner(
+                ROOT,
+                OCP01_BASE,
+                head,
+                phase_paths,
+                lambda _cmd: self._completed(
+                    1,
+                    "",
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "reason": "relevant_tests_broadened",
+                            "plan": {"mode": "broad", "targets": [], "skippedBroadFallbackPaths": []},
+                        }
+                    ),
+                ),
+            )
+        with self.assertRaisesRegex(RuntimeError, "relevant_tests_unresolved"):
+            MODULE.build_focused_customization_plan(
+                ROOT, OCP01_BASE, head, ["unmapped-fast-ci-probe.ts"]
             )
 
 
