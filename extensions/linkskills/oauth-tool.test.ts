@@ -69,11 +69,13 @@ function httpConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const skillsNativeAccess = "fx-sk-acc";
+
 function resolvedToken(bindingId: string) {
   return {
     bindingId,
     bindingFingerprint: `fp-${bindingId}`,
-    accessToken: "test-access-token",
+    accessToken: skillsNativeAccess,
     expiresAt: Date.now() + 60_000,
     tokenType: "Bearer" as const,
   };
@@ -85,7 +87,7 @@ describe("linkskills native OAuth bridge", () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe("http://127.0.0.1:18788/v1/skills_catalog_search");
       const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe("Bearer test-access-token");
+      expect(headers.get("authorization")).toBe(`Bearer ${skillsNativeAccess}`);
       const idempotencyKey = headers.get("idempotency-key");
       expect(idempotencyKey).toMatch(/^openclaw:[a-f0-9-]{36}$/u);
       expect(headers.get("x-request-id")).toBe(idempotencyKey);
@@ -108,7 +110,7 @@ describe("linkskills native OAuth bridge", () => {
     });
 
     expect(result.details).toMatchObject({ ok: true });
-    expect(JSON.stringify(result)).not.toContain("test-access-token");
+    expect(JSON.stringify(result)).not.toContain(skillsNativeAccess);
     expect(acquire).toHaveBeenCalledWith({ bindingId: "linkskills-production" });
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
