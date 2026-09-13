@@ -254,6 +254,12 @@ export function sha256File(filePath: string): { sha256: string; bytes: number } 
  */
 export const PKT11_PRE_VPS_QUALIFICATION_RECEIPT_TYPE =
   "lisa_pkt_11_pre_vps_qualification_receipt_v1" as const;
+export const PKT11_PRE_VPS_QUALIFICATION_SCHEMA_PATH =
+  "linkbots/lisa/ops/receipts/pkt-11-pre-vps-qualification.schema.json";
+const PKT11_PRE_VPS_QUALIFICATION_SCHEMA_FILE = path.join(
+  here,
+  "receipts/pkt-11-pre-vps-qualification.schema.json",
+);
 
 const PKT11_PRE_VPS_EXTERNAL_GATES = [
   "providerReleaseSetAccepted",
@@ -274,6 +280,60 @@ const PKT11_PRE_VPS_ACTION_FIELDS = [
   "oauthOrLiveGoogleCalls",
   "privateDataRecorded",
 ] as const;
+
+const PKT11_PRE_VPS_ROOT_KEYS = [
+  "receiptType",
+  "status",
+  "packet",
+  "sourceBase",
+  "package",
+  "offlineCanary",
+  "rollback",
+  "gates",
+  "actions",
+  "receiptDigestSha256",
+] as const;
+
+const PKT11_PRE_VPS_PACKET_KEYS = ["id", "issue", "executionState"] as const;
+const PKT11_PRE_VPS_SOURCE_BASE_KEYS = ["repository", "ref", "commit", "tree"] as const;
+const PKT11_PRE_VPS_PACKAGE_KEYS = [
+  "packageId",
+  "manifestSha256",
+  "fileCount",
+  "status",
+  "mutableSeeds",
+  "liveMutationAllowed",
+] as const;
+const PKT11_PRE_VPS_CANARY_KEYS = [
+  "status",
+  "packageStatus",
+  "networkAccess",
+  "delivery",
+  "oauthEnabled",
+  "schedulesEnabled",
+  "liveMutationAllowed",
+  "liveLisaTouched",
+  "stageWorkspaceMutated",
+  "installedFileCount",
+] as const;
+const PKT11_PRE_VPS_ROLLBACK_KEYS = [
+  "status",
+  "strategy",
+  "installedFileCount",
+  "removedFileCount",
+  "liveRestorePerformed",
+  "rollbackVerified",
+  "approvalRequired",
+] as const;
+const PKT11_PRE_VPS_LIVE_COMMANDS = new Set([
+  "deploy",
+  "canary",
+  "ssh",
+  "restore",
+  "promote",
+  "schedule",
+  "oauth",
+]);
 
 export type Pkt11OfflineCanaryConfig = {
   targetDir: string;
@@ -312,6 +372,31 @@ export type Pkt11OfflineRollbackEvidence = {
 
 function preVpsFail(code: string): never {
   throw new Error(`pkt11_pre_vps_${code}`);
+}
+
+function assertExactKeys(value: object, keys: readonly string[], code: string): void {
+  const actual = Object.keys(value).toSorted().join("\0");
+  const expected = [...keys].toSorted().join("\0");
+  if (actual !== expected) preVpsFail(code);
+}
+
+function assertPreVpsSchemaContract(): void {
+  if (!existsSync(PKT11_PRE_VPS_QUALIFICATION_SCHEMA_FILE)) {
+    preVpsFail("schema_missing");
+  }
+  const schema = JSON.parse(readFileSync(PKT11_PRE_VPS_QUALIFICATION_SCHEMA_FILE, "utf8")) as {
+    $id?: string;
+    additionalProperties?: boolean;
+    properties?: { receiptType?: { const?: string }; status?: { const?: string } };
+  };
+  if (schema.$id !== "https://openclaw.local/schemas/lisa/pkt-11-pre-vps-qualification-v1.json") {
+    preVpsFail("schema_id");
+  }
+  if (schema.additionalProperties !== false) preVpsFail("schema_open");
+  if (schema.properties?.receiptType?.const !== PKT11_PRE_VPS_QUALIFICATION_RECEIPT_TYPE) {
+    preVpsFail("schema_receipt_type");
+  }
+  if (schema.properties?.status?.const !== "offline-qualified") preVpsFail("schema_status");
 }
 
 function isSha256(value: unknown): value is string {
@@ -483,22 +568,26 @@ function canonicalPreVpsJson(value: unknown): string {
 export function validatePkt11PreVpsQualificationReceipt(
   receipt: Pkt11PreVpsQualificationReceipt,
 ): Pkt11PreVpsQualificationReceipt {
+  assertPreVpsSchemaContract();
   if (!receipt || typeof receipt !== "object" || containsSensitiveKey(receipt)) {
     preVpsFail("receipt_sensitive_or_missing");
   }
+  assertExactKeys(receipt, PKT11_PRE_VPS_ROOT_KEYS, "receipt_keys");
   if (receipt.receiptType !== PKT11_PRE_VPS_QUALIFICATION_RECEIPT_TYPE) {
     preVpsFail("receipt_type");
   }
   if (receipt.status !== "offline-qualified") preVpsFail("receipt_status");
+  assertExactKeys(receipt.packet, PKT11_PRE_VPS_PACKET_KEYS, "receipt_packet_keys");
   if (
-    receipt.packet?.id !== "PKT-11" ||
+    receipt.packet.id !== "PKT-11" ||
     receipt.packet.issue !== "ISS-11" ||
     receipt.packet.executionState !== "PLAN"
   ) {
     preVpsFail("receipt_packet");
   }
+  assertExactKeys(receipt.sourceBase, PKT11_PRE_VPS_SOURCE_BASE_KEYS, "receipt_source_base_keys");
   if (
-    receipt.sourceBase?.repository !== "openclaw/openclaw" ||
+    receipt.sourceBase.repository !== "openclaw/openclaw" ||
     receipt.sourceBase.ref !== "origin/development" ||
     !isGitSha(receipt.sourceBase.commit) ||
     !isGitSha(receipt.sourceBase.tree)
@@ -506,6 +595,7 @@ export function validatePkt11PreVpsQualificationReceipt(
     preVpsFail("receipt_source_base");
   }
   const pkg = receipt.package;
+  assertExactKeys(pkg, PKT11_PRE_VPS_PACKAGE_KEYS, "receipt_package_keys");
   if (
     !pkg ||
     typeof pkg.packageId !== "string" ||
@@ -519,6 +609,7 @@ export function validatePkt11PreVpsQualificationReceipt(
     preVpsFail("receipt_package");
   }
   const canary = receipt.offlineCanary;
+  assertExactKeys(canary, PKT11_PRE_VPS_CANARY_KEYS, "receipt_canary_keys");
   if (
     !canary ||
     canary.status !== "passed" ||
@@ -535,6 +626,7 @@ export function validatePkt11PreVpsQualificationReceipt(
     preVpsFail("receipt_canary");
   }
   const rollback = receipt.rollback;
+  assertExactKeys(rollback, PKT11_PRE_VPS_ROLLBACK_KEYS, "receipt_rollback_keys");
   if (
     !rollback ||
     rollback.status !== "verified-offline" ||
@@ -561,6 +653,7 @@ export function validatePkt11PreVpsQualificationReceipt(
     ) {
       preVpsFail(`receipt_gate:${gate}`);
     }
+    assertExactKeys(receipt.gates[gate], ["status", "requiredEvidence"], `receipt_gate_keys:${gate}`);
   }
   if (
     !receipt.actions ||
@@ -910,10 +1003,12 @@ function printHelp(): void {
   node --experimental-strip-types linkbots/lisa/ops/stage-workspace-package.ts verify --out <dir>
   node --experimental-strip-types linkbots/lisa/ops/stage-workspace-package.ts emit-commands --out <dir> [--target <dir>]
   node --experimental-strip-types linkbots/lisa/ops/stage-workspace-package.ts install --out <dir> --target <hermetic-dir>
+  node --experimental-strip-types linkbots/lisa/ops/stage-workspace-package.ts verify-pre-vps-receipt --receipt <path>
 
 Default never writes to ${FORBIDDEN_STAGE_WORKSPACE}.
 Mutable seeds initialize only when missing (preserve on reinstall).
 Never installs under ~/.openclaw-lisa.
+Live deploy, canary, restore, schedule, and OAuth commands are rejected.
 `);
 }
 
@@ -924,6 +1019,41 @@ function main(argv: string[]): number {
     return 0;
   }
   const actionRaw = args[0];
+  if (actionRaw && PKT11_PRE_VPS_LIVE_COMMANDS.has(actionRaw)) {
+    console.error(`pkt11_pre_vps_live_command_forbidden:${actionRaw}`);
+    return 2;
+  }
+  if (actionRaw === "verify-pre-vps-receipt") {
+    const receiptIdx = args.indexOf("--receipt");
+    const receiptPath = receiptIdx >= 0 ? args[receiptIdx + 1] : undefined;
+    if (!receiptPath) {
+      console.error("verify-pre-vps-receipt requires --receipt <path>");
+      return 2;
+    }
+    const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as Pkt11PreVpsQualificationReceipt;
+    validatePkt11PreVpsQualificationReceipt(receipt);
+    console.log(
+      JSON.stringify(
+        {
+          status: receipt.status,
+          receiptType: receipt.receiptType,
+          receiptDigestSha256: receipt.receiptDigestSha256,
+          liveActions: false,
+        },
+        null,
+        2,
+      ),
+    );
+    return 0;
+  }
+  if (
+    actionRaw !== "install" &&
+    actionRaw !== "emit-commands" &&
+    actionRaw !== "verify"
+  ) {
+    console.error(`pkt11_pre_vps_unknown_command:${actionRaw}`);
+    return 2;
+  }
   const action =
     actionRaw === "install"
       ? "install"

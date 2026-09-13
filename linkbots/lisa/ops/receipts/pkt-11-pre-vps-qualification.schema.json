@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openclaw.local/schemas/lisa/pkt-11-pre-vps-qualification-v1.json",
+  "title": "PKT-11 hermetic pre-VPS qualification receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "receiptType",
+    "status",
+    "packet",
+    "sourceBase",
+    "package",
+    "offlineCanary",
+    "rollback",
+    "gates",
+    "actions",
+    "receiptDigestSha256"
+  ],
+  "properties": {
+    "receiptType": { "const": "lisa_pkt_11_pre_vps_qualification_receipt_v1" },
+    "status": { "const": "offline-qualified" },
+    "packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "issue", "executionState"],
+      "properties": {
+        "id": { "const": "PKT-11" },
+        "issue": { "const": "ISS-11" },
+        "executionState": { "const": "PLAN" }
+      }
+    },
+    "sourceBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "ref", "commit", "tree"],
+      "properties": {
+        "repository": { "const": "openclaw/openclaw" },
+        "ref": { "const": "origin/development" },
+        "commit": { "$ref": "#/$defs/gitSha" },
+        "tree": { "$ref": "#/$defs/gitSha" }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packageId",
+        "manifestSha256",
+        "fileCount",
+        "status",
+        "mutableSeeds",
+        "liveMutationAllowed"
+      ],
+      "properties": {
+        "packageId": { "type": "string", "minLength": 1 },
+        "manifestSha256": { "$ref": "#/$defs/sha256" },
+        "fileCount": { "type": "integer", "minimum": 1 },
+        "status": { "const": "verified-source" },
+        "mutableSeeds": { "const": false },
+        "liveMutationAllowed": { "const": false }
+      }
+    },
+    "offlineCanary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "packageStatus",
+        "networkAccess",
+        "delivery",
+        "oauthEnabled",
+        "schedulesEnabled",
+        "liveMutationAllowed",
+        "liveLisaTouched",
+        "stageWorkspaceMutated",
+        "installedFileCount"
+      ],
+      "properties": {
+        "status": { "const": "passed" },
+        "packageStatus": { "const": "installed" },
+        "networkAccess": { "const": "disabled" },
+        "delivery": { "const": "none" },
+        "oauthEnabled": { "const": false },
+        "schedulesEnabled": { "const": false },
+        "liveMutationAllowed": { "const": false },
+        "liveLisaTouched": { "const": false },
+        "stageWorkspaceMutated": { "const": false },
+        "installedFileCount": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "strategy",
+        "installedFileCount",
+        "removedFileCount",
+        "liveRestorePerformed",
+        "rollbackVerified",
+        "approvalRequired"
+      ],
+      "properties": {
+        "status": { "const": "verified-offline" },
+        "strategy": { "const": "discard-hermetic-target" },
+        "installedFileCount": { "type": "integer", "minimum": 1 },
+        "removedFileCount": { "type": "integer", "minimum": 1 },
+        "liveRestorePerformed": { "const": false },
+        "rollbackVerified": { "const": true },
+        "approvalRequired": { "const": true }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerReleaseSetAccepted",
+        "independentTerraVerification",
+        "independentReview",
+        "stageDeployment",
+        "vpsDeployment",
+        "productionCanary",
+        "principalAcceptance",
+        "rollbackVerification"
+      ],
+      "properties": {
+        "providerReleaseSetAccepted": { "$ref": "#/$defs/holdGate" },
+        "independentTerraVerification": { "$ref": "#/$defs/holdGate" },
+        "independentReview": { "$ref": "#/$defs/holdGate" },
+        "stageDeployment": { "$ref": "#/$defs/holdGate" },
+        "vpsDeployment": { "$ref": "#/$defs/holdGate" },
+        "productionCanary": { "$ref": "#/$defs/holdGate" },
+        "principalAcceptance": { "$ref": "#/$defs/holdGate" },
+        "rollbackVerification": { "$ref": "#/$defs/holdGate" }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vpsTouched",
+        "liveLisaTouched",
+        "productionTouched",
+        "scheduleChangesApplied",
+        "oauthOrLiveGoogleCalls",
+        "privateDataRecorded"
+      ],
+      "properties": {
+        "vpsTouched": { "const": false },
+        "liveLisaTouched": { "const": false },
+        "productionTouched": { "const": false },
+        "scheduleChangesApplied": { "const": false },
+        "oauthOrLiveGoogleCalls": { "const": false },
+        "privateDataRecorded": { "const": false }
+      }
+    },
+    "receiptDigestSha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "gitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "holdGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "requiredEvidence"],
+      "properties": {
+        "status": { "const": "HOLD" },
+        "requiredEvidence": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

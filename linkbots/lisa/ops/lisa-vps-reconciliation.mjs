@@ -65,6 +65,35 @@ export const PKT11_SOURCE_ACCEPTANCE_PROHIBITED_PATHS = Object.freeze([
   "extensions/linklibraries/src",
   "extensions/linkautowork/src",
 ]);
+export const PKT11_SOURCE_ACCEPTANCE_SCHEMA_PATH =
+  "linkbots/lisa/ops/receipts/pkt-11-source-acceptance.schema.json";
+const PKT11_SOURCE_ACCEPTANCE_SCHEMA_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "receipts/pkt-11-source-acceptance.schema.json",
+);
+const PKT11_LIVE_COMMANDS = Object.freeze([
+  "deploy",
+  "canary",
+  "ssh",
+  "restore",
+  "promote",
+  "schedule",
+  "oauth",
+]);
+const PKT11_SOURCE_ACCEPTANCE_ROOT_KEYS = Object.freeze([
+  "receiptType",
+  "status",
+  "packet",
+  "sourceBase",
+  "ownedPaths",
+  "prohibitedPaths",
+  "dependencyPackets",
+  "artifacts",
+  "gates",
+  "actions",
+  "rollback",
+  "receiptDigestSha256",
+]);
 const PKT11_DEPENDENCIES = Object.freeze([
   "PKT-01",
   "PKT-02",
@@ -499,29 +528,63 @@ function assertExactStringArray(actual, expected, label) {
   assert(canonicalJson(actual) === canonicalJson(expected), `${label}_mismatch`);
 }
 
+function assertExactKeys(value, keys, label) {
+  assert(value && typeof value === "object" && !Array.isArray(value), `${label}_missing`);
+  assertExactStringArray(Object.keys(value).toSorted(), [...keys].toSorted(), `${label}_keys`);
+}
+
+function assertSourceAcceptanceSchemaContract() {
+  assert(existsSync(PKT11_SOURCE_ACCEPTANCE_SCHEMA_FILE), "acceptance_schema_missing");
+  const schema = JSON.parse(readFileSync(PKT11_SOURCE_ACCEPTANCE_SCHEMA_FILE, "utf8"));
+  assert(
+    schema?.$id === "https://openclaw.local/schemas/lisa/pkt-11-source-acceptance-v1.json",
+    "acceptance_schema_id",
+  );
+  assert(schema.additionalProperties === false, "acceptance_schema_open");
+  assert(
+    schema.properties?.receiptType?.const === PKT11_SOURCE_ACCEPTANCE_RECEIPT_TYPE,
+    "acceptance_schema_receipt_type",
+  );
+  assert(schema.properties?.status?.const === "source-prepared", "acceptance_schema_status");
+  assert(
+    schema.properties?.artifacts?.properties?.stageWorkspacePackage?.properties?.status?.const ===
+      "verified-source",
+    "acceptance_schema_package_status",
+  );
+}
+
 /**
  * Validate the source-only PKT-11 handoff contract. This does not assert that
  * deployment happened: every external gate must remain HOLD until its
  * separately owned receipt is supplied and reviewed.
  */
 export function validateSourceAcceptanceReceipt(receipt) {
+  assertSourceAcceptanceSchemaContract();
   assert(
     receipt && typeof receipt === "object" && !Array.isArray(receipt),
     "acceptance_receipt_missing",
   );
   assertNoSecretMaterialFields(receipt, "acceptance_receipt");
+  assertExactKeys(receipt, PKT11_SOURCE_ACCEPTANCE_ROOT_KEYS, "acceptance_receipt");
   assert(
     receipt.receiptType === PKT11_SOURCE_ACCEPTANCE_RECEIPT_TYPE,
     "unsupported_acceptance_receipt_type",
   );
   assert(receipt.status === "source-prepared", "invalid_acceptance_receipt_status");
-  assert(receipt.packet?.id === "PKT-11", "acceptance_packet_id_mismatch");
+  assertExactKeys(receipt.packet, ["id", "issue", "executionState"], "acceptance_packet");
+  assert(receipt.packet.id === "PKT-11", "acceptance_packet_id_mismatch");
   assert(receipt.packet.issue === "ISS-11", "acceptance_issue_id_mismatch");
   assert(receipt.packet.executionState === "PLAN", "acceptance_execution_state_mismatch");
-  assert(receipt.sourceBase?.repository === "openclaw/openclaw", "acceptance_repository_mismatch");
-  assert(receipt.sourceBase?.ref === "origin/development", "acceptance_ref_mismatch");
-  assertGitSha(receipt.sourceBase?.commit, "acceptance_source_commit");
-  assertGitSha(receipt.sourceBase?.tree, "acceptance_source_tree");
+  // Protected-base identity is shared with pkt11-source-base-preflight.mjs.
+  assertExactKeys(
+    receipt.sourceBase,
+    ["repository", "ref", "commit", "tree"],
+    "acceptance_source_base",
+  );
+  assert(receipt.sourceBase.repository === "openclaw/openclaw", "acceptance_repository_mismatch");
+  assert(receipt.sourceBase.ref === "origin/development", "acceptance_ref_mismatch");
+  assertGitSha(receipt.sourceBase.commit, "acceptance_source_commit");
+  assertGitSha(receipt.sourceBase.tree, "acceptance_source_tree");
   assertExactStringArray(
     receipt.ownedPaths,
     PKT11_SOURCE_ACCEPTANCE_OWNED_PATHS,
@@ -533,9 +596,10 @@ export function validateSourceAcceptanceReceipt(receipt) {
     "acceptance_prohibited_paths",
   );
 
-  assert(
-    receipt.dependencyPackets && typeof receipt.dependencyPackets === "object",
-    "acceptance_dependencies_missing",
+  assertExactKeys(
+    receipt.dependencyPackets,
+    ["required", "reproduced", "resolution"],
+    "acceptance_dependencies_object",
   );
   assertExactStringArray(
     receipt.dependencyPackets.required,
@@ -553,20 +617,30 @@ export function validateSourceAcceptanceReceipt(receipt) {
     "acceptance_dependency_resolution_mismatch",
   );
 
-  const packageArtifact = receipt.artifacts?.stageWorkspacePackage;
-  assert(
-    packageArtifact && typeof packageArtifact === "object",
-    "acceptance_stage_package_missing",
+  assertExactKeys(
+    receipt.artifacts,
+    ["reconciliationTool", "stageWorkspacePackage", "providerQualificationReference"],
+    "acceptance_artifacts",
+  );
+  const packageArtifact = receipt.artifacts.stageWorkspacePackage;
+  assertExactKeys(
+    packageArtifact,
+    [
+      "sourceReceiptType",
+      "status",
+      "packageId",
+      "manifestSha256",
+      "fileCount",
+      "mutableSeeds",
+      "liveMutationAllowed",
+    ],
+    "acceptance_stage_package",
   );
   assert(
     packageArtifact.sourceReceiptType === "lisa_stage_workspace_package_source_receipt_v1",
     "acceptance_stage_receipt_type_mismatch",
   );
-  assert(
-    packageArtifact.status === "verified-source" ||
-      packageArtifact.status === "blocked-hash-mismatch",
-    "acceptance_stage_status",
-  );
+  assert(packageArtifact.status === "verified-source", "acceptance_stage_status");
   assertSafeText(packageArtifact.packageId, "acceptance_stage_package_id");
   assertSha(packageArtifact.manifestSha256, "acceptance_stage_manifest_hash");
   assert(
@@ -576,8 +650,13 @@ export function validateSourceAcceptanceReceipt(receipt) {
   assert(packageArtifact.mutableSeeds === false, "acceptance_stage_mutable_seeds");
   assert(packageArtifact.liveMutationAllowed === false, "acceptance_stage_live_mutation");
 
+  assertExactKeys(
+    receipt.artifacts.reconciliationTool,
+    ["path", "sourceOnly", "liveActions"],
+    "acceptance_reconciliation_tool",
+  );
   assert(
-    receipt.artifacts.reconciliationTool?.sourceOnly === true,
+    receipt.artifacts.reconciliationTool.sourceOnly === true,
     "acceptance_reconciliation_not_source_only",
   );
   assert(
@@ -599,25 +678,36 @@ export function validateSourceAcceptanceReceipt(receipt) {
   for (const gate of PKT11_EXTERNAL_GATES) {
     const value = receipt.gates[gate];
     assert(value && typeof value === "object", `acceptance_gate_missing:${gate}`);
+    assertExactKeys(value, ["status", "requiredEvidence"], `acceptance_gate:${gate}`);
     assert(value.status === "HOLD", `acceptance_gate_not_hold:${gate}`);
     assertSafeText(value.requiredEvidence, `acceptance_gate_evidence:${gate}`);
   }
 
-  const actions = receipt.actions;
-  assert(actions && typeof actions === "object", "acceptance_actions_missing");
-  for (const field of [
+  const actionFields = [
     "vpsTouched",
     "liveLisaTouched",
     "productionTouched",
     "scheduleChangesApplied",
     "oauthOrLiveGoogleCalls",
     "privateDataRecorded",
-  ]) {
-    assert(actions[field] === false, `acceptance_action_not_false:${field}`);
+  ];
+  assertExactKeys(receipt.actions, actionFields, "acceptance_actions");
+  for (const field of actionFields) {
+    assert(receipt.actions[field] === false, `acceptance_action_not_false:${field}`);
   }
 
   const rollback = receipt.rollback;
-  assert(rollback && typeof rollback === "object", "acceptance_rollback_missing");
+  assertExactKeys(
+    rollback,
+    [
+      "strategy",
+      "sourceRevertAvailable",
+      "liveRestorePerformed",
+      "rollbackVerified",
+      "approvalRequired",
+    ],
+    "acceptance_rollback",
+  );
   assert(
     rollback.strategy === "revert-this-source-checkpoint-before-any-promotion",
     "acceptance_rollback_strategy",
@@ -898,13 +988,30 @@ function verifyCommand(args) {
   };
 }
 
+function verifyAcceptanceCommand(args) {
+  const receipt = readJson(args.receipt, "acceptance_receipt");
+  const result = validateSourceAcceptanceReceipt(receipt);
+  return {
+    status: result.status,
+    receiptType: result.receiptType,
+    receiptDigestSha256: result.receiptDigestSha256,
+    liveActions: false,
+  };
+}
+
 export async function main(argv = process.argv.slice(2)) {
   const { command, args } = parseArgs(argv);
+  if (PKT11_LIVE_COMMANDS.includes(command)) {
+    return fail(`live_command_forbidden:${command}`);
+  }
   if (command === "compare") {
     return compareCommand(args);
   }
   if (command === "verify") {
     return verifyCommand(args);
+  }
+  if (command === "verify-acceptance") {
+    return verifyAcceptanceCommand(args);
   }
   return fail(`unknown_command:${command ?? "(missing)"}`);
 }
