@@ -588,6 +588,15 @@ class RecoveredParallelTipOverlapTests(unittest.TestCase):
         with self.assertRaisesRegex(CoordinatorError, "overlapping_commits"):
             self.fx.assemble([left, right])
 
+    def test_missing_local_issue_ref_still_assembles_from_remote_tip(self) -> None:
+        parent = self.fx.accept_issue(66, "shared-history.txt", "shared\n")
+        left = self._branch_from(parent.sha, 67, "remote-a.txt", "a\n")
+        right = self._branch_from(parent.sha, 68, "remote-b.txt", "b\n")
+        git(self.fx.work, "branch", "-D", left.branch)
+        git(self.fx.work, "branch", "-D", right.branch)
+        result = self.fx.assemble([left, right])
+        self.assertEqual(result["action"], "created")
+
 
 if __name__ == "__main__":
     unittest.main()

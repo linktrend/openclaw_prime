@@ -703,12 +703,12 @@ def _validate_source(
 ) -> None:
     if not _object_exists(repo, source.sha):
         raise CoordinatorError("missing_commit", source.sha)
-    local = _git(repo, "rev-parse", f"refs/heads/{source.branch}", check=False)
+    local = _local_sha(repo, source.branch)
     current = _git(repo, "rev-parse", "--abbrev-ref", "HEAD", check=False)
     porcelain = _git(repo, "status", "--porcelain", "--untracked-files=all", check=False)
     if current == source.branch and porcelain:
         raise CoordinatorError("uncommitted", source.branch)
-    if local and normalize_sha(local) != source.sha:
+    if local and local != source.sha:
         raise CoordinatorError("stale_commit", f"{source.branch}:local={local}:accepted={source.sha}")
     remote_sha = _remote_sha(repo, remote, source.branch)
     if not remote_sha:
