@@ -14,7 +14,7 @@
 | Coordination home | `/workspace` |
 | Session ID        | `cursor-cloud-cloud-cloud-agent-feature-20260916-2010` |
 | Started           | 2026-09-16 20:10 Asia/Taipei |
-| Last updated      | 2026-09-16 20:10 Asia/Taipei |
+| Last updated      | 2026-09-16 21:10 Asia/Taipei |
 
 ## Work
 
@@ -47,9 +47,15 @@
 - 2026-09-16: Verified cached vs admitted identity; checked out issue branch at exact SHA. Node 22.14.0 on default PATH is below engines floor; installed Node 24.15.0. Codex cloned to `/home/ubuntu/codex` because `/codex` is not writable.
 - 2026-09-16: Issue/312 Codex app-server auth-refresh fallback is open, not in `development`. Direct Codex source confirms `auth refresh request failed: code=`, timeout, and canceled copy in `codex-rs/app-server/src/external_auth.rs`.
 
+## Progress (closeout)
+
+- Ending checkpoint before this SHA-field amendment: `5dea846c37ec08b7c83cb3e3bc23e3251e9179d6` tree `8e48889855d45257db5cceeb6d99a70c1c851b15`.
+- Codex auth-refresh mapped to typed failover; docs archive + Prime 1.0 briefing pushed.
+- Acceptance: diff-check PASS; docs:list PASS; secret_scan FAIL (pre-existing); pnpm check FAIL (pre-existing ratchets).
+
 ## Next Action
 
-- Exact next action: prove the classification defect with failing tests, port the owner-boundary fix, write 1.0 briefing/classification, checkpoint.
-- Owner: current agent.
-- Questions for Carlos: Server01 live image digest/receipt still missing from GitHub-only evidence.
-- Questions for the Orchestrator or next agent: independent review of this checkpoint; production-owner Server01 inspect; governed promotion/tag.
+- Exact next action: independent review of this issue-branch tip; production-owner Server01 packet; Phase Packager then controller. Do not tag or deploy from this worker.
+- Owner: orchestrator / production owner.
+- Questions for Carlos: who records Server01 digest/receipt for the production-owner packet?
+- Questions for the Orchestrator or next agent: run five-agent acceptance against the admitted digest; do not self-merge.

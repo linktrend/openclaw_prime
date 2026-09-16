@@ -14,7 +14,7 @@
 | Starting branch  | `issue/150032-complete-openclaw-prime-1-0-cleanup-and-consolid` |
 | Ending branch    | same |
 | Starting commit  | `f9c09dc53c8942b45b817e88fef49fe46bbc9d38` |
-| Ending commit    | see closeout SHA |
+| Ending commit    | `5dea846c37ec08b7c83cb3e3bc23e3251e9179d6` (tree `8e48889855d45257db5cceeb6d99a70c1c851b15`; this amendment commit updates these fields) |
 | Starting status  | `active` |
 | Ending status    | `complete` (checkpoint; production digest still missing) |
 
@@ -43,7 +43,12 @@ None. Moves only into `docs/archive/**`.
 
 ## Commands Run
 
-See closeout; include fail-first Vitest (6 failed) then post-fix pass, frozen `pnpm install`, Node 24.15.0.
+- Identity: `git fetch origin issue/150032-complete-openclaw-prime-1-0-cleanup-and-consolid`; `git rev-parse` matched `f9c09dc53c8942b45b817e88fef49fe46bbc9d38` / `72ea598d5cb8b2156c8816a303ab1723f18d333e`.
+- Toolchain: nvm Node `v24.15.0`; `corepack`/pnpm `12.1.0`; frozen `pnpm install` for this lockfile.
+- Fail-first Vitest on OAuth classification (6 failed, including `classifyFailoverReason("auth refresh request failed: code=-32603")` → `null`); post-fix focused unit/extension tests passed.
+- Codex inspect: `/home/ubuntu/codex/codex-rs/app-server/src/external_auth.rs` (`auth refresh request failed: code=`; 10s timeout; canceled).
+- Acceptance: `git diff --check f9c09dc53c8942b45b817e88fef49fe46bbc9d38..HEAD` PASS; `pnpm docs:list` PASS (exit 0); `python3 scripts/gitops/secret_scan.py` FAIL (pre-existing `stale_fixture_declaration` 11957, `credential_finding` 2349, `skipped_input` 580); `pnpm check` FAIL on pre-existing fork ratchets (dup scan, SAFETY, OPENCLAW_* 499>498).
+- `python3 scripts/gitops/completion_gate.py` blocked locally: missing `jsonschema` / module path.
 
 ## Decisions
 
@@ -54,7 +59,7 @@ See closeout; include fail-first Vitest (6 failed) then post-fix pass, frozen `p
 
 ## Tests and Verification
 
-Fail-first: `classifyFailoverReason("auth refresh request failed: code=-32603")` was `null`. After fix, focused unit/extension tests passed. `git diff --check` PASS. `pnpm docs:list` PASS (exit 0). `python3 scripts/gitops/secret_scan.py` FAIL on this tree with pre-existing `stale_fixture_declaration` (11957) and `credential_finding` (2349) plus skipped binaries; no new credential findings on Prime 1.0 briefing/classification paths. `pnpm check` recorded at closeout if it completed.
+Fail-first: `classifyFailoverReason("auth refresh request failed: code=-32603")` was `null`. After fix, focused unit/extension tests passed. `git diff --check` PASS. `pnpm docs:list` PASS (exit 0). `python3 scripts/gitops/secret_scan.py` FAIL on this tree with pre-existing `stale_fixture_declaration` (11957) and `credential_finding` (2349) plus skipped binaries; no new credential findings on Prime 1.0 briefing/classification paths. `pnpm check` FAIL: diagnosed as pre-existing on this fork identity (dup scan for linkbots outside targets, SAFETY ratchet on link* plugins/lisa stores, OPENCLAW_* 499>498). Not introduced by the 1.0 docs/Codex classification diff.
 
 Not tested: live Server01 five-agent sequence, credentialed providers, Crabbox.
 
@@ -91,3 +96,5 @@ Run the five-agent acceptance sequence against the admitted digest. Do not self-
 95% for Git classification and the Codex defect/fix. Production SHA/digest: unknown by design.
 
 ## Amendments
+
+- 2026-09-16 (this session): filled ending SHA `5dea846c37ec08b7c83cb3e3bc23e3251e9179d6` / tree `8e48889855d45257db5cceeb6d99a70c1c851b15` and recorded exact acceptance outcomes. The commit that lands this amendment will be the new tip.
