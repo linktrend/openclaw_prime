@@ -222,6 +222,8 @@ export type EmbeddedAgentRunMeta = {
     fallbackSafe?: boolean;
     /** True when the payload includes a trusted structured terminal tool summary. */
     terminalPresentation?: boolean;
+    /** Plugin-owned refresh stamp; core classifies this object, not Codex literals. */
+    oauthRefreshFailure?: import("../auth-profiles/oauth-refresh-failure.js").OAuthRefreshFailurePresentation;
   };
   failureSignal?: EmbeddedRunFailureSignal;
   /** Bounded, sanitized unresolved Code Mode failure for operator diagnostics. */

@@ -2,7 +2,7 @@
 
 **Recorded:** 2026-07-27 19:17 Asia/Taipei
 **Branch:** `issue/ocp-openclawdevelopmentplan01`
-**Plan:** `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`
+**Plan:** `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`
 **Plan SHA-256:** `17203ee586a3fb2b1281bcddd8b17ae350075ebce537689f3c4bfcbbd14914f7`
 **Status:** **blocked — Platform stage inactive / unverified; no live Lisa or Platform mutation**
 

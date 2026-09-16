@@ -69,3 +69,13 @@ Stop for independent OpenClaw Codex Phase-14 re-verification of the pushed Wave 
 ## Confidence
 
 98% on OpenClaw-owned Wave 8 lifecycle correction; 0% claim of Codex certification.
+
+## Amendments
+
+### 2026-09-16 — archive provenance
+
+- What was wrong: This handoff cited `docs/CURSOR-GROK-*` as the live Principal prompt path.
+- Corrected fact: Those prompts now live at `docs/archive/openclaw-prime-1.0/cursor-grok-paci/`.
+- Why: Independent-review P2 after the 1.0 archive move.
+- Who: `cursor-cloud-cloud-cloud-agent-feature-20260916-2054`
+- Evidence: `docs/archive/openclaw-prime-1.0/README.md`

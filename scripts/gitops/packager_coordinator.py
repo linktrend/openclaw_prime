@@ -13,7 +13,10 @@ Phase PR identity. Tests inject ``MemoryGitHub``; the production CLI never
 does. Existing Phase state is preserved: unique or drifted Phase work is
 rejected instead of reset. Assembly runs in an isolated worktree and writes
 coordinator state under the git common directory, outside the caller
-checkout. This module never pushes
+checkout. An existing Phase record may be hydrated into that isolated
+state only when every supplied identity matches live git and the draft
+PR; hydration never assembles, pushes, opens a PR, labels, seals,
+dispatches CI, or promotes. This module never pushes
 ``development``/``staging``/``main``, never seals a candidate, and never
 starts Full.
 """
@@ -25,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -89,8 +93,13 @@ COMPONENT_KIND = "phase_packager_coordinator"
 IS_PHASE_PACKAGER = True
 HANDOFF_REL = Path(".linktrend/phase-handoff.json")
 COORDINATOR_STATE_REL = Path("ide-development/phase-packager")
+ISOLATED_RECORD_NAME = "phase-delivery-record.json"
+ISOLATED_HANDOFF_NAME = "phase-handoff.json"
+ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME = "provider-consumer-handoff.json"
 PROTECTED_BRANCHES = frozenset({"development", "staging", "main"})
 ISSUE_BRANCH_RE = re.compile(r"^issue/([1-9][0-9]{0,8})-[a-z0-9]+(?:-[a-z0-9]+)*$")
+PHASE_BRANCH_RE = re.compile(r"^phase/[A-Za-z0-9._-]+$")
+REPOSITORY_RE = re.compile(r"^[^/\s]+/[^/\s]+$")
 ACCEPT_RE = re.compile(r"^([^@=]+)[@=]([0-9a-fA-F]{40})$")
 LIVE_PR_URL_RE = re.compile(r"^https://github\.com/[^/]+/[^/]+/pull/[1-9][0-9]*$")
 AGENT_ENV_KEYS = (
@@ -680,20 +689,23 @@ def _validate_source(
 ) -> None:
     if not _object_exists(repo, source.sha):
         raise CoordinatorError("missing_commit", source.sha)
-    local = _git(repo, "rev-parse", f"refs/heads/{source.branch}", check=False)
+    # Missing refs/heads/<issue> must not be treated as a SHA: bare rev-parse
+    # echoes the ref name on stdout. _local_sha requires --verify + is_valid_sha.
+    local = _local_sha(repo, source.branch)
     current = _git(repo, "rev-parse", "--abbrev-ref", "HEAD", check=False)
     porcelain = _git(repo, "status", "--porcelain", "--untracked-files=all", check=False)
     if current == source.branch and porcelain:
         raise CoordinatorError("uncommitted", source.branch)
-    if local and normalize_sha(local) != source.sha:
-        raise CoordinatorError("stale_commit", f"{source.branch}:local={local}:accepted={source.sha}")
+    accepted = normalize_sha(source.sha)
+    if local and local != accepted:
+        raise CoordinatorError("stale_commit", f"{source.branch}:local={local}:accepted={accepted}")
     remote_sha = _remote_sha(repo, remote, source.branch)
     if not remote_sha:
         raise CoordinatorError("unpushed", source.branch)
-    if remote_sha != source.sha:
-        if local and normalize_sha(local) == source.sha:
-            raise CoordinatorError("unpushed", f"{source.branch}:local={source.sha}:remote={remote_sha}")
-        raise CoordinatorError("stale_commit", f"{source.branch}:remote={remote_sha}:accepted={source.sha}")
+    if remote_sha != accepted:
+        if local and local == accepted:
+            raise CoordinatorError("unpushed", f"{source.branch}:local={accepted}:remote={remote_sha}")
+        raise CoordinatorError("stale_commit", f"{source.branch}:remote={remote_sha}:accepted={accepted}")
     if not _is_ancestor(repo, source.sha, remote_sha) and remote_sha != source.sha:
         raise CoordinatorError("stale_commit", source.branch)
     if require_evidence:
@@ -722,6 +734,70 @@ def _coordinator_state_dir(repo: Path, phase_branch: str) -> Path:
     return _git_common_dir(repo) / COORDINATOR_STATE_REL / phase_id
 
 
+def _read_isolated_state_pair(state_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read the published record/handoff pair from one directory.
+
+    Readers must treat these files as one generation. A missing sibling is
+    incomplete isolated state, not a usable mixed pair. Record/handoff
+    identity drift is also mixed state and fails closed.
+    """
+
+    record_path = state_dir / ISOLATED_RECORD_NAME
+    handoff_path = state_dir / ISOLATED_HANDOFF_NAME
+    if not record_path.is_file() or not handoff_path.is_file():
+        raise CoordinatorError("isolated_state_incomplete", str(state_dir))
+    record = json.loads(record_path.read_text(encoding="utf-8"))
+    handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+    if not isinstance(record, dict) or not isinstance(handoff, dict):
+        raise CoordinatorError("isolated_state_incomplete", str(state_dir))
+    record_head = normalize_sha(str(record.get("headSha") or ""))
+    handoff_head = normalize_sha(str(handoff.get("headCommit") or ""))
+    record_tree = normalize_sha(str(record.get("gitTree") or ""))
+    handoff_tree = normalize_sha(str(handoff.get("gitTree") or ""))
+    if record_head != handoff_head or record_tree != handoff_tree:
+        raise CoordinatorError("isolated_state_incomplete", str(state_dir))
+    return record, handoff
+
+
+def _existing_isolated_state_pair(
+    state_dir: Path,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Load a complete published pair, or None when no isolated state exists.
+
+    Duplicate, idempotent, hydrate, and assemble readers share this helper so
+    a lone record, lone handoff, or mixed identity cannot be treated as live.
+    """
+
+    record_exists = (state_dir / ISOLATED_RECORD_NAME).exists()
+    handoff_exists = (state_dir / ISOLATED_HANDOFF_NAME).exists()
+    if not record_exists and not handoff_exists:
+        return None
+    return _read_isolated_state_pair(state_dir)
+
+
+def _publish_isolated_state_dir(staging: Path, live: Path) -> None:
+    """Replace live isolated state with a complete staged directory.
+
+    Directory rename is the publication step. File-by-file replace would let a
+    crash pair a new record with a stale handoff (or the reverse). If live
+    cannot be replaced, roll the previous directory back so readers still see
+    the old complete pair.
+    """
+
+    backup: Path | None = None
+    try:
+        if live.exists():
+            backup = live.with_name(f".{live.name}-prev-{staging.name.lstrip('.')}")
+            os.rename(live, backup)
+        os.rename(staging, live)
+    except Exception:
+        if backup is not None and backup.exists() and not live.exists():
+            os.rename(backup, live)
+        raise
+    if backup is not None:
+        shutil.rmtree(backup, ignore_errors=True)
+
+
 def _local_sha(repo: Path, branch: str) -> str:
     value = _git(repo, "rev-parse", "--verify", f"refs/heads/{branch}", check=False)
     return normalize_sha(value) if is_valid_sha(value) else ""
@@ -739,6 +815,21 @@ def _unique_phase_commits(
     phase_sha: str,
     accepted_shas: set[str],
 ) -> list[str]:
+    accepted_history: set[str] = set()
+    for accepted_sha in sorted(accepted_shas):
+        if not _is_ancestor(repo, development_sha, accepted_sha):
+            continue
+        history = _git(
+            repo,
+            "rev-list",
+            f"{development_sha}..{accepted_sha}",
+            check=False,
+        )
+        accepted_history.update(
+            normalize_sha(line)
+            for line in history.splitlines()
+            if is_valid_sha(normalize_sha(line))
+        )
     output = _git(repo, "rev-list", "--parents", f"{development_sha}..{phase_sha}", check=False)
     unique: list[str] = []
     for line in output.splitlines():
@@ -747,9 +838,14 @@ def _unique_phase_commits(
             continue
         commit = normalize_sha(parts[0])
         parents = [normalize_sha(item) for item in parts[1:]]
-        if commit in accepted_shas:
+        # An accepted exact tip authorizes its complete post-development
+        # ancestry, including an existing two-parent Phase merge whose
+        # second parent is that history rather than only the newest tip.
+        # Otherwise revising a Phase falsely treats a multi-commit
+        # accepted issue as unrelated Phase work.
+        if commit in accepted_history:
             continue
-        if len(parents) == 2 and parents[1] in accepted_shas:
+        if len(parents) == 2 and parents[1] in accepted_history:
             continue
         unique.append(commit)
     return unique
@@ -830,22 +926,35 @@ def _write_isolated_state(
     handoff: Mapping[str, Any],
     provider_consumer_handoff: Mapping[str, Any] | None = None,
 ) -> Path:
-    state_dir = _coordinator_state_dir(repo, phase_branch)
-    state_dir.mkdir(parents=True, exist_ok=True)
-    (state_dir / "phase-delivery-record.json").write_text(
-        json.dumps(record, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    (state_dir / "phase-handoff.json").write_text(
-        json.dumps(handoff, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    live = _coordinator_state_dir(repo, phase_branch)
+    parent = live.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Mapping[str, Any]] = {
+        ISOLATED_RECORD_NAME: record,
+        ISOLATED_HANDOFF_NAME: handoff,
+    }
     if provider_consumer_handoff is not None:
-        (state_dir / "provider-consumer-handoff.json").write_text(
-            json.dumps(provider_consumer_handoff, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-    return state_dir
+        payload[ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME] = provider_consumer_handoff
+    staging = Path(tempfile.mkdtemp(prefix=f".{live.name}-next-", dir=str(parent)))
+    published = False
+    try:
+        for name, data in payload.items():
+            (staging / name).write_text(
+                json.dumps(data, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        # Omitted optional provider-consumer handoff stays with the generation
+        # being replaced; dropping it here would change that reader contract.
+        if provider_consumer_handoff is None:
+            existing_typed = live / ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME
+            if existing_typed.is_file():
+                shutil.copy2(existing_typed, staging / ISOLATED_PROVIDER_CONSUMER_HANDOFF_NAME)
+        _publish_isolated_state_dir(staging, live)
+        published = True
+    finally:
+        if not published:
+            shutil.rmtree(staging, ignore_errors=True)
+    return live
 
 
 def _stable_title(phase_branch: str) -> str:
@@ -965,6 +1074,260 @@ def _handoff_from(
     return result
 
 
+def _sources_from_record(record: Mapping[str, Any]) -> list[AcceptedSource]:
+    raw = record.get("acceptedCommits")
+    if not isinstance(raw, list) or not raw:
+        raise CoordinatorError("malformed_phase_record", "acceptedCommits")
+    sources: list[AcceptedSource] = []
+    seen_branches: set[str] = set()
+    seen_numbers: set[str] = set()
+    seen_shas: set[str] = set()
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, Mapping):
+            raise CoordinatorError("malformed_phase_record", f"acceptedCommits[{index}]")
+        order = item.get("order", index)
+        if not isinstance(order, int) or isinstance(order, bool) or order < 1:
+            raise CoordinatorError("malformed_phase_record", f"acceptedCommits[{index}].order")
+        source = AcceptedSource(
+            branch=str(item.get("branch") or ""),
+            sha=normalize_sha(str(item.get("sha") or "")),
+            order=order,
+        )
+        match = ISSUE_BRANCH_RE.fullmatch(source.branch)
+        if not match:
+            raise CoordinatorError("invalid_issue_branch", source.branch)
+        if not is_valid_sha(source.sha):
+            raise CoordinatorError("invalid_sha", source.sha)
+        number = match.group(1)
+        if source.branch in seen_branches or number in seen_numbers:
+            raise CoordinatorError("duplicate_issue", source.branch)
+        if source.sha in seen_shas:
+            raise CoordinatorError("duplicate_issue_sha", source.sha)
+        seen_branches.add(source.branch)
+        seen_numbers.add(number)
+        seen_shas.add(source.sha)
+        sources.append(source)
+    dependency = record.get("dependencyOrder")
+    expected = [source.branch for source in sources]
+    if not isinstance(dependency, list) or [str(item) for item in dependency] != expected:
+        raise CoordinatorError("malformed_phase_record", "dependencyOrder")
+    return sources
+
+
+def _matching_draft_pr(
+    github: GitHubPort,
+    *,
+    repository: str,
+    phase_branch: str,
+    development: str,
+    record_pr: Mapping[str, Any],
+    head: str,
+    require_live_pr: bool,
+) -> dict[str, Any]:
+    if not bool(record_pr.get("isDraft", False)):
+        raise CoordinatorError("phase_pr_not_draft", str(record_pr.get("number")))
+    _assert_live_phase_pr_optional(record_pr, require_live_pr=require_live_pr)
+    number = record_pr.get("number")
+    url = str(record_pr.get("url") or "")
+    if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+        raise CoordinatorError("invalid_phase_pr", "missing draft Phase PR identity")
+    if not url:
+        raise CoordinatorError("invalid_phase_pr", "missing draft Phase PR identity")
+    open_prs = github.list_open_phase_prs(repository=repository, head=phase_branch, base=development)
+    if not open_prs:
+        raise CoordinatorError("missing_phase_pr", phase_branch)
+    if len(open_prs) != 1:
+        raise CoordinatorError("duplicate_phase_pr", json.dumps([row.get("number") for row in open_prs]))
+    live = open_prs[0]
+    if live.get("number") != number or str(live.get("url") or "") != url:
+        raise CoordinatorError("phase_pr_mismatch", json.dumps({"record": number, "live": live.get("number")}))
+    if not bool(live.get("isDraft", False)):
+        raise CoordinatorError("phase_pr_not_draft", str(live.get("number")))
+    live_head = normalize_sha(str(live.get("headSha") or ""))
+    if is_valid_sha(live_head) and live_head != head:
+        raise CoordinatorError("stale_commit", f"pr_head={live_head}:expected={head}")
+    return dict(live)
+
+
+def hydrate_existing_phase_state(
+    *,
+    repo: Path,
+    record: Mapping[str, Any],
+    github: GitHubPort,
+    expected_repository: str | None = None,
+    development: str = "development",
+    remote: str = "origin",
+    require_evidence: bool = True,
+    require_live_pr: bool = False,
+    evidence_payloads: Mapping[str, Any] | None = None,
+    provider_consumer_handoff: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Write isolated controller state from an explicit existing Phase record.
+
+    Facts must be supplied; this path never scrapes GitHub, invents accepted
+    issues, creates or merges a PR, pushes, labels, seals, dispatches CI, or
+    promotes.
+    """
+
+    if not isinstance(record, Mapping):
+        raise CoordinatorError("malformed_phase_record", "record must be an object")
+    if record.get("schemaVersion") != 1 or record.get("kind") != "phase-record":
+        raise CoordinatorError("malformed_phase_record", "schemaVersion/kind")
+    if record.get("component") != COMPONENT_KIND:
+        raise CoordinatorError("malformed_phase_record", "component")
+    if record.get("sealed") is not False:
+        raise CoordinatorError("malformed_phase_record", "sealed")
+    delivery_mode = record.get("deliveryMode")
+    if delivery_mode not in {None, MODE_PHASE_INTEGRATION}:
+        raise CoordinatorError("malformed_phase_record", str(delivery_mode))
+    repository = str(record.get("repository") or "")
+    if not REPOSITORY_RE.fullmatch(repository):
+        raise CoordinatorError("malformed_phase_record", "repository")
+    if expected_repository and expected_repository != repository:
+        raise CoordinatorError("wrong_repository", f"expected={expected_repository}:got={repository}")
+    if repository != getattr(github, "repository", repository):
+        raise CoordinatorError("wrong_repository", repository)
+    phase_branch = str(record.get("phaseBranch") or "")
+    if phase_branch in PROTECTED_BRANCHES or not PHASE_BRANCH_RE.fullmatch(phase_branch):
+        raise CoordinatorError("invalid_phase_branch", phase_branch)
+    phase_id = str(record.get("phaseId") or "")
+    if phase_id != phase_branch.split("/", 1)[-1]:
+        raise CoordinatorError("malformed_phase_record", "phaseId")
+    if development in {"staging", "main"}:
+        raise CoordinatorError("protected_base", development)
+    base = normalize_sha(str(record.get("immutableBaseSha") or record.get("baseSha") or ""))
+    recorded_base = normalize_sha(str(record.get("baseSha") or ""))
+    head = normalize_sha(str(record.get("headSha") or ""))
+    tree = normalize_sha(str(record.get("gitTree") or ""))
+    if not all(is_valid_sha(value) for value in (base, recorded_base, head, tree)):
+        raise CoordinatorError("malformed_phase_record", "base/head/tree")
+    if base != recorded_base:
+        raise CoordinatorError("stale_commit", f"immutableBase={base}:baseSha={recorded_base}")
+    pr = record.get("phasePr")
+    if not isinstance(pr, Mapping):
+        raise CoordinatorError("missing_phase_pr", "phasePr")
+
+    sources = _sources_from_record(record)
+    revision = _candidate_revision(repository, phase_branch, base, sources)
+    if str(record.get("candidateRevision") or "") != revision:
+        raise CoordinatorError("stale_commit", "candidateRevision")
+
+    development_sha = _remote_sha(repo, remote, development) or _git(repo, "rev-parse", development)
+    if not is_valid_sha(development_sha):
+        raise CoordinatorError("missing_commit", development)
+    live_development = _git(repo, "rev-parse", development)
+    if normalize_sha(live_development) != normalize_sha(development_sha):
+        raise CoordinatorError("stale_commit", f"{development}:local={live_development}:remote={development_sha}")
+    if normalize_sha(development_sha) != base:
+        raise CoordinatorError("stale_commit", f"{development}:live={development_sha}:record={base}")
+
+    local_phase, remote_phase = _existing_phase_shas(repo, remote, phase_branch)
+    live_phase = remote_phase or local_phase
+    if not live_phase:
+        raise CoordinatorError("missing_phase_ref", phase_branch)
+    if live_phase != head:
+        raise CoordinatorError("stale_commit", f"{phase_branch}:live={live_phase}:record={head}")
+    live_tree = normalize_sha(_git(repo, "rev-parse", f"{head}^{{tree}}"))
+    if live_tree != tree:
+        raise CoordinatorError("stale_commit", f"tree:live={live_tree}:record={tree}")
+
+    unique = _unique_phase_commits(
+        repo,
+        development_sha=development_sha,
+        phase_sha=head,
+        accepted_shas={source.sha for source in sources},
+    )
+    if unique:
+        raise CoordinatorError(
+            "unique_phase_divergence",
+            f"{phase_branch}:{head}:{','.join(unique)}",
+        )
+    for source in sources:
+        if not _is_ancestor(repo, source.sha, head):
+            raise CoordinatorError("unrelated_commits", source.branch)
+        _validate_source(
+            repo,
+            source,
+            github=github,
+            remote=remote,
+            require_evidence=require_evidence,
+            evidence_payloads=evidence_payloads,
+        )
+
+    live_pr = _matching_draft_pr(
+        github,
+        repository=repository,
+        phase_branch=phase_branch,
+        development=development,
+        record_pr=pr,
+        head=head,
+        require_live_pr=require_live_pr,
+    )
+
+    state_dir = _coordinator_state_dir(repo, phase_branch)
+    pair = _existing_isolated_state_pair(state_dir)
+    identical = False
+    if pair is not None:
+        previous, _previous_handoff = pair
+        previous_branch = str(previous.get("phaseBranch") or "")
+        if previous_branch not in {"", phase_branch}:
+            raise CoordinatorError("duplicate_active_phase", previous_branch)
+        previous_pr = previous.get("phasePr") if isinstance(previous.get("phasePr"), Mapping) else {}
+        identical = (
+            normalize_sha(str(previous.get("headSha") or "")) == head
+            and normalize_sha(str(previous.get("gitTree") or "")) == tree
+            and str(previous.get("candidateRevision") or "") == revision
+            and previous_pr.get("number") == pr.get("number")
+        )
+        if not identical:
+            raise CoordinatorError("duplicate_active_phase", phase_branch)
+
+    written_record = dict(record)
+    handoff = _handoff_from(
+        written_record,
+        valid=True,
+        provider_consumer_handoff=provider_consumer_handoff,
+    )
+    written = _write_isolated_state(
+        repo,
+        phase_branch,
+        written_record,
+        handoff,
+        provider_consumer_handoff=provider_consumer_handoff,
+    )
+    result = {
+        "component": COMPONENT_KIND,
+        "action": "reused" if identical else "hydrated",
+        "repository": repository,
+        "phaseBranch": phase_branch,
+        "phasePr": {
+            "number": pr.get("number"),
+            "url": pr.get("url"),
+            "isDraft": True,
+        },
+        "headSha": head,
+        "gitTree": tree,
+        "baseSha": base,
+        "remoteSha": live_phase,
+        "candidateRevision": revision,
+        "acceptedCommits": [source.to_dict() for source in sources],
+        "idempotent": identical,
+        "githubEnsureCalls": getattr(github, "ensure_calls", 0),
+        "labels": list(getattr(github, "labels", [])),
+        "workflowDispatches": list(getattr(github, "workflow_dispatches", [])),
+        "fastTrigger": "phase_pr",
+        "checkpointCI": False,
+        "fullDispatchAllowed": False,
+        "handoff": handoff,
+        "record": written_record,
+        "stateDir": str(written),
+        "livePhasePr": live_pr,
+    }
+    if provider_consumer_handoff is not None:
+        result["providerConsumerHandoff"] = dict(provider_consumer_handoff)
+    return result
+
+
 def assemble_phase(
     *,
     repo: Path,
@@ -1032,10 +1395,10 @@ def assemble_phase(
     _probe_conflicts(repo, development_sha, ordered)
 
     state_dir = _coordinator_state_dir(repo, phase_branch)
-    record_path = state_dir / "phase-delivery-record.json"
+    pair = _existing_isolated_state_pair(state_dir)
     previous = None
-    if record_path.is_file():
-        previous = json.loads(record_path.read_text(encoding="utf-8"))
+    if pair is not None:
+        previous, _previous_handoff = pair
         if previous.get("phaseBranch") not in {None, phase_branch} and previous.get("phaseBranch") != phase_branch:
             raise CoordinatorError("duplicate_active_phase", str(previous.get("phaseBranch")))
 

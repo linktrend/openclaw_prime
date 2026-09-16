@@ -20,5 +20,7 @@ policy HOLD for live writes. Wave B records the Brain v2 bind surface as
 `extensions/linkbrain/api.ts` on the accepted Item 2 head; that naming does not
 authorize a live LiNKbrain write. Do not claim a live LiNKbrain write. If the
 destination is HOLD, enqueue the task locally with a temporary `P-*` ID and map
-it once to the permanent `T-*` ID after a later bound recovery. Never invent a
+it once to the already assigned permanent `T-*` display ref after a later bound
+recovery. Intake itself assigns the immutable internal UUID and `T-NNNNNN`
+display ref immediately; `P-*` is never the identity. Never invent a
 permanent ID, lose queued work, or claim that an external action occurred.

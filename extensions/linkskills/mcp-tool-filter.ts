@@ -43,7 +43,7 @@ const LINKSKILLS_MCP_EVIDENCE_TOOLS = Object.freeze([
   "skills_trace_candidate_submit",
 ] as const);
 
-/** Full frozen Skills MCP include list for Lisa. */
+/** Frozen v1 Skills MCP include list retained as the named compatibility contract. */
 export const LINKSKILLS_MCP_TOOL_ALLOWLIST = Object.freeze([
   ...LINKSKILLS_MCP_DISCOVERY_TOOLS,
   ...LINKSKILLS_MCP_RUN_TOOLS,

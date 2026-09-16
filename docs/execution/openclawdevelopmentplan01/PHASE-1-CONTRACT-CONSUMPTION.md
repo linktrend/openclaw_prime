@@ -11,7 +11,7 @@
 
 | Field   | Value                                                                           |
 | ------- | ------------------------------------------------------------------------------- |
-| Plan    | `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` |
+| Plan    | `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` |
 | SHA-256 | `17203ee586a3fb2b1281bcddd8b17ae350075ebce537689f3c4bfcbbd14914f7`              |
 | Check   | HASH_OK (re-verified 2026-07-28 09:52 Asia/Taipei)                              |
 

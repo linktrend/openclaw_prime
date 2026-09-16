@@ -3,16 +3,13 @@ import type { OpenClawPluginApi, OpenClawPluginToolContext } from "../runtime-ap
 import type { LinkbrainConfig } from "./config.js";
 import { parseLinkbrainConfig } from "./config.js";
 import { sanitizeCaptureText } from "./sanitize.js";
+import { isStandardBrainReadOperation, LINKBRAIN_V2_READ_OPERATIONS } from "./standard-mcp-v2.js";
 import { LINKBRAIN_CAPTURE_TOOL, LINKBRAIN_CHECKPOINT_TOOL } from "./tools.js";
 import { callLinkbrainMcpTool, resolveLinkbrainTransport } from "./transport.js";
 
 const brainReadSchema = Type.Object(
   {
-    operation: Type.Union([
-      Type.Literal("brain_browse"),
-      Type.Literal("brain_search"),
-      Type.Literal("brain_load"),
-    ]),
+    operation: Type.Enum(LINKBRAIN_V2_READ_OPERATIONS, { type: "string" }),
     arguments: Type.Record(Type.String(), Type.Unknown()),
   },
   { additionalProperties: false },
@@ -469,10 +466,14 @@ export function createLinkbrainReadTool(api: OpenClawPluginApi) {
       }
       const operation = params.operation;
       const argumentsValue = params.arguments;
+      if (typeof operation !== "string") {
+        return {
+          content: [{ type: "text" as const, text: "Invalid LiNKbrain read request." }],
+          details: { ok: false, reason: "invalid_request" },
+        };
+      }
       if (
-        (operation !== "brain_browse" &&
-          operation !== "brain_search" &&
-          operation !== "brain_load") ||
+        !isStandardBrainReadOperation(operation) ||
         typeof argumentsValue !== "object" ||
         argumentsValue === null ||
         Array.isArray(argumentsValue)

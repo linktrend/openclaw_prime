@@ -35,7 +35,11 @@ from coordinator.receipts import (  # noqa: E402
     verify_receipt,
     verify_transition_receipt,
 )
-from phase_integrator import MergeEligibility, phase_merge_eligibility  # noqa: E402
+from coordinator.state import StateError, comparable_sealed_identity  # noqa: E402
+try:
+    from scripts.gitops.phase_integrator import MergeEligibility, phase_merge_eligibility  # noqa: E402
+except ModuleNotFoundError:  # pragma: no cover - direct script execution
+    from phase_integrator import MergeEligibility, phase_merge_eligibility  # noqa: E402
 from receipt_loop_detector import admit_receipt_maintenance_transition, write_loop_diagnosis  # noqa: E402
 
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
@@ -247,6 +251,140 @@ def resolve_canonical_candidate_head(payload: Mapping[str, Any]) -> dict[str, An
             "note": "Merge-ref evidence is integration-only and never replaces candidate head/tree identity.",
         }
     return result
+
+
+def bind_full_receipt_identity(
+    record: Mapping[str, Any],
+    receipt: Mapping[str, Any] | None,
+    *,
+    live_head_sha: str | None = None,
+    expected_tree: str | None = None,
+) -> dict[str, Any]:
+    """Bind a schema-v2 FullSuiteReceipt to the sealed Phase candidate.
+
+    Exact repository / head / tree must match. Full-profile provenance is the
+    receipt ``profileDigest`` (and sealed ``testProfile`` / ``profileDigest``
+    when present). Phase ``candidateId`` is returned unchanged and is never
+    compared to a schema-v2 canonical identity digest. Literal ``profile`` and
+    ``candidateId`` receipt fields are not required and are not invented.
+    """
+
+    sealed_raw = record.get("candidateIdentity")
+    if not isinstance(sealed_raw, Mapping):
+        return {
+            "accepted": False,
+            "code": "sealed_candidate_identity_missing",
+            "detail": "sealed Phase candidate identity is required",
+            "candidateId": str(record.get("candidateId") or "") or None,
+        }
+    try:
+        parsed = parse_trusted_full_suite_receipt(receipt)
+        sealed = comparable_sealed_identity(sealed_raw)
+    except SealError as exc:
+        return {
+            "accepted": False,
+            "code": exc.code,
+            "detail": exc.detail,
+            "candidateId": str(record.get("candidateId") or "") or None,
+        }
+    except StateError as exc:
+        return {
+            "accepted": False,
+            "code": exc.code,
+            "detail": exc.detail,
+            "candidateId": str(record.get("candidateId") or "") or None,
+        }
+
+    receipt_identity = parsed.candidate_identity
+    live_head = _sha(live_head_sha) or _sha(record.get("sealedSha") or record.get("headSha"))
+    sealed_head = _sha(sealed["headCommit"]) or live_head
+    sealed_tree = _sha(expected_tree) or _sha(sealed["gitTree"])
+    sealed_repo = sealed["repository"] or str(record.get("repository") or "").strip() or None
+    phase_candidate_id = str(record.get("candidateId") or "").strip() or None
+
+    if sealed_repo and receipt_identity.repository != sealed_repo:
+        return {
+            "accepted": False,
+            "code": "repository_mismatch",
+            "detail": "receipt repository does not match sealed Phase candidate",
+            "candidateId": phase_candidate_id,
+        }
+    expected_head = live_head or sealed_head
+    if expected_head and receipt_identity.head_commit != expected_head:
+        return {
+            "accepted": False,
+            "code": "retained_receipt_wrong_head",
+            "detail": "receipt headCommit does not match sealed Phase head",
+            "candidateId": phase_candidate_id,
+        }
+    if sealed_head and receipt_identity.head_commit != sealed_head:
+        return {
+            "accepted": False,
+            "code": "retained_receipt_wrong_head",
+            "detail": "receipt headCommit does not match sealed Phase head",
+            "candidateId": phase_candidate_id,
+        }
+    if sealed_tree and receipt_identity.git_tree != sealed_tree:
+        return {
+            "accepted": False,
+            "code": "retained_receipt_wrong_tree",
+            "detail": "receipt gitTree does not match sealed Phase tree",
+            "candidateId": phase_candidate_id,
+        }
+
+    sealed_profile = sealed["testProfile"]
+    if sealed_profile and sealed_profile != "full":
+        return {
+            "accepted": False,
+            "code": "profile_mismatch",
+            "detail": "sealed Phase candidate is not the full test profile",
+            "candidateId": phase_candidate_id,
+        }
+    receipt_profile_digest = _digest(receipt_identity.profile_digest)
+    if not receipt_profile_digest:
+        return {
+            "accepted": False,
+            "code": "profile_mismatch",
+            "detail": "receipt is missing a recognized full-profile digest",
+            "candidateId": phase_candidate_id,
+        }
+    sealed_profile_digest = _digest(sealed["profileDigest"])
+    if sealed_profile_digest and sealed_profile_digest != receipt_profile_digest:
+        return {
+            "accepted": False,
+            "code": "profile_mismatch",
+            "detail": "receipt profileDigest does not match sealed full-profile digest",
+            "candidateId": phase_candidate_id,
+        }
+    sealed_dependency = _digest(sealed["dependencyDigest"])
+    if sealed_dependency and sealed_dependency != _digest(receipt_identity.dependency_digest):
+        return {
+            "accepted": False,
+            "code": "dependency_mismatch",
+            "detail": "receipt dependencyDigest does not match sealed candidate",
+            "candidateId": phase_candidate_id,
+        }
+    sealed_workflow = _digest(sealed["workflowDigest"])
+    if sealed_workflow and sealed_workflow != _digest(receipt_identity.workflow_digest):
+        return {
+            "accepted": False,
+            "code": "workflow_mismatch",
+            "detail": "receipt workflowDigest does not match sealed candidate",
+            "candidateId": phase_candidate_id,
+        }
+
+    return {
+        "accepted": True,
+        "code": "bound",
+        "detail": "schema-v2 FullSuiteReceipt bound to sealed Phase candidate",
+        "candidateId": phase_candidate_id,
+        "repository": receipt_identity.repository,
+        "headCommit": receipt_identity.head_commit,
+        "gitTree": receipt_identity.git_tree,
+        "profileDigest": receipt_profile_digest,
+        "dependencyDigest": receipt_identity.dependency_digest,
+        "workflowDigest": receipt_identity.workflow_digest,
+    }
 
 
 def parse_trusted_full_suite_receipt(receipt: Mapping[str, Any] | None) -> FullSuiteReceipt:
@@ -539,42 +677,29 @@ def phase_merge_eligibility_with_receipt(
         failed = [name for name, ok in checks.items() if not ok]
         return MergeEligibility(False, "blocked:" + ",".join(failed + ["retained_receipt_missing"]), checks)
 
+    binding = bind_full_receipt_identity(
+        record,
+        retained_receipt,
+        live_head_sha=head,
+        expected_tree=expected_tree,
+    )
+    if not binding.get("accepted"):
+        checks["retainedReceipt"] = False
+        failed = [name for name, ok in checks.items() if not ok]
+        return MergeEligibility(
+            False,
+            "blocked:" + ",".join(failed + [str(binding.get("code") or "retained_receipt_malformed")]),
+            checks,
+        )
+
     try:
         parsed = parse_trusted_full_suite_receipt(retained_receipt)
-        receipt_head = parsed.candidate_identity.head_commit
-        receipt_tree = parsed.candidate_identity.git_tree
-        if not receipt_head or receipt_head != head:
-            checks["retainedReceipt"] = False
-            failed = [name for name, ok in checks.items() if not ok]
-            return MergeEligibility(
-                False,
-                "blocked:" + ",".join(failed + ["retained_receipt_wrong_head"]),
-                checks,
-            )
-        live_tree = _sha(expected_tree)
-        if not live_tree:
-            candidate = record.get("candidateIdentity")
-            if isinstance(candidate, Mapping):
-                live_tree = _sha(
-                    candidate.get("gitTreeSha")
-                    or candidate.get("gitTree")
-                    or candidate.get("git_tree")
-                )
-        if not live_tree:
-            live_tree = receipt_tree
-        if live_tree and receipt_tree != live_tree:
-            checks["retainedReceipt"] = False
-            failed = [name for name, ok in checks.items() if not ok]
-            return MergeEligibility(
-                False,
-                "blocked:" + ",".join(failed + ["retained_receipt_wrong_tree"]),
-                checks,
-            )
+        live_tree = _sha(binding.get("gitTree")) or parsed.candidate_identity.git_tree
         live_identity = CandidateIdentity(
             parsed.candidate_identity.repository,
             parsed.candidate_identity.source_branch,
             head,
-            live_tree or receipt_tree,
+            live_tree,
             parsed.candidate_identity.dependency_digest,
             parsed.candidate_identity.profile_digest,
             parsed.candidate_identity.workflow_digest,

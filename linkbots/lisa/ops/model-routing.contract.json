@@ -75,6 +75,10 @@
   "nonCodingRouting": {
     "version": "2026-08-24-transient-noncoding-routing-v1",
     "liveMutationAllowed": false,
+    "exactModelIdsApproved": false,
+    "paidRouteActivationAllowed": false,
+    "sourceOnlyEvaluation": true,
+    "activationState": "disabled_pending_founder_approval",
     "classifier": {
       "obviousRequestsSkipClassifier": true,
       "ambiguousRequestsOnly": true,

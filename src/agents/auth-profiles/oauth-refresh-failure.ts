@@ -39,31 +39,28 @@ export type OAuthRefreshFailurePresentation = {
 const OAUTH_REFRESH_FAILURE_ERROR_TYPE_MAX_CHARS = 100;
 const OAUTH_REFRESH_FAILURE_SUMMARY_MAX_CHARS = 500;
 
-export function readProviderOAuthRefreshFailure(
-  error: unknown,
-): OAuthRefreshFailurePresentation | null {
-  const presentation = asOptionalRecord(asOptionalRecord(error)?.oauthRefreshFailure);
-  if (!presentation) {
-    return null;
-  }
+function presentationFromOAuthRefreshFields(params: {
+  summary?: unknown;
+  errorType?: unknown;
+  reason?: unknown;
+  status?: unknown;
+}): OAuthRefreshFailurePresentation | null {
   const summary = normalizeBoundedOptionalString(
-    presentation.summary,
+    params.summary,
     OAUTH_REFRESH_FAILURE_SUMMARY_MAX_CHARS,
   );
   const errorType = normalizeBoundedOptionalString(
-    presentation.errorType,
+    params.errorType,
     OAUTH_REFRESH_FAILURE_ERROR_TYPE_MAX_CHARS,
   );
   const reason =
-    typeof presentation.reason === "string"
-      ? classifyOAuthRefreshFailureReason(presentation.reason)
-      : null;
+    typeof params.reason === "string" ? classifyOAuthRefreshFailureReason(params.reason) : null;
   const status =
-    typeof presentation.status === "number" &&
-    Number.isInteger(presentation.status) &&
-    presentation.status >= 100 &&
-    presentation.status <= 599
-      ? presentation.status
+    typeof params.status === "number" &&
+    Number.isInteger(params.status) &&
+    params.status >= 100 &&
+    params.status <= 599
+      ? params.status
       : undefined;
   if (!summary && !errorType && !reason && !status) {
     return null;
@@ -74,6 +71,24 @@ export function readProviderOAuthRefreshFailure(
     ...(status ? { status } : {}),
     ...(summary ? { summary } : {}),
   };
+}
+
+export function readProviderOAuthRefreshFailure(
+  error: unknown,
+): OAuthRefreshFailurePresentation | null {
+  if (error instanceof OAuthRefreshFailureError) {
+    return presentationFromOAuthRefreshFields({
+      summary: error.summary ?? error.message,
+      errorType: error.errorType,
+      reason: error.reason,
+      status: error.status,
+    });
+  }
+  const presentation = asOptionalRecord(asOptionalRecord(error)?.oauthRefreshFailure);
+  if (!presentation) {
+    return null;
+  }
+  return presentationFromOAuthRefreshFields(presentation);
 }
 
 type StructuredClaudeCliAuthFailure = {
@@ -273,6 +288,164 @@ export function classifyOAuthRefreshFailure(message: string): OAuthRefreshFailur
 }
 
 /** Classify provider/reason from the structured OAuth refresh failure error. */
+/** Codex `external_auth.rs` JSON-RPC error wrap; code is native, never invented. */
+const CODEX_APP_SERVER_AUTH_REFRESH_FAILED_RE = /^auth refresh request failed: code=(-?\d+)$/;
+/** Codex `external_auth.rs` 10s deadline copy (duration is Codex-owned). */
+const CODEX_APP_SERVER_AUTH_REFRESH_TIMEOUT_RE = /^auth refresh request timed out after \d+s$/;
+const CODEX_APP_SERVER_AUTH_REFRESH_CANCELED_PREFIX = "auth refresh request canceled:";
+/** Codex `external_auth.rs` parser failure after a JSON-RPC success (token-bearing payload redacted). */
+const CODEX_APP_SERVER_AUTH_REFRESH_INVALID_RESPONSE = "invalid auth refresh response";
+/** Codex `external_auth.rs` credential constructor failure (token-bearing payload redacted). */
+const CODEX_APP_SERVER_AUTH_REFRESH_INVALID_CREDENTIALS = "auth refresh returned invalid credentials";
+
+export const CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_ERROR_TYPE =
+  "codex_app_server_external_auth_refresh";
+export const CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_TIMEOUT_ERROR_TYPE =
+  "codex_app_server_external_auth_refresh_timeout";
+export const CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_CANCELED_ERROR_TYPE =
+  "codex_app_server_external_auth_refresh_canceled";
+
+export type ExternalAuthRefreshTerminalKind = "refresh_failed" | "timeout" | "canceled";
+
+export type ExternalAuthRefreshTerminalFailure = {
+  kind: ExternalAuthRefreshTerminalKind;
+  jsonRpcCode?: number;
+};
+
+function readUnknownErrorMessage(error: unknown): string {
+  if (typeof error === "string") {
+    return error.trim();
+  }
+  if (error instanceof Error) {
+    return error.message.trim();
+  }
+  return "";
+}
+
+function errorTypeForExternalAuthRefreshKind(kind: ExternalAuthRefreshTerminalKind): string {
+  switch (kind) {
+    case "timeout":
+      return CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_TIMEOUT_ERROR_TYPE;
+    case "canceled":
+      return CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_CANCELED_ERROR_TYPE;
+    default:
+      return CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_ERROR_TYPE;
+  }
+}
+
+function classifyExternalAuthRefreshErrorType(
+  errorType: string | undefined,
+): ExternalAuthRefreshTerminalKind | null {
+  switch (errorType) {
+    case CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_ERROR_TYPE:
+      return "refresh_failed";
+    case CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_TIMEOUT_ERROR_TYPE:
+      return "timeout";
+    case CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_CANCELED_ERROR_TYPE:
+      return "canceled";
+    default:
+      return null;
+  }
+}
+
+function typedExternalAuthRefreshKind(error: unknown): ExternalAuthRefreshTerminalKind | null {
+  return classifyExternalAuthRefreshErrorType(
+    readProviderOAuthRefreshFailure(error)?.errorType ??
+      (error instanceof OAuthRefreshFailureError ? error.errorType : undefined),
+  );
+}
+
+/**
+ * Classify Codex native refresh copy plus typed plugin stamps.
+ * Generic JSON-RPC -32603 without this wrap is not a refresh failure.
+ */
+export function classifyExternalAuthRefreshTerminalFailure(
+  error: unknown,
+): ExternalAuthRefreshTerminalFailure | null {
+  const typedKind = typedExternalAuthRefreshKind(error);
+  if (typedKind) {
+    return { kind: typedKind };
+  }
+  const message = readUnknownErrorMessage(error);
+  const failed = message.match(CODEX_APP_SERVER_AUTH_REFRESH_FAILED_RE);
+  if (failed) {
+    const jsonRpcCode = Number(failed[1]);
+    return {
+      kind: "refresh_failed",
+      ...(Number.isFinite(jsonRpcCode) ? { jsonRpcCode } : {}),
+    };
+  }
+  if (
+    message === CODEX_APP_SERVER_AUTH_REFRESH_INVALID_RESPONSE ||
+    message === CODEX_APP_SERVER_AUTH_REFRESH_INVALID_CREDENTIALS
+  ) {
+    return { kind: "refresh_failed" };
+  }
+  if (CODEX_APP_SERVER_AUTH_REFRESH_TIMEOUT_RE.test(message)) {
+    return { kind: "timeout" };
+  }
+  if (message.startsWith(CODEX_APP_SERVER_AUTH_REFRESH_CANCELED_PREFIX)) {
+    return { kind: "canceled" };
+  }
+  return null;
+}
+
+/** Map typed plugin-owned refresh stamps onto OpenClaw failover reasons. */
+export function failoverReasonForExternalAuthRefreshTerminalFailure(
+  error: unknown,
+): "auth_permanent" | "timeout" | null {
+  const typedKind = typedExternalAuthRefreshKind(error);
+  if (typedKind === "refresh_failed") {
+    // ChatGPT refresh already failed for this turn. Skip same-model runtime
+    // auth retry (`auth` only); JSON-RPC codes are not the permanence signal.
+    return "auth_permanent";
+  }
+  if (typedKind === "timeout") {
+    return "timeout";
+  }
+  return null;
+}
+
+export function isExternalAuthRefreshFallbackEligible(error: unknown): boolean {
+  return failoverReasonForExternalAuthRefreshTerminalFailure(error) !== null;
+}
+
+/** Attach bounded Codex external-auth refresh provenance for OpenClaw failover. */
+export function materializeExternalAuthRefreshPromptError(params: {
+  message: string;
+  cause?: unknown;
+  kind?: ExternalAuthRefreshTerminalKind;
+}): Error | null {
+  const classified = params.kind
+    ? { kind: params.kind }
+    : classifyExternalAuthRefreshTerminalFailure(params.message);
+  if (!classified) {
+    return null;
+  }
+  const errorType = errorTypeForExternalAuthRefreshKind(classified.kind);
+  if (classified.kind === "refresh_failed") {
+    return new OAuthRefreshFailureError({
+      provider: "openai",
+      message: params.message,
+      cause: params.cause,
+      errorType,
+      reason: null,
+      summary: params.message,
+    });
+  }
+  const error = new Error(
+    params.message,
+    params.cause !== undefined ? { cause: params.cause } : undefined,
+  );
+  Object.assign(error, {
+    oauthRefreshFailure: {
+      errorType,
+      summary: params.message,
+    },
+  });
+  return error;
+}
+
 export function classifyOAuthRefreshFailureError(err: unknown): OAuthRefreshFailure | null {
   const seen = new Set<object>();
   let rawFallback: OAuthRefreshFailure | null = null;

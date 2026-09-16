@@ -5,7 +5,7 @@
 **Agent:** Cursor Local Agent / Grok 4.5 High (primary integrator; **not** Codex verifier)
 **Branch:** `issue/ocp-openclawdevelopmentplan01`
 **PR:** [#38](https://github.com/linktrend/openclaw_prime/pull/38) (draft — do not merge / do not change readiness)
-**Correction prompt:** `docs/CURSOR-GROK-PACI-IV-CORRECTION-WAVE4-2026-07-30.md`
+**Correction prompt:** `docs/archive/openclaw-prime-1.0/cursor-grok-paci/CURSOR-GROK-PACI-IV-CORRECTION-WAVE4-2026-07-30.md`
 **Status:** Wave 4 OpenClaw-owned corrections landed. **Not** Codex-certified. **No** self-certification. **No** Codex classifications assigned here.
 
 ## Exact heads

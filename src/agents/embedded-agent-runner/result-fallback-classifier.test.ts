@@ -1,5 +1,9 @@
 // Coverage for deciding when embedded run results should trigger model fallback.
 import { describe, expect, it } from "vitest";
+import {
+  materializeExternalAuthRefreshPromptError,
+  readProviderOAuthRefreshFailure,
+} from "../auth-profiles/oauth-refresh-failure.js";
 import { GENERIC_EXTERNAL_RUN_FAILURE_TEXT } from "../failover/user-copy.js";
 import { runWithModelFallback } from "../model-fallback-runner.js";
 import { classifyEmbeddedAgentRunResultForModelFallback } from "./result-fallback-classifier.js";
@@ -588,5 +592,264 @@ describe("classifyEmbeddedAgentRunResultForModelFallback", () => {
     });
 
     expect(result).toBeNull();
+  });
+
+  const CODEX_AUTH_REFRESH_FAILED = "auth refresh request failed: code=-32603";
+
+  function typedRefreshError(message: string, fallbackSafe: boolean) {
+    const stamped = materializeExternalAuthRefreshPromptError({ message });
+    if (!stamped) {
+      throw new Error(`failed to stamp ${message}`);
+    }
+    return {
+      kind: "incomplete_turn" as const,
+      message: stamped.message,
+      fallbackSafe,
+      oauthRefreshFailure: readProviderOAuthRefreshFailure(stamped) ?? undefined,
+    };
+  }
+
+  it("advances fallback for typed Codex external-auth refresh failures without visible output", () => {
+    const result = classifyEmbeddedAgentRunResultForModelFallback({
+      provider: "openai",
+      model: "gpt-5.6-sol",
+      result: {
+        payloads: [{ isError: true, text: CODEX_AUTH_REFRESH_FAILED }],
+        meta: {
+          durationMs: 12,
+          error: typedRefreshError(CODEX_AUTH_REFRESH_FAILED, true),
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      message: `openai/gpt-5.6-sol ended with a provider error: ${CODEX_AUTH_REFRESH_FAILED}`,
+      reason: "auth_permanent",
+      code: "embedded_error_payload",
+      rawError: CODEX_AUTH_REFRESH_FAILED,
+    });
+  });
+
+  it("advances empty Sol refresh to a sole Luna fallback without same-model retry", async () => {
+    const runs: Array<{ provider: string; model: string }> = [];
+    const result = await runWithModelFallback({
+      cfg: undefined,
+      provider: "openai",
+      model: "gpt-5.6-sol",
+      fallbacksOverride: ["openrouter/openai/gpt-5.6-luna"],
+      skipAuthProfileRuntime: true,
+      run: async (provider, model) => {
+        runs.push({ provider, model });
+        return runs.length === 1
+          ? {
+              payloads: [{ isError: true, text: CODEX_AUTH_REFRESH_FAILED }],
+              meta: {
+                durationMs: 1,
+                error: typedRefreshError(CODEX_AUTH_REFRESH_FAILED, true),
+              },
+            }
+          : { payloads: [{ text: "luna ok" }], meta: { durationMs: 1 } };
+      },
+      classifyResult: ({ provider, model, result: runResult }) =>
+        classifyEmbeddedAgentRunResultForModelFallback({
+          provider,
+          model,
+          result: runResult,
+        }),
+    });
+
+    expect(runs).toEqual([
+      { provider: "openai", model: "gpt-5.6-sol" },
+      { provider: "openrouter", model: "openai/gpt-5.6-luna" },
+    ]);
+    expect(result.result.payloads).toEqual([{ text: "luna ok" }]);
+    expect(result.attempts[0]).toMatchObject({
+      provider: "openai",
+      model: "gpt-5.6-sol",
+      reason: "auth_permanent",
+    });
+  });
+
+  it("does not bypass fallbackSafe for refresh copy after tool or outbound side effects", () => {
+    expect(
+      classifyEmbeddedAgentRunResultForModelFallback({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        result: {
+          payloads: [{ isError: true, text: CODEX_AUTH_REFRESH_FAILED }],
+          meta: {
+            durationMs: 12,
+            toolSummary: { calls: 1 },
+            error: typedRefreshError(CODEX_AUTH_REFRESH_FAILED, false),
+          },
+        },
+      }),
+    ).toBeNull();
+    expect(
+      classifyEmbeddedAgentRunResultForModelFallback({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        result: {
+          payloads: [{ isError: true, text: CODEX_AUTH_REFRESH_FAILED }],
+          messagingToolSentTexts: ["already sent"],
+          meta: {
+            durationMs: 12,
+            error: typedRefreshError(CODEX_AUTH_REFRESH_FAILED, false),
+          },
+        },
+      }),
+    ).toBeNull();
+    expect(
+      classifyEmbeddedAgentRunResultForModelFallback({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        result: {
+          payloads: [{ isError: true, text: CODEX_AUTH_REFRESH_FAILED }],
+          meta: {
+            durationMs: 12,
+            error: {
+              kind: "incomplete_turn",
+              message: CODEX_AUTH_REFRESH_FAILED,
+              fallbackSafe: false,
+            },
+          },
+        },
+      }),
+    ).toBeNull();
+    expect(
+      classifyEmbeddedAgentRunResultForModelFallback({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        result: {
+          payloads: [{ isError: true, text: CODEX_AUTH_REFRESH_FAILED }],
+          restartUnsafeSideEffectsDetected: true,
+          meta: {
+            durationMs: 12,
+            error: typedRefreshError(CODEX_AUTH_REFRESH_FAILED, false),
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("does not treat unrelated JSON-RPC -32603 copy as fallback-eligible", () => {
+    expect(
+      classifyEmbeddedAgentRunResultForModelFallback({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        result: {
+          payloads: [{ isError: true, text: "Internal error (-32603): store hiccup" }],
+          meta: {
+            durationMs: 12,
+            error: {
+              kind: "incomplete_turn",
+              message: "Internal error (-32603): store hiccup",
+              fallbackSafe: false,
+            },
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps partial assistant output unsafe even when a refresh failure is present", () => {
+    expect(
+      classifyEmbeddedAgentRunResultForModelFallback({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        result: {
+          payloads: [
+            { text: "partial answer before refresh failed" },
+            { isError: true, text: CODEX_AUTH_REFRESH_FAILED },
+          ],
+          meta: {
+            durationMs: 12,
+            finalAssistantVisibleText: "partial answer before refresh failed",
+            error: typedRefreshError(CODEX_AUTH_REFRESH_FAILED, true),
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("classifies Codex app-server refresh timeouts as timeout fallback", () => {
+    const timeoutText = "auth refresh request timed out after 10s";
+    expect(
+      classifyEmbeddedAgentRunResultForModelFallback({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        result: {
+          payloads: [{ isError: true, text: timeoutText }],
+          meta: {
+            durationMs: 12,
+            error: typedRefreshError(timeoutText, true),
+          },
+        },
+      }),
+    ).toEqual({
+      message: `openai/gpt-5.6-sol ended with a provider error: ${timeoutText}`,
+      reason: "timeout",
+      code: "embedded_error_payload",
+      rawError: timeoutText,
+    });
+  });
+
+  it("does not fallback a canceled Codex external-auth refresh", () => {
+    expect(
+      classifyEmbeddedAgentRunResultForModelFallback({
+        provider: "openai",
+        model: "gpt-5.6-sol",
+        result: {
+          payloads: [{ isError: true, text: "auth refresh request canceled: AbortError" }],
+          meta: {
+            durationMs: 12,
+            error: typedRefreshError("auth refresh request canceled: AbortError", false),
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("presents fallback exhaustion without duplicate payloads or a winner", async () => {
+    const run = runWithModelFallback({
+      cfg: undefined,
+      provider: "openai",
+      model: "gpt-5.6-sol",
+      fallbacksOverride: ["openrouter/openai/gpt-5.6-luna"],
+      skipAuthProfileRuntime: true,
+      run: async () => ({
+        payloads: [{ isError: true, text: CODEX_AUTH_REFRESH_FAILED }],
+        meta: {
+          durationMs: 1,
+          error: typedRefreshError(CODEX_AUTH_REFRESH_FAILED, true),
+        },
+      }),
+      classifyResult: ({ provider, model, result: runResult }) =>
+        classifyEmbeddedAgentRunResultForModelFallback({
+          provider,
+          model,
+          result: runResult,
+        }),
+    });
+
+    await expect(run).rejects.toMatchObject({
+      name: "FailoverError",
+      reason: "auth_permanent",
+      provider: "openrouter",
+      model: "openai/gpt-5.6-luna",
+      message: expect.stringMatching(/All models failed \(2\):/),
+      attempts: [
+        expect.objectContaining({
+          provider: "openai",
+          model: "gpt-5.6-sol",
+          reason: "auth_permanent",
+        }),
+        expect.objectContaining({
+          provider: "openrouter",
+          model: "openai/gpt-5.6-luna",
+          reason: "auth_permanent",
+        }),
+      ],
+    });
   });
 });

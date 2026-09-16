@@ -454,4 +454,26 @@ describe("Outcome/fallback runtime contract - Codex app-server adapter", () => {
       expect(classifyProjectedAttemptResult(result) !== null).toBe(replaySafe);
     },
   );
+
+  it("keeps mapped Codex auth-refresh failures as prompt errors for OpenClaw-owned failover", async () => {
+    const projector = await createProjector();
+    await projector.handleNotification(
+      forCurrentTurn("error", {
+        error: {
+          message: "auth refresh request failed: code=-32603",
+          codexErrorInfo: null,
+          additionalDetails: null,
+        },
+        willRetry: false,
+      }),
+    );
+
+    const result = projector.buildResult(buildToolTelemetry());
+    expect(readAttemptTerminal(result).promptError).toMatchObject({
+      name: "OAuthRefreshFailureError",
+      message: "auth refresh request failed: code=-32603",
+    });
+    expect(result.agentHarnessResultClassification).toBeUndefined();
+    expect(result.assistantTexts).toEqual([]);
+  });
 });

@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 2,
+  "mode": "phase-integration",
+  "compute": {
+    "provider": "github-hosted",
+    "runner": "ubuntu-24.04-arm",
+    "checkpointCI": false,
+    "cancelObsolete": true,
+    "maxInfrastructureAttempts": 2,
+    "maxSealedCandidates": 2
+  },
+  "profiles": {
+    "fast": {
+      "commands": [
+        [
+          "python3",
+          "-m",
+          "py_compile",
+          "scripts/gitops/run_delivery_profile.py",
+          "scripts/gitops/gate_receipt.py",
+          "scripts/gitops/secret_scan.py",
+          "scripts/gitops/repository_ci_contract.py",
+          "scripts/gitops/receipt_seal.py",
+          "scripts/gitops/packager_coordinator.py",
+          ".github/openclaw_progressive_validation.py",
+          ".linktrend/openclaw-prime/validate_customization_boundary.py"
+        ],
+        ["python3", ".linktrend/openclaw-prime/validate_customization_boundary.py"],
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "fast"],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "openclaw_progressive_validation.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "docs/execution/openclaw-prime-lisa/tests",
+          "-p",
+          "test_execution_approval_snapshot.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "packager_coordinator_phase_history.py"
+        ]
+      ],
+      "timeoutMinutes": 5
+    },
+    "full": {
+      "commands": [
+        [
+          "python3",
+          "-m",
+          "py_compile",
+          "scripts/gitops/run_delivery_profile.py",
+          "scripts/gitops/gate_receipt.py",
+          "scripts/gitops/secret_scan.py",
+          "scripts/gitops/repository_ci_contract.py",
+          "scripts/gitops/receipt_seal.py",
+          "scripts/gitops/packager_coordinator.py",
+          ".github/openclaw_progressive_validation.py",
+          ".linktrend/openclaw-prime/validate_customization_boundary.py"
+        ],
+        ["python3", ".linktrend/openclaw-prime/validate_customization_boundary.py"],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "openclaw_progressive_validation.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "docs/execution/openclaw-prime-lisa/tests",
+          "-p",
+          "test_execution_approval_snapshot.py"
+        ],
+        [
+          "env",
+          "PYTHONPATH=.",
+          "python3",
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "test",
+          "-p",
+          "packager_coordinator_phase_history.py"
+        ],
+        ["python3", ".github/openclaw_progressive_validation.py", "--profile", "full"]
+      ],
+      "required": true
+    },
+    "release": {
+      "commands": []
+    }
+  }
+}
