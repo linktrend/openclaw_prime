@@ -210,14 +210,10 @@ export function classifyEmbeddedAgentRunResultForModelFallback(params: {
     (payload) => payload.isError === true && typeof payload.text === "string",
   )?.text;
   const incompleteTurn = params.result.meta.error?.kind === "incomplete_turn";
-  const externalAuthRefreshReason =
-    failoverReasonForExternalAuthRefreshTerminalFailure(terminalErrorText) ??
-    failoverReasonForExternalAuthRefreshTerminalFailure(params.result.meta.error?.message);
-  if (
-    incompleteTurn &&
-    params.result.meta.error?.fallbackSafe !== true &&
-    !externalAuthRefreshReason
-  ) {
+  const externalAuthRefreshReason = failoverReasonForExternalAuthRefreshTerminalFailure(
+    params.result.meta.error,
+  );
+  if (incompleteTurn && params.result.meta.error?.fallbackSafe !== true) {
     return null;
   }
   const fallbackSafeIncompleteTurn = incompleteTurn;

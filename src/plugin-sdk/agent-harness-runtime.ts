@@ -124,8 +124,6 @@ export const agentHarnessAttemptTerminal = {
   normalize: normalizeAgentRunAttemptTerminal,
   project: projectAgentRunAttemptTerminal,
   setFailure: setAgentRunAttemptTerminalFailure,
-  // Existing terminal seam: Codex maps JSON-RPC refresh copy here instead of
-  // four new public SDK callables. Numeric-only -32603 stays ineligible.
   externalAuthRefresh: Object.freeze({
     classify: classifyExternalAuthRefreshTerminalFailure,
     failoverReason: failoverReasonForExternalAuthRefreshTerminalFailure,

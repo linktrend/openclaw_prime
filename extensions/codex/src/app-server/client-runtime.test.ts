@@ -26,6 +26,7 @@ const {
   claimCodexAppServerLiveThread,
   consumeCodexAppServerLiveThread,
   ensureCodexAppServerClientRuntime,
+  takeCodexAppServerExternalAuthRefreshFailure,
   hasCodexAppServerLiveThread,
   isCodexAppServerLiveThreadClaimed,
   protectCodexAppServerLiveThread,
@@ -864,5 +865,27 @@ describe("Codex app-server client runtime", () => {
     await expect(
       consumeCodexAppServerLiveThread(harness.client, "thread-stale"),
     ).resolves.toBeUndefined();
+  });
+
+  it("stamps handler refresh failures without fabricating JSON-RPC -32603 copy", async () => {
+    const harness = createClientHarness();
+    clients.push(harness.client);
+    mocks.refreshAuth.mockRejectedValueOnce(
+      new Error("refresh_token=sk-live-abcdefghijklmnopqrstuvwx"),
+    );
+    ensureCodexAppServerClientRuntime(harness.client, { agentDir: "/tmp/agent" });
+    harness.send({
+      id: "refresh-fail",
+      method: "account/chatgptAuthTokens/refresh",
+      params: { reason: "unauthorized" },
+    });
+    await vi.waitFor(() => expect(harness.writes.length).toBe(1));
+    const failure = takeCodexAppServerExternalAuthRefreshFailure(harness.client);
+    expect(failure).toMatchObject({
+      errorType: "codex_app_server_external_auth_refresh",
+    });
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).not.toMatch(/code=-32603/);
+    expect((failure as Error).message).not.toContain("sk-live-abcdefghijklmnopqrstuvwx");
   });
 });

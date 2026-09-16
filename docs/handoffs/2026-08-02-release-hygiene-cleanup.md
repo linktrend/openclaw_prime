@@ -133,3 +133,11 @@ Refresh dashboard from this handoff; close or move handing-off W10/ACP active re
 - Why: Fix whitespace gate without restarting infinite ending-SHA chase.
 - Who: cursor-local-mac-mini-release-hygiene-correction-20260802-1411
 - Evidence: `git diff --check origin/development...HEAD`; [PR #45](https://github.com/linktrend/openclaw_prime/pull/45)
+
+### 2026-09-16 — CURSOR-GROK archive move
+
+- What was wrong: This hygiene handoff treated live `docs/CURSOR-GROK-*` and the frozen plan as unmovable authority still at those paths.
+- Corrected fact: Those files now live under `docs/archive/openclaw-prime-1.0/cursor-grok-paci/` and `docs/archive/openclaw-prime-1.0/plans/`. Freeze packets, coverage index, and §13.3 inventory/ledger cite the archive locations. No duplicate live copies.
+- Why: Independent-review P2 after the 1.0 archive move.
+- Who: `cursor-cloud-cloud-cloud-agent-feature-20260916-2054`
+- Evidence: `docs/archive/README.md`, `docs/execution/openclawdevelopmentplan01/PHASE-0-FREEZE-PACKET.md`

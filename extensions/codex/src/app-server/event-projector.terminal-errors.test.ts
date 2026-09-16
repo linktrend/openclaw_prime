@@ -283,6 +283,19 @@ describe("CodexAppServerEventProjector terminal errors", () => {
     });
   });
 
+  it.each([
+    "invalid auth refresh response",
+    "auth refresh returned invalid credentials",
+  ])("materializes Codex %s as a typed refresh failure", async (message) => {
+    const projector = await createProjector();
+    await projector.handleNotification(appServerError({ message, willRetry: false }));
+    expect(readAttemptTerminal(projector.buildResult(buildEmptyToolTelemetry())).promptError).toMatchObject({
+      name: "OAuthRefreshFailureError",
+      message,
+      errorType: "codex_app_server_external_auth_refresh",
+    });
+  });
+
   it("does not wrap unrelated JSON-RPC -32603 prompt errors as auth refresh", async () => {
     const projector = await createProjector();
     await projector.handleNotification(

@@ -16,7 +16,8 @@ is historical only; use `docs/openclaw-prime-1.0-briefing.md` and
 
 - Archive only private-fork / Lisa workshop material that is superseded.
 - Do **not** reorganize upstream public OpenClaw docs here.
-- Do **not** move coordination records (`docs/agent-sessions/**`, `docs/handoffs/**`), freeze packets under `docs/execution/openclawdevelopmentplan01/**`, release evidence under `docs/evidence/**`, or Principal `docs/CURSOR-GROK-*` / frozen implementation-plan authority without a coordinated provenance rewrite.
+- Do **not** move coordination records (`docs/agent-sessions/**`, `docs/handoffs/**`), freeze packets under `docs/execution/openclawdevelopmentplan01/**`, or release evidence under `docs/evidence/**` without a coordinated provenance rewrite.
+- Principal `docs/CURSOR-GROK-*` prompts and the frozen OpenClaw implementation plan were moved (2026-09-16) to `docs/archive/openclaw-prime-1.0/cursor-grok-paci/` and `docs/archive/openclaw-prime-1.0/plans/`. Freeze packets and the §13.3 ledger now cite those archive paths. Do not restore duplicate live copies under `docs/CURSOR-GROK-*`.
 - Workshop backups under `workshop-backups/` are historical config snapshots, not live runtime.
 
 ## 2026-08-02 release-hygiene intake

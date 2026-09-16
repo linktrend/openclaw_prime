@@ -2,6 +2,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { wrapRunWithTestPreparedAdmission } from "./admitted-run-context.test-support.js";
 import { classifyEmbeddedAgentRunResultForModelFallback } from "./embedded-agent-runner/result-fallback-classifier.js";
+import { materializeExternalAuthRefreshPromptError } from "./auth-profiles/oauth-refresh-failure.js";
 import type { EmbeddedRunAttemptResult } from "./embedded-agent-runner/run/types.js";
 import { markFallbackCandidateSkipped } from "./fallback-skip-cache.js";
 import { resetFallbackSkipCacheForTest } from "./fallback-skip-cache.test-support.js";
@@ -844,7 +845,9 @@ describe("runWithModelFallback + runEmbeddedAgent failover behavior", () => {
             terminal: {
               kind: "failed",
               source: "prompt",
-              error: new Error("auth refresh request failed: code=-32603"),
+              error: materializeExternalAuthRefreshPromptError({
+                message: "auth refresh request failed: code=-32603",
+              }),
             },
           });
         }

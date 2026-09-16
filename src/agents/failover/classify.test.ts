@@ -24,18 +24,17 @@ describe("OAuth session expiry", () => {
 });
 
 describe("Codex app-server external-auth refresh failover", () => {
-  it("classifies mapped refresh-failed copy as auth_permanent without treating -32603 as the reason", () => {
-    expect(classifyFailoverReason("auth refresh request failed: code=-32603")).toBe(
-      "auth_permanent",
-    );
-    expect(classifyFailoverReason("auth refresh request failed: code=0")).toBe("auth_permanent");
+  it("does not treat Codex refresh literals or generic -32603 as failover without a typed stamp", () => {
+    expect(classifyFailoverReason("auth refresh request failed: code=-32603")).toBeNull();
+    expect(classifyFailoverReason("auth refresh request failed: code=0")).toBeNull();
+    expect(classifyFailoverReason("invalid auth refresh response")).toBeNull();
+    expect(classifyFailoverReason("auth refresh returned invalid credentials")).toBeNull();
+    expect(classifyFailoverReason("external auth lock is poisoned")).toBeNull();
     expect(classifyFailoverReason("Internal error (-32603): store hiccup")).toBeNull();
     expect(classifyFailoverReason("JSON-RPC error -32603 Internal error")).toBeNull();
   });
 
-  it("distinguishes Codex refresh timeout and cancellation from refresh-failed", () => {
-    expect(classifyFailoverReason("auth refresh request timed out after 10s")).toBe("timeout");
-    expect(classifyFailoverReason("auth refresh request timed out after 9s")).toBe("timeout");
+  it("does not classify Codex refresh cancellation copy as generic failover", () => {
     expect(classifyFailoverReason("auth refresh request canceled: operator abort")).toBeNull();
   });
 });

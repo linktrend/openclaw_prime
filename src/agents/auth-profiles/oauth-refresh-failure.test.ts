@@ -18,6 +18,7 @@ import {
   isExternalAuthRefreshFallbackEligible,
   materializeExternalAuthRefreshPromptError,
   OAuthRefreshFailureError,
+  readProviderOAuthRefreshFailure,
 } from "./oauth-refresh-failure.js";
 
 describe("buildAuthProfileUnusableHint", () => {
@@ -366,7 +367,14 @@ describe("Codex app-server external-auth refresh terminal failures", () => {
       failoverReasonForExternalAuthRefreshTerminalFailure(
         "auth refresh request failed: code=-32603",
       ),
-    ).toBe("auth_permanent");
+    ).toBeNull();
+    expect(classifyExternalAuthRefreshTerminalFailure("invalid auth refresh response")).toEqual({
+      kind: "refresh_failed",
+    });
+    expect(
+      classifyExternalAuthRefreshTerminalFailure("auth refresh returned invalid credentials"),
+    ).toEqual({ kind: "refresh_failed" });
+    expect(classifyExternalAuthRefreshTerminalFailure("external auth lock is poisoned")).toBeNull();
     expect(isExternalAuthRefreshFallbackEligible("Internal error (-32603)")).toBe(false);
     expect(classifyExternalAuthRefreshTerminalFailure("Internal error (-32603)")).toBeNull();
   });
@@ -384,6 +392,17 @@ describe("Codex app-server external-auth refresh terminal failures", () => {
     expect(classifyOAuthRefreshFailureError(failed)?.errorType).toBe(
       "codex_app_server_external_auth_refresh",
     );
+    expect(readProviderOAuthRefreshFailure(failed)?.errorType).toBe(
+      "codex_app_server_external_auth_refresh",
+    );
+    expect(failoverReasonForExternalAuthRefreshTerminalFailure(failed)).toBe("auth_permanent");
+    expect(
+      failoverReasonForExternalAuthRefreshTerminalFailure(
+        materializeExternalAuthRefreshPromptError({
+          message: "invalid auth refresh response",
+        }),
+      ),
+    ).toBe("auth_permanent");
 
     const timedOut = materializeExternalAuthRefreshPromptError({
       message: "auth refresh request timed out after 10s",

@@ -45,7 +45,7 @@ Documentation/tooling only. No runtime behavior change. Fixture bytes unchanged.
 ### Evidence-mapped Phase-0 artifact paths
 
 - `docs/execution/openclawdevelopmentplan01/PHASE-0-FREEZE-PACKET.md`
-- `docs/CURSOR-GROK-EXECUTION-PROMPT.md`
+- `docs/archive/openclaw-prime-1.0/cursor-grok-paci/CURSOR-GROK-EXECUTION-PROMPT.md`
 - `docs/execution/openclawdevelopmentplan01/contracts/{brain,skills,platform}/PIN.json`
 - `docs/agent-sessions/completed/cursor-local-mac-mini-lisa-openclawdevelopmentplan01-20260727-1648.md`
 

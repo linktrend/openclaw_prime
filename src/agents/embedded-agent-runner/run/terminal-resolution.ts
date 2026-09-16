@@ -12,7 +12,7 @@ import {
   projectAgentRunAttemptTerminal,
 } from "../../agent-run-terminal-outcome.js";
 import type { AuthProfileFailureReason, AuthProfileStore } from "../../auth-profiles.js";
-import { isExternalAuthRefreshFallbackEligible } from "../../auth-profiles/oauth-refresh-failure.js";
+import { isExternalAuthRefreshFallbackEligible, readProviderOAuthRefreshFailure } from "../../auth-profiles/oauth-refresh-failure.js";
 import { AGENT_LANE_SUBAGENT } from "../../lanes.js";
 import type { ResolvedProviderAuth } from "../../model-auth.js";
 import { log } from "../logger.js";
@@ -506,18 +506,21 @@ async function completeEmbeddedRun(
   const terminalTimedOut = isEmbeddedRunTerminalTimeout(input.terminalState.outcome);
   // Warning suppression is presentation only: an unrecovered terminal failure
   // must retain error metadata and must not enter successful auth/trace bookkeeping.
+  const projectedPromptError = projectAgentRunAttemptTerminal(input.attempt.terminal).promptError;
+  const oauthRefreshFailure = readProviderOAuthRefreshFailure(projectedPromptError);
   const error =
     input.incompleteTurnText !== undefined ||
     classifyAgentRunTerminalOutcome(input.terminalState.outcome) === "failure"
       ? {
           kind: "incomplete_turn" as const,
           message: formatErrorMessage(
-            projectAgentRunAttemptTerminal(input.attempt.terminal).promptError ??
+            projectedPromptError ??
               input.terminalState.outcome.error ??
               "Agent couldn't generate a response.",
           ),
           fallbackSafe: input.incompleteTurnFallbackSafe ?? false,
           terminalPresentation: input.terminalToolPresentation !== undefined,
+          ...(oauthRefreshFailure ? { oauthRefreshFailure } : {}),
         }
       : undefined;
   const incompleteTurnText = input.incompleteTurnText ?? error?.message ?? null;

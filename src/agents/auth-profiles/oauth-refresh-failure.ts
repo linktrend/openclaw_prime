@@ -39,31 +39,28 @@ export type OAuthRefreshFailurePresentation = {
 const OAUTH_REFRESH_FAILURE_ERROR_TYPE_MAX_CHARS = 100;
 const OAUTH_REFRESH_FAILURE_SUMMARY_MAX_CHARS = 500;
 
-export function readProviderOAuthRefreshFailure(
-  error: unknown,
-): OAuthRefreshFailurePresentation | null {
-  const presentation = asOptionalRecord(asOptionalRecord(error)?.oauthRefreshFailure);
-  if (!presentation) {
-    return null;
-  }
+function presentationFromOAuthRefreshFields(params: {
+  summary?: unknown;
+  errorType?: unknown;
+  reason?: unknown;
+  status?: unknown;
+}): OAuthRefreshFailurePresentation | null {
   const summary = normalizeBoundedOptionalString(
-    presentation.summary,
+    params.summary,
     OAUTH_REFRESH_FAILURE_SUMMARY_MAX_CHARS,
   );
   const errorType = normalizeBoundedOptionalString(
-    presentation.errorType,
+    params.errorType,
     OAUTH_REFRESH_FAILURE_ERROR_TYPE_MAX_CHARS,
   );
   const reason =
-    typeof presentation.reason === "string"
-      ? classifyOAuthRefreshFailureReason(presentation.reason)
-      : null;
+    typeof params.reason === "string" ? classifyOAuthRefreshFailureReason(params.reason) : null;
   const status =
-    typeof presentation.status === "number" &&
-    Number.isInteger(presentation.status) &&
-    presentation.status >= 100 &&
-    presentation.status <= 599
-      ? presentation.status
+    typeof params.status === "number" &&
+    Number.isInteger(params.status) &&
+    params.status >= 100 &&
+    params.status <= 599
+      ? params.status
       : undefined;
   if (!summary && !errorType && !reason && !status) {
     return null;
@@ -74,6 +71,24 @@ export function readProviderOAuthRefreshFailure(
     ...(status ? { status } : {}),
     ...(summary ? { summary } : {}),
   };
+}
+
+export function readProviderOAuthRefreshFailure(
+  error: unknown,
+): OAuthRefreshFailurePresentation | null {
+  if (error instanceof OAuthRefreshFailureError) {
+    return presentationFromOAuthRefreshFields({
+      summary: error.summary ?? error.message,
+      errorType: error.errorType,
+      reason: error.reason,
+      status: error.status,
+    });
+  }
+  const presentation = asOptionalRecord(asOptionalRecord(error)?.oauthRefreshFailure);
+  if (!presentation) {
+    return null;
+  }
+  return presentationFromOAuthRefreshFields(presentation);
 }
 
 type StructuredClaudeCliAuthFailure = {
@@ -273,11 +288,15 @@ export function classifyOAuthRefreshFailure(message: string): OAuthRefreshFailur
 }
 
 /** Classify provider/reason from the structured OAuth refresh failure error. */
-/** Codex app-server maps failed `account/chatgptAuthTokens/refresh` JSON-RPC to this exact phrase. */
+/** Codex `external_auth.rs` JSON-RPC error wrap; code is native, never invented. */
 const CODEX_APP_SERVER_AUTH_REFRESH_FAILED_RE = /^auth refresh request failed: code=(-?\d+)$/;
-/** Codex app-server native external-auth refresh deadline (duration is Codex-owned). */
+/** Codex `external_auth.rs` 10s deadline copy (duration is Codex-owned). */
 const CODEX_APP_SERVER_AUTH_REFRESH_TIMEOUT_RE = /^auth refresh request timed out after \d+s$/;
 const CODEX_APP_SERVER_AUTH_REFRESH_CANCELED_PREFIX = "auth refresh request canceled:";
+/** Codex `external_auth.rs` parser failure after a JSON-RPC success (token-bearing payload redacted). */
+const CODEX_APP_SERVER_AUTH_REFRESH_INVALID_RESPONSE = "invalid auth refresh response";
+/** Codex `external_auth.rs` credential constructor failure (token-bearing payload redacted). */
+const CODEX_APP_SERVER_AUTH_REFRESH_INVALID_CREDENTIALS = "auth refresh returned invalid credentials";
 
 export const CODEX_APP_SERVER_EXTERNAL_AUTH_REFRESH_ERROR_TYPE =
   "codex_app_server_external_auth_refresh";
@@ -329,17 +348,21 @@ function classifyExternalAuthRefreshErrorType(
   }
 }
 
+function typedExternalAuthRefreshKind(error: unknown): ExternalAuthRefreshTerminalKind | null {
+  return classifyExternalAuthRefreshErrorType(
+    readProviderOAuthRefreshFailure(error)?.errorType ??
+      (error instanceof OAuthRefreshFailureError ? error.errorType : undefined),
+  );
+}
+
 /**
- * Classify Codex app-server external-auth refresh terminal copy.
- * Numeric JSON-RPC -32603 alone is generic internal error and must not match.
+ * Classify Codex native refresh copy plus typed plugin stamps.
+ * Generic JSON-RPC -32603 without this wrap is not a refresh failure.
  */
 export function classifyExternalAuthRefreshTerminalFailure(
   error: unknown,
 ): ExternalAuthRefreshTerminalFailure | null {
-  const typedKind = classifyExternalAuthRefreshErrorType(
-    readProviderOAuthRefreshFailure(error)?.errorType ??
-      (error instanceof OAuthRefreshFailureError ? error.errorType : undefined),
-  );
+  const typedKind = typedExternalAuthRefreshKind(error);
   if (typedKind) {
     return { kind: typedKind };
   }
@@ -352,6 +375,12 @@ export function classifyExternalAuthRefreshTerminalFailure(
       ...(Number.isFinite(jsonRpcCode) ? { jsonRpcCode } : {}),
     };
   }
+  if (
+    message === CODEX_APP_SERVER_AUTH_REFRESH_INVALID_RESPONSE ||
+    message === CODEX_APP_SERVER_AUTH_REFRESH_INVALID_CREDENTIALS
+  ) {
+    return { kind: "refresh_failed" };
+  }
   if (CODEX_APP_SERVER_AUTH_REFRESH_TIMEOUT_RE.test(message)) {
     return { kind: "timeout" };
   }
@@ -361,17 +390,17 @@ export function classifyExternalAuthRefreshTerminalFailure(
   return null;
 }
 
-/** Map typed Codex external-auth refresh failures onto OpenClaw failover reasons. */
+/** Map typed plugin-owned refresh stamps onto OpenClaw failover reasons. */
 export function failoverReasonForExternalAuthRefreshTerminalFailure(
   error: unknown,
 ): "auth_permanent" | "timeout" | null {
-  const classified = classifyExternalAuthRefreshTerminalFailure(error);
-  if (classified?.kind === "refresh_failed") {
+  const typedKind = typedExternalAuthRefreshKind(error);
+  if (typedKind === "refresh_failed") {
     // ChatGPT refresh already failed for this turn. Skip same-model runtime
-    // auth retry (`auth` only); -32603 is not itself the permanence signal.
+    // auth retry (`auth` only); JSON-RPC codes are not the permanence signal.
     return "auth_permanent";
   }
-  if (classified?.kind === "timeout") {
+  if (typedKind === "timeout") {
     return "timeout";
   }
   return null;
@@ -385,8 +414,11 @@ export function isExternalAuthRefreshFallbackEligible(error: unknown): boolean {
 export function materializeExternalAuthRefreshPromptError(params: {
   message: string;
   cause?: unknown;
+  kind?: ExternalAuthRefreshTerminalKind;
 }): Error | null {
-  const classified = classifyExternalAuthRefreshTerminalFailure(params.message);
+  const classified = params.kind
+    ? { kind: params.kind }
+    : classifyExternalAuthRefreshTerminalFailure(params.message);
   if (!classified) {
     return null;
   }

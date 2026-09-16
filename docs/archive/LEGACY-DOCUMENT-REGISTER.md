@@ -12,4 +12,6 @@ The following material is retained as historical evidence but is superseded for 
 
 Current operator briefing: `docs/openclaw-prime-1.0-briefing.md`.
 
+Principal `docs/CURSOR-GROK-*` prompts now live only at `docs/archive/openclaw-prime-1.0/cursor-grok-paci/`. The frozen OpenClaw implementation plan is `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`.
+
 Historical documents must not override current protected code, current contracts, the production PRD, or the production work packets. They remain evidence only and must not be used as live configuration instructions without revalidation.

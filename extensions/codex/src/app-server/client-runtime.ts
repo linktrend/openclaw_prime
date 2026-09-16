@@ -87,8 +87,12 @@ function isExternalAuthRefreshCanceled(error: unknown): boolean {
 }
 
 function materializeCaughtExternalAuthRefreshFailure(error: unknown): Error {
-  const message = formatErrorMessage(error);
   const materialize = agentHarnessAttemptTerminal.externalAuthRefresh.materializePromptError;
+  const classified = agentHarnessAttemptTerminal.externalAuthRefresh.classify(error);
+  if (classified && agentHarnessAttemptTerminal.externalAuthRefresh.failoverReason(error)) {
+    return error instanceof Error ? error : new Error(formatErrorMessage(error));
+  }
+  const message = formatErrorMessage(error);
   if (message === CODEX_EXTERNAL_AUTH_REFRESH_TIMEOUT_MESSAGE) {
     return (
       materialize({
@@ -105,10 +109,19 @@ function materializeCaughtExternalAuthRefreshFailure(error: unknown): Error {
       }) ?? (error instanceof Error ? error : new Error(message))
     );
   }
+  if (classified) {
+    return (
+      materialize({
+        message,
+        cause: error,
+      }) ?? (error instanceof Error ? error : new Error(message))
+    );
+  }
   return (
     materialize({
-      message: "auth refresh request failed: code=-32603",
+      message,
       cause: error,
+      kind: "refresh_failed",
     }) ?? (error instanceof Error ? error : new Error(message))
   );
 }

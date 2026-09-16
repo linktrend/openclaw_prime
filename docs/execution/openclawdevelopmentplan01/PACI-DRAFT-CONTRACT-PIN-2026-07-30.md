@@ -3,7 +3,7 @@
 **Recorded:** 2026-07-30 Asia/Taipei
 **OpenClaw branch:** `issue/ocp-openclawdevelopmentplan01`
 **OpenClaw start HEAD (correction wave):** `3e449b74d8a2fdfb157949656f394228dab32857`
-**Authority:** Principal correction prompt `docs/CURSOR-GROK-PACI-INDEPENDENT-VERIFICATION-CORRECTION-2026-07-30.md` — frozen Platform supersedes prior draft pin
+**Authority:** Principal correction prompt `docs/archive/openclaw-prime-1.0/cursor-grok-paci/CURSOR-GROK-PACI-INDEPENDENT-VERIFICATION-CORRECTION-2026-07-30.md` — frozen Platform supersedes prior draft pin
 
 ## Platform snapshot (frozen)
 

@@ -193,10 +193,19 @@ describe("agent harness runtime SDK facade", () => {
       ),
     ).toEqual({ kind: "refresh_failed", jsonRpcCode: -32603 });
     expect(
+      agentHarnessAttemptTerminal.externalAuthRefresh.classify("invalid auth refresh response"),
+    ).toEqual({ kind: "refresh_failed" });
+    const stamped = agentHarnessAttemptTerminal.externalAuthRefresh.materializePromptError({
+      message: "auth refresh request failed: code=-32603",
+    });
+    expect(agentHarnessAttemptTerminal.externalAuthRefresh.failoverReason(stamped)).toBe(
+      "auth_permanent",
+    );
+    expect(
       agentHarnessAttemptTerminal.externalAuthRefresh.failoverReason(
         "auth refresh request failed: code=-32603",
       ),
-    ).toBe("auth_permanent");
+    ).toBeNull();
     expect(
       agentHarnessAttemptTerminal.externalAuthRefresh.isFallbackEligible("Internal error (-32603)"),
     ).toBe(false);
