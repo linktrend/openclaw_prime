@@ -15,7 +15,9 @@ import {
 } from "./attempt-results.js";
 import { attemptTerminal, type EmbeddedRunAttemptResult } from "./attempt-terminal.js";
 import { TURN_FINALIZE_DRAIN_ABORT_GRACE_MS } from "./attempt-timeouts.js";
+import { takeCodexAppServerExternalAuthRefreshFailure } from "./client-runtime.js";
 import { buildCodexContinuityCalibration } from "./context-engine-projection.js";
+import { resolveCodexExternalAuthRefreshPromptError } from "./event-projector-terminal-failure.js";
 import { flattenCodexDynamicToolFunctions } from "./protocol.js";
 import { readCodexRateLimitsRevision, readRecentCodexRateLimits } from "./rate-limit-cache.js";
 import type { CodexAttemptActiveTurn } from "./run-attempt-active-turn.js";
@@ -239,6 +241,10 @@ export async function finalizeCodexAttempt(
         rateLimits: readRecentCodexRateLimits(resourceState.client),
       });
     }
+    enrichedPromptError = resolveCodexExternalAuthRefreshPromptError(
+      enrichedPromptError,
+      takeCodexAppServerExternalAuthRefreshFailure(resourceState.client),
+    );
     const projectTerminalOutcome = () => {
       const effectiveTimedOut = state.timeout !== undefined;
       const clientClosedPromptErrorForFinal = state.clientClosedPromptError;
