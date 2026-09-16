@@ -1,5 +1,9 @@
 # OpenClaw Prime 1.0 archive
 
+This archive contains the superseded development plans, PRDs, and execution
+prompts that led to the accepted OpenClaw Prime 1.0 release. Current operators
+and AI agents start with [`../../openclaw-prime-1.0-briefing.md`](../../openclaw-prime-1.0-briefing.md).
+
 - [classification.md](classification.md) — unique refs, production-evidence gaps, proposed promotion/tag sequence
 - [cursor-grok-paci/](cursor-grok-paci/) — Principal `docs/CURSOR-GROK-*` prompts moved here 2026-09-16 (no live duplicate under `docs/`)
 - [plans/](plans/) — frozen OpenClaw plan and Item-3 / Brain-Skills implementation plans (historical SHA pins live in PHASE-0 / §13.3)
