@@ -633,6 +633,10 @@ export const LISA_JOB_DESIRED_STATE: LisaJobDesiredState = Object.freeze({
   excludedCronFamilies: ["librarian", "backup"],
 });
 
+export const LISA_DESIRED_DECLARATION_KEYS = Object.freeze(
+  LISA_JOB_DESIRED_STATE.declarations.map((item) => item.declarationKey),
+);
+
 export type LisaLiveDeclarationSnapshot = Readonly<{
   declarationKey: string;
   instanceIdentity?: string;

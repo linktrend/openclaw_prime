@@ -40,6 +40,7 @@ import {
   type LinkskillsTransportResult,
   type SkillsFakeDispatch,
 } from "./runtime.js";
+import { rejectNonStandardSkillsMcpOperation } from "./standard-mcp-v2.js";
 import { isSkillsDrainTool } from "./tools.js";
 
 type ManagedMcpServerEntry = {
@@ -1166,6 +1167,10 @@ export async function callLinkskillsMcpTool(params: {
 }): Promise<LinkskillsMcpCallResult> {
   if (params.config.transportMode !== "mcp") {
     return { ok: false, safeMessage: "linkskills MCP transport is not enabled" };
+  }
+  const nonStandard = rejectNonStandardSkillsMcpOperation(params.toolName);
+  if (nonStandard) {
+    return { ok: false, safeMessage: "linkskills operation is not on the standard MCP v2 surface" };
   }
   if (!isAllowedLinkskillsMcpTool(params.toolName)) {
     return { ok: false, safeMessage: "linkskills operation is not allowlisted" };

@@ -60,6 +60,7 @@ import {
 import { isVoiceCallExtensionRoot } from "../test/vitest/vitest.extension-voice-call-paths.mjs";
 import { isWhatsAppExtensionRoot } from "../test/vitest/vitest.extension-whatsapp-paths.mjs";
 import { isZaloExtensionRoot } from "../test/vitest/vitest.extension-zalo-paths.mjs";
+import { isApprovedLinkbotsToolingTestFile } from "../test/vitest/vitest.linkbots-paths.mjs";
 import { narrowIncludePatternsForCli } from "../test/vitest/vitest.pattern-file.ts";
 import { resolveVitestFsModuleCacheRoot } from "../test/vitest/vitest.performance-config.ts";
 import {
@@ -1210,7 +1211,39 @@ function toScopedIncludePattern(arg: string, cwd: string) {
   return `${relative.replace(/\/+$/u, "")}/**/*.test.ts`;
 }
 
-const EXPLICIT_TEST_TARGET_ROOTS = ["src", "test", "extensions", "ui", "packages", "apps"];
+// Lisa customization tests sit outside OpenClaw source roots. Inventory only
+// these explicit owners so directory targets can match without scanning all of
+// linkbots or changing the full-suite include set.
+export const LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS = [
+  "linkbots/lisa/ops/backup",
+  "linkbots/lisa/ops/deployment",
+  "linkbots/lisa/ops/google-workspace",
+] as const;
+export const LINKBOTS_BLUEPRINTS_TEST_ROOT = "linkbots/blueprints";
+export const LINKBOTS_BLUEPRINTS_EXISTING_TESTS = [
+  "src/agents/profile-manifest.test.ts",
+] as const;
+export const LINKBOTS_APPROVED_PROJECT_ROUTER_DIRECTORY_ROOTS = [
+  ...LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS,
+  LINKBOTS_BLUEPRINTS_TEST_ROOT,
+] as const;
+
+function resolveApprovedLinkbotsMappedTestTargets(targetArg: string, cwd: string) {
+  const relative = toRepoRelativeTarget(targetArg, cwd).replace(/\/+$/u, "");
+  return relative === LINKBOTS_BLUEPRINTS_TEST_ROOT ||
+    isPathAtOrUnder(relative, LINKBOTS_BLUEPRINTS_TEST_ROOT)
+    ? [...LINKBOTS_BLUEPRINTS_EXISTING_TESTS]
+    : null;
+}
+const EXPLICIT_TEST_TARGET_ROOTS = [
+  "src",
+  "test",
+  "extensions",
+  "ui",
+  "packages",
+  "apps",
+  ...LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS,
+];
 let cachedExplicitTestTargetFiles: string[] | null = null;
 let cachedExplicitTestTargetFilesCwd: string | null = null;
 
@@ -1335,6 +1368,10 @@ function expandExplicitSourceTestTargets(targetArgs: string[], cwd: string) {
     const prefixTargets = resolveExplicitTestPrefixTargets(targetArg, cwd);
     if (prefixTargets) {
       return prefixTargets;
+    }
+    const mappedLinkbotsTargets = resolveApprovedLinkbotsMappedTestTargets(targetArg, cwd);
+    if (mappedLinkbotsTargets) {
+      return mappedLinkbotsTargets;
     }
     if (relative === "src/commands" && isExistingDirectoryTarget(targetArg, cwd)) {
       return [COMMANDS_LIGHT_VITEST_CONFIG, COMMANDS_VITEST_CONFIG];
@@ -1471,6 +1508,10 @@ export function findUnmatchedExplicitTestTargets(args: string[], cwd = process.c
           reason: "glob-matched-no-files",
         });
       }
+      continue;
+    }
+
+    if (resolveApprovedLinkbotsMappedTestTargets(targetArg, cwd)) {
       continue;
     }
 
@@ -3635,7 +3676,9 @@ function classifyTarget(arg: string, cwd: string) {
     relative.startsWith("src/scripts/") ||
     relative === "src/config/doc-baseline.integration.test.ts" ||
     relative === "src/config/schema.base.generated.test.ts" ||
-    relative === "src/config/schema.help.quality.test.ts"
+    relative === "src/config/schema.help.quality.test.ts" ||
+    isApprovedLinkbotsToolingTestFile(relative) ||
+    LINKBOTS_LISA_CUSTOMIZATION_TEST_ROOTS.some((root) => isPathAtOrUnder(relative, root))
   ) {
     return "tooling";
   }

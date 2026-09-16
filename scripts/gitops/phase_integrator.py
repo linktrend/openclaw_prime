@@ -186,6 +186,12 @@ def validate_issue_batch(
 
 
 def _digest_set(identity: CandidateIdentity) -> str:
+    """Phase-local Candidate ID over the sealed coordinator identity.
+
+    This digest is meaningful on the Phase record. It is not the schema-v2
+    FullSuiteReceipt identity hash and must not be compared to that JSON.
+    """
+
     return hashlib.sha256(identity.canonical().encode("utf-8")).hexdigest()
 
 

@@ -6,6 +6,10 @@ import type { PluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot
 import { registerRuntimeAuthProfileStoreMutationListener } from "./auth-profiles/runtime-snapshots.js";
 import type { ModelCatalogSnapshot } from "./model-catalog.types.js";
 import {
+  admitTransientNonCodingRuntimeOverlay,
+  type TransientNonCodingRoute,
+} from "./noncoding-route.js";
+import {
   PreparedModelRuntimeAuthPublicationOwner,
   type PreparedModelRuntimeAuthMutation,
 } from "./prepared-model-runtime-auth-publication.js";
@@ -98,6 +102,17 @@ const replyDispatchPublication = new PreparedReplyDispatchPublicationOwner({
   getPendingReplacement: () => pendingModelRuntimeReplacement?.promise,
 });
 export const loadPublishedGatewayReplyDispatchRuntime = replyDispatchPublication.load;
+
+/**
+ * PKT-04 runtime adapter. One-response overlays stay off the owner map so
+ * Telegram/browser/main-session defaults cannot be mutated from this path.
+ */
+export function admitTransientNonCodingRoute(
+  publishedDefaults: { primary?: string; fallbacks?: readonly string[] },
+  route: TransientNonCodingRoute,
+) {
+  return admitTransientNonCodingRuntimeOverlay({ publishedDefaults, route });
+}
 
 /** Advances model-neutral config identity without rebuilding prepared generation artifacts. */
 export function advancePreparedModelRuntimeConfig(config: OpenClawConfig): void {

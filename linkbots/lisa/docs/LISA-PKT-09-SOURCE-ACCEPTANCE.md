@@ -16,12 +16,23 @@ payload, or live-provider result.
 ## Repository-owned proof
 
 The source package provides deterministic company-archive enumeration with
-private-health and credential exclusions, online SQLite snapshot/quick-check
-hooks, AES-256-GCM encryption using only a runtime Secret Manager reference,
-ciphertext hash/size verification, disposable decrypt verification, retention
-of the previous verified object, Linux systemd service/timer/restore templates,
-clean-host path and unit hardening validation, and an injected rollback
-sequence.
+private-health and credential exclusions, a restorable source-plus-procedure
+inventory, distinct opaque company/private destination bindings, online SQLite
+snapshot/quick-check hooks, AES-256-GCM encryption using only a runtime Secret
+Manager reference, ciphertext hash/size verification, disposable decrypt
+verification with injected directory cleanup, retention of the previous
+verified object, Linux systemd service/timer/restore templates that must match
+the committed unit files, clean-host path and unit hardening validation, and an
+injected rollback sequence.
+
+Root Vitest projects do not include `linkbots/`. Focused proof uses local
+configs:
+
+```sh
+node scripts/run-vitest.mjs --config linkbots/lisa/ops/backup/vitest.config.ts linkbots/lisa/ops/backup
+node scripts/run-vitest.mjs --config linkbots/lisa/ops/deployment/vitest.config.ts linkbots/lisa/ops/deployment
+git diff --check
+```
 
 The offline composition rehearsal is:
 
@@ -48,6 +59,7 @@ explicit holds:
 - VPS deployment, production canary, and Principal acceptance.
 
 The required operator sequence and inverse rollback are documented in
-`LISA-BACKUP-DEPLOYMENT-RUNBOOK.md` and `LISA-DIRECT-MIGRATION.md`. No schedule,
+`LISA-BACKUP-DEPLOYMENT-RUNBOOK.md` and archived
+`docs/archive/linkbots-lisa/superseded-2026/LISA-DIRECT-MIGRATION.md`. No schedule,
 service, VPS, production, upstream, provider, credential, or private-state
 mutation occurred for this source package.

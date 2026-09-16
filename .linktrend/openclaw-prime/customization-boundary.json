@@ -140,6 +140,10 @@
       {
         "path": ".github/workflows/linktrend-",
         "provenance": "github-contents-404-at-classification-pin"
+      },
+      {
+        "path": ".github/linktrend-",
+        "provenance": "github-contents-404-at-classification-pin"
       }
     ],
     "exactPaths": [
@@ -157,6 +161,10 @@
       },
       {
         "path": ".github/linktrend-secret-scan-fixtures.json",
+        "provenance": "github-contents-404-at-classification-pin"
+      },
+      {
+        "path": ".github/openclaw_progressive_validation.py",
         "provenance": "github-contents-404-at-classification-pin"
       },
       {

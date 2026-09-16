@@ -10,10 +10,15 @@ import { FailoverError } from "../failover-error.js";
 import {
   buildAuthProfileUnusableHint,
   buildOAuthRefreshFailureLoginCommand,
+  classifyExternalAuthRefreshTerminalFailure,
   classifyOAuthRefreshFailure,
   classifyOAuthRefreshFailureError,
+  failoverReasonForExternalAuthRefreshTerminalFailure,
   formatOAuthRefreshFailureLoginCommandMarkdown,
+  isExternalAuthRefreshFallbackEligible,
+  materializeExternalAuthRefreshPromptError,
   OAuthRefreshFailureError,
+  readProviderOAuthRefreshFailure,
 } from "./oauth-refresh-failure.js";
 
 describe("buildAuthProfileUnusableHint", () => {
@@ -350,5 +355,63 @@ describe("claude-cli oauth-expiry — real HTTP server (no fetch mock)", () => {
         console.log("[claude-cli-oauth-proof] server=200 → normal response returned");
       },
     );
+  });
+});
+
+describe("Codex app-server external-auth refresh terminal failures", () => {
+  it("parses Codex mapped refresh-failed copy without treating the JSON-RPC code as permanence", () => {
+    expect(
+      classifyExternalAuthRefreshTerminalFailure("auth refresh request failed: code=-32603"),
+    ).toEqual({ kind: "refresh_failed", jsonRpcCode: -32603 });
+    expect(
+      failoverReasonForExternalAuthRefreshTerminalFailure(
+        "auth refresh request failed: code=-32603",
+      ),
+    ).toBeNull();
+    expect(classifyExternalAuthRefreshTerminalFailure("invalid auth refresh response")).toEqual({
+      kind: "refresh_failed",
+    });
+    expect(
+      classifyExternalAuthRefreshTerminalFailure("auth refresh returned invalid credentials"),
+    ).toEqual({ kind: "refresh_failed" });
+    expect(classifyExternalAuthRefreshTerminalFailure("external auth lock is poisoned")).toBeNull();
+    expect(isExternalAuthRefreshFallbackEligible("Internal error (-32603)")).toBe(false);
+    expect(classifyExternalAuthRefreshTerminalFailure("Internal error (-32603)")).toBeNull();
+  });
+
+  it("materializes refresh-failed as typed OpenAI OAuth provenance and keeps timeout distinct", () => {
+    const failed = materializeExternalAuthRefreshPromptError({
+      message: "auth refresh request failed: code=-32603",
+    });
+    expect(failed).toBeInstanceOf(OAuthRefreshFailureError);
+    expect(failed).toMatchObject({
+      provider: "openai",
+      errorType: "codex_app_server_external_auth_refresh",
+      reason: null,
+    });
+    expect(classifyOAuthRefreshFailureError(failed)?.errorType).toBe(
+      "codex_app_server_external_auth_refresh",
+    );
+    expect(readProviderOAuthRefreshFailure(failed)?.errorType).toBe(
+      "codex_app_server_external_auth_refresh",
+    );
+    expect(failoverReasonForExternalAuthRefreshTerminalFailure(failed)).toBe("auth_permanent");
+    expect(
+      failoverReasonForExternalAuthRefreshTerminalFailure(
+        materializeExternalAuthRefreshPromptError({
+          message: "invalid auth refresh response",
+        }),
+      ),
+    ).toBe("auth_permanent");
+
+    const timedOut = materializeExternalAuthRefreshPromptError({
+      message: "auth refresh request timed out after 10s",
+    });
+    expect(timedOut).not.toBeInstanceOf(OAuthRefreshFailureError);
+    expect(classifyExternalAuthRefreshTerminalFailure(timedOut)).toEqual({ kind: "timeout" });
+    expect(failoverReasonForExternalAuthRefreshTerminalFailure(timedOut)).toBe("timeout");
+    expect(
+      failoverReasonForExternalAuthRefreshTerminalFailure("auth refresh request canceled: done"),
+    ).toBeNull();
   });
 });

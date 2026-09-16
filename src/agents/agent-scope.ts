@@ -34,6 +34,7 @@ import {
   resolveDefaultAgentId,
   tryResolveLegacyCompatibilityAgentId,
 } from "./agent-scope-config.js";
+import { resolveProfileRuntimeAdmission } from "./profile-manifest.js";
 import { resolveCanonicalWorkspacePath } from "./workspace-state-identity.js";
 export { hasSessionAutoModelFallbackProvenance } from "../config/sessions/model-override-provenance.js";
 export {
@@ -358,6 +359,13 @@ export function resolveSessionAgentIdsStrict(params: {
       hint: "Pass an agentId, an agent-scoped session key, or a prepared fallbackAgentId.",
     });
   const defaultAgentId = compatibilityAgentId ?? sessionAgentId;
+  const admission = resolveProfileRuntimeAdmission(cfg, sessionAgentId);
+  if (!admission.admitted) {
+    throw new AgentSelectionRequiredError(listAgentIds(cfg), {
+      surface: "session agent resolution",
+      hint: admission.message,
+    });
+  }
   return { defaultAgentId, sessionAgentId };
 }
 
@@ -443,6 +451,10 @@ export function setAgentEffectiveModelPrimary(
   options: { target?: AgentModelPrimaryWriteTarget; forceAgent?: boolean } = {},
 ): AgentModelPrimaryWriteTarget {
   const id = normalizeAgentId(agentId);
+  const admission = resolveProfileRuntimeAdmission(cfg, id);
+  if (!admission.admitted) {
+    throw new Error(admission.message);
+  }
   const target = options.target ?? (options.forceAgent ? "agent" : undefined);
   const resolvedTarget = resolveAgentModelPrimaryWriteTarget(cfg, id, options);
   // An explicit agent target pins the write even without an existing model,

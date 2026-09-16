@@ -1,0 +1,223 @@
+#!/usr/bin/env node
+/**
+ * Fork-owned planner: exact base-to-head paths through resolveChangedTestTargetPlan.
+ * Refuses broad/unresolved plans before any test runner starts.
+ *
+ * Diffs whose every path is already in NON_VITEST_VALIDATION emit the same
+ * targets-mode payload without loading the TypeScript test-target resolver.
+ */
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+
+const HEX40 = /^[0-9a-f]{40}$/;
+const REPO_REL =
+  /^(?!\/|\\)(?!.*\.\.(?:\/|\\|$))(?!.*:)[A-Za-z0-9._@+, \-]+(?:\/[A-Za-z0-9._@+, \-]+)*$/;
+const CODE_SUFFIX = /\.(?:[cm]?[jt]sx?)$/;
+const BROAD_MARKERS = ["broad local run will start", "buildFullSuiteVitestRunPlans", '"mode":"broad"'];
+const TARGET_PLAN_RESOLVER = "../../scripts/test-projects.test-support.mts";
+const NON_VITEST_VALIDATION = new Map([
+  [".github/linktrend-delivery-mode.json", "progressive-validation-tests"],
+  [".github/linktrend-gitops-consumer.json", "progressive-validation-tests"],
+  [".github/linktrend-repository-ci-contract.json", "progressive-validation-tests"],
+  [".github/openclaw_progressive_validation.py", "progressive-validation-tests"],
+  [".github/workflows/linktrend-integrator-merge.yml", "progressive-validation-tests"],
+  [".github/workflows/linktrend-review-packager.yml", "progressive-validation-tests"],
+  [".linktrend/openclaw-prime/customization-boundary.json", "customization-boundary-validator"],
+  [".linktrend/openclaw-prime/resolve_customization_tests.mts", "progressive-validation-tests"],
+  ["docs/execution/openclaw-prime-lisa/BASELINE-CI-RECEIPT.md", "phase-diff-check"],
+  ["docs/execution/openclaw-prime-lisa/IMPLEMENTATION-ROADMAP.md", "phase-diff-check"],
+  ["linkbots/lisa/docs/LISA-BACKUP-DEPLOYMENT-RUNBOOK.md", "phase-diff-check"],
+  ["linkbots/lisa/docs/LISA-JOBS-SOURCE-OPERATIONS.md", "phase-diff-check"],
+  ["linkbots/lisa/docs/LISA-MODEL-ROUTING-CONTRACT-2026-08-01.md", "phase-diff-check"],
+  ["linkbots/lisa/docs/LISA-MODEL-ROUTING-EVAL-PKT04-2026-09-11.md", "phase-diff-check"],
+  ["linkbots/lisa/docs/LISA-PKT-09-SOURCE-ACCEPTANCE.md", "phase-diff-check"],
+  ["linkbots/lisa/ops/backup/backup.test.ts", "phase-diff-check"],
+  ["linkbots/lisa/ops/backup/vitest.config.ts", "phase-diff-check"],
+  ["linkbots/lisa/ops/deployment/deployment.test.ts", "phase-diff-check"],
+  ["linkbots/lisa/ops/deployment/vitest.config.ts", "phase-diff-check"],
+  ["linkbots/lisa/ops/jobs/lisa-job-catalogue.test.ts", "phase-diff-check"],
+  ["linkbots/lisa/ops/jobs/lisa-job-desired-state.ts", "phase-diff-check"],
+  ["linkbots/lisa/ops/jobs/time-management/procedure.md", "lisa-time-management-tests"],
+  ["linkbots/lisa/ops/model-routing.contract.json", "phase-diff-check"],
+  ["linkbots/lisa/ops/model-routing.test.ts", "phase-diff-check"],
+  ["linkbots/lisa/ops/templates/README.md", "lisa-template-registry-tests"],
+  ["src/commands/agents.config.ts", "agents-config-tests"],
+  ["src/state/lisa-compliance-state-schema.ts", "phase-diff-check"],
+  ["src/state/lisa-principal-task-schema.ts", "phase-diff-check"],
+  ["test/vitest/vitest.linkbots-paths.d.mts", "phase-diff-check"],
+  ["test/vitest/vitest.linkbots-paths.mjs", "phase-diff-check"],
+  ["test/vitest/vitest.tooling.config.ts", "phase-diff-check"],
+  ["docs/execution/openclaw-prime-lisa/dispatch-authority.json", "execution-approval-tests"],
+  ["docs/execution/openclaw-prime-lisa/dispatch-authority.schema.json", "execution-approval-tests"],
+  [
+    "docs/execution/openclaw-prime-lisa/linkautowork-skill-watcher.execution-manifest.json",
+    "execution-approval-tests",
+  ],
+  [
+    "docs/execution/openclaw-prime-lisa/linkplatform-agent-foundation.execution-manifest.json",
+    "execution-approval-tests",
+  ],
+  [
+    "docs/execution/openclaw-prime-lisa/openclaw-prime-lisa.execution-manifest.json",
+    "execution-approval-tests",
+  ],
+  [
+    "docs/execution/openclaw-prime-lisa/tests/test_execution_approval_snapshot.py",
+    "execution-approval-tests",
+  ],
+  [
+    "docs/execution/openclaw-prime-lisa/validate_execution_approval_snapshot.py",
+    "execution-approval-tests",
+  ],
+  ["test/openclaw_progressive_validation.py", "progressive-validation-tests"],
+  ["test/packager_coordinator_phase_history.py", "phase-packager-history-tests"],
+  ["scripts/gitops/packager_coordinator.py", "phase-packager-history-tests"],
+  ["scripts/gitops/secret_scan.py", "progressive-validation-tests"],
+  ["scripts/gitops/coordinator/state.py", "phase-integrator-tests"],
+  ["scripts/gitops/phase_integrator.py", "phase-integrator-tests"],
+  ["scripts/gitops/receipt_seal.py", "receipt-seal-tests"],
+  ["test/phase_integrator.py", "phase-integrator-tests"],
+  ["test/receipt_seal.py", "receipt-seal-tests"],
+]);
+
+function fail(reason, extra = {}) {
+  process.stderr.write(`${JSON.stringify({ ok: false, reason, ...extra })}\n`);
+  process.exit(1);
+}
+
+function parseRef(flag, args) {
+  const index = args.indexOf(flag);
+  const value = index >= 0 ? args[index + 1] : undefined;
+  if (!value || value.startsWith("-")) {
+    fail("phase_identity");
+  }
+  return value;
+}
+
+function git(root, ...gitArgs) {
+  const result = spawnSync("git", gitArgs, { cwd: root, encoding: "utf8" });
+  if (result.status !== 0) {
+    fail("phase_diff", { detail: (result.stderr || result.stdout || "git failed").trim() });
+  }
+  return result.stdout.trim();
+}
+
+function resolveCommit(root, ref) {
+  const commit = git(root, "rev-parse", "--verify", `${ref}^{commit}`);
+  if (!HEX40.test(commit)) {
+    fail("phase_identity");
+  }
+  return commit;
+}
+
+function listNormalizedPaths(root, baseline, head) {
+  const renameOut = git(root, "diff", "--name-status", "--find-renames", baseline, head);
+  for (const line of renameOut.split("\n")) {
+    if (!line) {
+      continue;
+    }
+    const status = line.split("\t", 1)[0] ?? "";
+    if (status.startsWith("R") || status.startsWith("C")) {
+      fail("unresolved_rename");
+    }
+  }
+  const statusOut = git(root, "diff", "--name-only", "--no-renames", baseline, head);
+  const paths = [...new Set(statusOut.split("\n").map((line) => line.trim()).filter(Boolean))].sort();
+  for (const path of paths) {
+    if (!REPO_REL.test(path) || path.startsWith("-")) {
+      fail("unsafe_path", { path });
+    }
+  }
+  return paths;
+}
+
+function codeChangesRequireTests(paths) {
+  return paths.some((path) => CODE_SUFFIX.test(path));
+}
+
+function canonicalDigest(value) {
+  const serialized = JSON.stringify(value);
+  return `sha256:${createHash("sha256").update(serialized).digest("hex")}`;
+}
+
+function focusedNonVitestPlan() {
+  return { mode: "targets", targets: [], skippedBroadFallbackPaths: [] };
+}
+
+async function loadChangedTestTargetPlan(changedPaths, root) {
+  let resolveChangedTestTargetPlan;
+  try {
+    ({ resolveChangedTestTargetPlan } = await import(TARGET_PLAN_RESOLVER));
+  } catch (error) {
+    fail("relevant_tests_unresolved", {
+      detail: error instanceof Error ? error.message : "resolver_import_failed",
+    });
+  }
+  if (typeof resolveChangedTestTargetPlan !== "function") {
+    fail("relevant_tests_unresolved");
+  }
+  return resolveChangedTestTargetPlan(changedPaths, { cwd: root, broad: false });
+}
+
+function emitPlan(plan, changedPaths, baseline, head) {
+  const allPathsHaveFocusedValidation =
+    changedPaths.length > 0 && changedPaths.every((path) => NON_VITEST_VALIDATION.has(path));
+  const targets = allPathsHaveFocusedValidation ? [] : [...new Set(plan.targets ?? [])];
+  const skipped = plan.skippedBroadFallbackPaths ?? [];
+  const nonVitestValidations = changedPaths.flatMap((path) => {
+    const validation = NON_VITEST_VALIDATION.get(path);
+    return validation ? [{ path, validation }] : [];
+  });
+  const unresolvedSkipped = skipped.filter((path) => !NON_VITEST_VALIDATION.has(path));
+  const payload = {
+    schemaVersion: 1,
+    kind: "customization-test-target-plan",
+    mode: plan.mode,
+    targets,
+    skippedBroadFallbackPaths: unresolvedSkipped,
+    nonVitestValidations,
+    changedPaths,
+    changedPathsDigest: canonicalDigest(changedPaths),
+    baselineCommit: baseline,
+    headCommit: head,
+  };
+  const serialized = JSON.stringify(payload);
+  if (BROAD_MARKERS.some((marker) => serialized.includes(marker))) {
+    fail("relevant_tests_broadened", { plan: payload });
+  }
+  if (plan.mode !== "targets") {
+    fail("relevant_tests_broadened", { plan: payload });
+  }
+  if (unresolvedSkipped.length > 0) {
+    fail("relevant_tests_broadened", { plan: payload });
+  }
+  for (const target of targets) {
+    if (!REPO_REL.test(target) || target.startsWith("-") || target === "--changed") {
+      fail("relevant_tests_unresolved", { target, plan: payload });
+    }
+  }
+  if (codeChangesRequireTests(changedPaths) && targets.length === 0 && !allPathsHaveFocusedValidation) {
+    fail("relevant_tests_unresolved", { plan: payload });
+  }
+  process.stdout.write(`${serialized}\n`);
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const root = process.cwd();
+  const baseline = resolveCommit(root, parseRef("--base", args));
+  const head = resolveCommit(root, parseRef("--head", args));
+  const changedPaths = listNormalizedPaths(root, baseline, head);
+  const allPathsHaveFocusedValidation =
+    changedPaths.length > 0 && changedPaths.every((path) => NON_VITEST_VALIDATION.has(path));
+  const plan = allPathsHaveFocusedValidation
+    ? focusedNonVitestPlan()
+    : await loadChangedTestTargetPlan(changedPaths, root);
+  emitPlan(plan, changedPaths, baseline, head);
+}
+
+void main().catch((error) => {
+  fail("relevant_tests_unresolved", {
+    detail: error instanceof Error ? error.message : "planner_failed",
+  });
+});

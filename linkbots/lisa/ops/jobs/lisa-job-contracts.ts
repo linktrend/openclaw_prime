@@ -79,7 +79,7 @@ export const LISA_JOB_SCHEDULE_METADATA: Readonly<Record<LisaJobId, LisaSchedule
   },
   selfie: {
     timeZone: LISA_JOB_TIME_ZONE,
-    localTimes: ["17:45", "21:45"],
+    localTimes: ["17:45", "21:45", "23:59"],
     deadlineLocalTime: "23:59",
     enabled: false,
     deliveryMode: "none",
@@ -98,7 +98,7 @@ export const LISA_JOB_SCHEDULE_METADATA: Readonly<Record<LisaJobId, LisaSchedule
   },
   time_management: {
     timeZone: LISA_JOB_TIME_ZONE,
-    localTimes: ["08:15", "14:45", "17:00"],
+    localTimes: ["07:45", "16:45"],
     enabled: false,
     deliveryMode: "none",
   },

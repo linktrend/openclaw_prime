@@ -6,7 +6,7 @@ OpenClaw-derived draft fixtures for Lisa ↔ LiNKbrain integration tests.
 - **Contract version:** `1.0.0` (`BRAIN_CONTRACT_VERSION`)
 - **Platform claims:** `platform.auth-claims/1.1.0` (camelCase AuthClaims in `identity/` + `auth/`)
 - **Error taxonomy:** Brain Gateway `BrainErrorCode` + `ErrorEnvelope` (`code`, `message`, `safeMessage`, `retryable`)
-- **Source plan:** `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` §9.1 / §9.3
+- **Source plan:** `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` §9.1 / §9.3
 - **Brain HEAD pin:** `a3cff6e0f04ac968c32beacb7bdb1b81a4d77d3f` — implements full frozen 17 tools in `packages/mcp-server/src/frozen-tools.ts`
 - **Denial handoff (prior tip):** `LiNKbrain/docs/handoffs/OPENCLAW-BRAIN-FIXTURE-COUNTERSIGN-2026-07-28.md` denied aggregate `d539debc…45fb` at OpenClaw tip `0b19e43…`
 - **Live data:** none — all actor IDs, tokens, and payloads are sanitized placeholders

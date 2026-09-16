@@ -20,7 +20,7 @@ consumption records pin the 17 frozen §9.1 names. Stale heads (`86161d3…`,
 ## Frozen OpenClaw plan §9.1 (authoritative for OpenClaw)
 
 From
-`docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`
+`docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`
 §9.1:
 
 | Family       | Frozen tool names                                                                                                                                                                                         |

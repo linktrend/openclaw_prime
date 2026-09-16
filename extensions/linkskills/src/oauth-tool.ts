@@ -2,27 +2,23 @@ import { randomUUID } from "node:crypto";
 import { Type } from "typebox";
 import type { OpenClawPluginApi } from "../runtime-api.js";
 import { parseLinkskillsConfig, type LinkskillsConfig } from "./config.js";
+import { rejectNonStandardSkillsMcpOperation } from "./standard-mcp-v2.js";
 import { callLinkskillsHttpTool, callLinkskillsMcpTool } from "./transport.js";
+import {
+  SKILLS_V2_OPERATIONS,
+  SKILLS_V2_RESOURCE_OPERATIONS,
+  SKILLS_V2_TOOL_OPERATIONS,
+} from "./v2.js";
 
-const discoveryOperations = [
-  "skills_list",
-  "skills_search",
-  "skills_describe",
-  "skills_fragment_get",
-  "skills_release_get",
-] as const;
-const governedOperations = [
-  "skills_tool_resolve",
-  "skills_tool_invoke",
-  "skills_input_validate",
-  "skills_output_validate",
-] as const;
+const discoveryOperations = SKILLS_V2_RESOURCE_OPERATIONS;
+const telemetryOperations = ["skills_feedback_submit"] as const;
+const governedOperationSet = new Set(
+  SKILLS_V2_TOOL_OPERATIONS.filter((operation) => operation !== "skills_feedback_submit"),
+);
 
 const skillsSchema = Type.Object(
   {
-    operation: Type.Union(
-      [...discoveryOperations, ...governedOperations].map((operation) => Type.Literal(operation)),
-    ),
+    operation: Type.Enum(SKILLS_V2_OPERATIONS, { type: "string" }),
     arguments: Type.Record(Type.String(), Type.Unknown()),
   },
   { additionalProperties: false },
@@ -82,15 +78,30 @@ export function createLinkskillsTool(api: OpenClawPluginApi, deps?: { fetchImpl?
           details: { ok: false, reason: "actor_override_rejected" },
         };
       }
+      const rejected = rejectNonStandardSkillsMcpOperation(operation);
+      if (rejected) {
+        return {
+          content: [{ type: "text" as const, text: "That LiNKskills capability is not allowed." }],
+          details: {
+            ok: false,
+            reason: rejected === "legacy_execution_disabled" ? rejected : "operation_not_allowed",
+          },
+        };
+      }
       const discovery = (discoveryOperations as readonly string[]).includes(operation);
-      const governed = (governedOperations as readonly string[]).includes(operation);
-      if (!discovery && !governed) {
+      const governed = governedOperationSet.has(operation);
+      const telemetry = (telemetryOperations as readonly string[]).includes(operation);
+      if (!discovery && !governed && !telemetry) {
         return {
           content: [{ type: "text" as const, text: "That LiNKskills capability is not allowed." }],
           details: { ok: false, reason: "operation_not_allowed" },
         };
       }
-      if ((discovery && !config.mcpDiscoveryRead) || (governed && !config.governedExecution)) {
+      if (
+        (discovery && !config.mcpDiscoveryRead) ||
+        (governed && !config.governedExecution) ||
+        (telemetry && !config.telemetryEnqueue)
+      ) {
         return {
           content: [{ type: "text" as const, text: "That LiNKskills capability is disabled." }],
           details: { ok: false, reason: "disabled" },

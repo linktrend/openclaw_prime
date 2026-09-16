@@ -143,19 +143,29 @@ jobs:
           if executions > 2:
               raise SystemExit("full_suite_attempt_limit")
           PY
-          printf 'SOURCE_BRANCH=%s\nEXPECTED_HEAD=%s\nCANDIDATE_ID=%s\n' \
-            "${live_branch}" "${live}" "${derived}" >> "$GITHUB_ENV"
+          live_base="$(jq -r .base.sha <<<"${pr}")"
+          [[ "${live_base}" =~ ^[0-9a-f]{40}$ ]] || { echo "full_suite_base_sha_invalid"; exit 1; }
+          printf 'SOURCE_BRANCH=%s\nEXPECTED_HEAD=%s\nCANDIDATE_ID=%s\nBASELINE_SHA=%s\n' \
+            "${live_branch}" "${live}" "${derived}" "${live_base}" >> "$GITHUB_ENV"
           echo "exact dispatch-time seal accepted"
+
+      - name: Setup Node with frozen dependencies
+        uses: ./.github/actions/setup-node-env
+        with:
+          frozen-lockfile: "true"
+          install-deps: "true"
+          cache-mode: restore
 
       - name: Run full profile
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git diff --check
+          git diff --check "${BASELINE_SHA}" "${EXPECTED_HEAD}"
           python3 scripts/gitops/run_delivery_profile.py full
-          python3 scripts/gitops/require_exact_ci_success.py \
-            --repository "${GITHUB_REPOSITORY}" --head "${EXPECTED_HEAD}"
+          # Exact-head Fast remains required. Do not require the Full
+          # workflow's own in-progress result, even when ciWorkflowName is
+          # bound to this customization-scoped aggregate check.
 
       - name: Write exact full-suite receipt
         if: success()
@@ -186,8 +196,11 @@ jobs:
           checks = json.loads(Path(".github/linktrend-gitops-consumer.json").read_text())
           commands = commands + [
               ["require-successful-workflow", checks["fastWorkflowName"]],
-              ["require-successful-workflow", checks["ciWorkflowName"]],
           ]
+          # Binding ciWorkflowName to Linktrend Full Suite must not make this
+          # receipt recursively require the still-running aggregate check.
+          if checks["ciWorkflowName"] != os.environ.get("GITHUB_WORKFLOW"):
+              commands.append(["require-successful-workflow", checks["ciWorkflowName"]])
           identity = compute_candidate_identity(
               Path("."),
               [],
@@ -203,8 +216,10 @@ jobs:
               "runner=ubuntu-24.04-arm\n",
               encoding="utf-8",
           )
+          evidence_path = Path("customization-validation-evidence.json")
           evidence = {
-              "full-suite-summary.txt": "sha256:" + hashlib.sha256(summary.read_bytes()).hexdigest()
+              "full-suite-summary.txt": "sha256:" + hashlib.sha256(summary.read_bytes()).hexdigest(),
+              "customization-validation-evidence.json": "sha256:" + hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
           }
           result = {
               "schemaVersion": 2,
@@ -230,6 +245,7 @@ jobs:
           path: |
             full-suite-receipt.json
             full-suite-summary.txt
+            customization-validation-evidence.json
           retention-days: 30
 
   bugbot:
@@ -286,7 +302,21 @@ jobs:
           [[ "${EXPECTED_COMMIT}" =~ ^[0-9a-f]{40}$ ]] || { echo reconciled_canary_commit_invalid; exit 1; }
           [[ "${EXPECTED_TREE}" =~ ^[0-9a-f]{40}$ ]] || { echo reconciled_canary_tree_invalid; exit 1; }
           python3 scripts/gitops/require_exact_ci_success.py --repository "${GITHUB_REPOSITORY}" --head "${EXPECTED_COMMIT}" --config-key fastWorkflowName
-          python3 scripts/gitops/require_exact_ci_success.py --repository "${GITHUB_REPOSITORY}" --head "${EXPECTED_COMMIT}" --config-key ciWorkflowName
+          python3 - "${GITHUB_REPOSITORY}" "${EXPECTED_COMMIT}" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, str(Path.cwd()))
+          from scripts.gitops.require_exact_ci_success import require_success
+
+          checks = json.loads(Path(".github/linktrend-gitops-consumer.json").read_text(encoding="utf-8"))
+          name = checks["ciWorkflowName"]
+          # Reconciled canary is this workflow; do not wait for its own result.
+          if name != os.environ.get("GITHUB_WORKFLOW"):
+              require_success(sys.argv[1], sys.argv[2], Path.cwd(), "ciWorkflowName")
+          PY
           test -n "${SECURITY_WORKFLOW_NAME}" || { echo reconciled_canary_security_workflow_missing; exit 1; }
           python3 scripts/gitops/require_exact_ci_success.py --repository "${GITHUB_REPOSITORY}" --head "${EXPECTED_COMMIT}" --workflow-name "${SECURITY_WORKFLOW_NAME}"
           checks_json="${RUNNER_TEMP}/linktrend-reconciled-checks.json"

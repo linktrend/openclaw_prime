@@ -32,6 +32,14 @@ import {
   mergeIdentityMarkdownContent,
   sanitizeAgentIdentityLine,
 } from "./identity-file.js";
+import {
+  authorizeProfileManifest,
+  cloneCommonProfileManifest,
+  dryRunInactiveProfileProvisioning,
+  parseCommonProfileManifest,
+  type CommonProfileManifest,
+  type ProfileProvisioningDryRun,
+} from "./profile-manifest.js";
 import { DEFAULT_IDENTITY_FILENAME, ensureAgentWorkspace } from "./workspace.js";
 
 const BOOTSTRAP_AGENT_ID = "main";
@@ -48,6 +56,15 @@ type CreateAgentSuccess = {
   bindingResult?: ReturnType<typeof applyAgentBindings>;
 };
 
+type CreateAgentInactive = {
+  status: "inactive";
+  agentId: string;
+  name: string;
+  bootstrapPending: false;
+  profileManifest: CommonProfileManifest;
+  provisioning: ProfileProvisioningDryRun;
+};
+
 type CreateError = {
   status: "error";
   reason:
@@ -58,12 +75,18 @@ type CreateError = {
     | "invalid-bindings"
     | "legacy-session-migration-required"
     | "shared-auth-store-owned-by-main"
-    | "unsafe-identity-file";
+    | "unsafe-identity-file"
+    | "invalid-profile-manifest"
+    | "activation-not-authorized"
+    | "profile-clone-rejected";
   agentId?: string;
   message: string;
 };
 
-type CreateAgentResult = (CreateAgentSuccess & { config: OpenClawConfig }) | CreateError;
+type CreateAgentResult =
+  | (CreateAgentSuccess & { config: OpenClawConfig })
+  | (CreateAgentInactive & { config: OpenClawConfig })
+  | CreateError;
 type AgentEntryConfig = NonNullable<NonNullable<OpenClawConfig["agents"]>["entries"]>[string];
 type CreateAgentEntry = AgentEntryConfig & { id: string };
 type ConfigCommitRollback = () => void | Promise<void>;
@@ -93,6 +116,10 @@ type CreateAgentParams = {
   /** Prepare guided staged state at the last reversible edge before config publication. */
   prepareConfigCommit?: () => Promise<ConfigCommitRollback | void>;
   provenance?: { createdVia: AgentCreatedVia; creatorAgentId?: string };
+  /** Source-only common profile manifest. Inactive stays dry-run and never creates a live actor. */
+  profileManifest?: unknown;
+  /** When set, clone this source first; live secret/account/private-state fields fail closed. */
+  cloneProfileManifestFrom?: unknown;
 };
 
 class DuplicateAgentError extends Error {}
@@ -232,11 +259,85 @@ async function writeIdentityFile(params: {
   await workspaceRoot.write(DEFAULT_IDENTITY_FILENAME, content, { encoding: "utf8" });
 }
 
+function resolveProfileManifestInput(params: CreateAgentParams): ResultLikeCreate {
+  if (params.cloneProfileManifestFrom !== undefined) {
+    const cloned = cloneCommonProfileManifest(params.cloneProfileManifestFrom);
+    if (!cloned.ok) {
+      return createError("profile-clone-rejected", cloned.error.message);
+    }
+    return { status: "manifest", manifest: cloned.value };
+  }
+  if (params.profileManifest === undefined) {
+    return { status: "none" };
+  }
+  const parsed = parseCommonProfileManifest(params.profileManifest);
+  if (!parsed.ok) {
+    return createError("invalid-profile-manifest", parsed.error.message);
+  }
+  const authorized = authorizeProfileManifest(parsed.value);
+  if (!authorized.ok) {
+    return createError(
+      "activation-not-authorized",
+      authorized.error.message,
+      parsed.value.profileId,
+    );
+  }
+  return { status: "manifest", manifest: authorized.value };
+}
+
+type ResultLikeCreate =
+  | CreateError
+  | { status: "none" }
+  | { status: "manifest"; manifest: CommonProfileManifest };
+
+function provisionInactiveProfile(params: {
+  manifest: CommonProfileManifest;
+  name: string;
+  config: OpenClawConfig;
+  bindingSpecs?: string[];
+}): CreateAgentResult {
+  if (params.bindingSpecs && params.bindingSpecs.length > 0) {
+    return createError(
+      "invalid-bindings",
+      `inactive profile "${params.manifest.profileId}" cannot bind channels or accounts`,
+      params.manifest.profileId,
+    );
+  }
+  const provisioned = dryRunInactiveProfileProvisioning(params.manifest);
+  if (!provisioned.ok) {
+    return createError(
+      "activation-not-authorized",
+      provisioned.error.message,
+      params.manifest.profileId,
+    );
+  }
+  return {
+    status: "inactive",
+    agentId: params.manifest.profileId,
+    name: params.name,
+    bootstrapPending: false,
+    profileManifest: params.manifest,
+    provisioning: provisioned.value,
+    config: params.config,
+  };
+}
+
 export async function createAgent(params: CreateAgentParams): Promise<CreateAgentResult> {
   if (params.stagedConfig && !Object.hasOwn(params, "expectedConfigHash")) {
     throw new Error("staged agent creation requires an expected config hash");
   }
-  const rawName = (params.entry?.name?.trim() || params.entry?.id || params.name || "").trim();
+  const profileInput = resolveProfileManifestInput(params);
+  if (profileInput.status === "error") {
+    return profileInput;
+  }
+  const manifestName = profileInput.status === "manifest" ? profileInput.manifest.profileId : "";
+  const rawName = (
+    params.entry?.name?.trim() ||
+    params.entry?.id ||
+    params.name ||
+    manifestName ||
+    ""
+  ).trim();
   if (!rawName) {
     return createError("invalid-name", "agent name is required");
   }
@@ -249,8 +350,23 @@ export async function createAgent(params: CreateAgentParams): Promise<CreateAgen
   }
   const agentId = validation.agentId;
   const isBootstrapMain = agentId === BOOTSTRAP_AGENT_ID && params.bootstrapMain === true;
-
   const safeName = sanitizeAgentIdentityLine(rawName);
+  if (profileInput.status === "manifest") {
+    if (normalizeAgentId(profileInput.manifest.profileId) !== agentId) {
+      return createError(
+        "invalid-profile-manifest",
+        `profileId "${profileInput.manifest.profileId}" does not match agent id "${agentId}"`,
+        agentId,
+      );
+    }
+    // Inactive manifests never take the config write lock or materialize workspace state.
+    return provisionInactiveProfile({
+      manifest: profileInput.manifest,
+      name: safeName,
+      config: params.stagedConfig ?? {},
+      bindingSpecs: params.bindingSpecs,
+    });
+  }
   const model = normalizeOptionalString(params.model);
   const identity = params.entry?.identity ??
     createAgentIdentityConfig({

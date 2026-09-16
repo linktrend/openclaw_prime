@@ -11,7 +11,7 @@
 - Contract tests: `linkbots/lisa/ops/model-routing-contract.test.ts`
 - **Mac Mini stage OpenRouter-only overlay:** `linkbots/lisa/ops/model-routing.openrouter-stage.ts` + `model-routing.openrouter-stage.contract.json` + `model-routing.openrouter-stage.test.ts`
 - Stage ops canary runbook: `docs/execution/openclawdevelopmentplan01/runbooks/lisa-stage-ops-canary.md`
-- Prior eval notes (superseded for defaults): `LISA-MODEL-ROUTING-EVAL-2026-07-30.md`
+- Prior eval notes (superseded for defaults): `docs/archive/linkbots-lisa/superseded-2026/LISA-MODEL-ROUTING-EVAL-2026-07-30.md`
 - Release graph: `docs/evidence/ocp-w30-approved-pdf-routing/release-graph.md`
 
 ## Mac Mini stage OpenRouter-only posture
@@ -84,12 +84,17 @@ call a classifier. Only ambiguous requests may call a classifier, and it sees
 at most 2,000 characters of the request with no transcript, private memory, or
 credentials. Invalid or failed classification fails closed to conversation.
 
-The transient defaults are native Luna High, OpenRouter Luna Medium, direct
-Moonshot Kimi K2.6, and direct Google Gemini 3.1 Flash-Lite. GLM is not a
-non-coding fallback. A request-time model/reasoning override is never persisted
-to Lisa's Telegram, browser, or main-session default. Provider/model failures
-may advance one fallback; infrastructure failures retry the same model, and a
-quality fallback requires a logged quality failure.
+Named candidate slots remain native Luna High, OpenRouter Luna Medium, direct
+Moonshot Kimi K2.6, and direct Google Gemini 3.1 Flash-Lite. Those IDs are
+evaluation candidates only: `exactModelIdsApproved` and
+`paidRouteActivationAllowed` stay `false`, and `activationState` is
+`disabled_pending_founder_approval` until a separate founder approval. GLM is not
+a non-coding fallback. A request-time model/reasoning override is never
+persisted to Lisa's Telegram, browser, or main-session default. Provider/model
+failures may advance one candidate fallback; infrastructure failures retry the
+same model, and a quality fallback requires a logged quality failure. Source-only
+evaluation uses deterministic fakes; it must not select or call a live
+model/provider.
 
 The MiniMax-M3 document route remains disabled because its capability is
 `approved_unverified`; it is not a default fallback and requires a separate
