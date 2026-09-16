@@ -9,6 +9,7 @@ import { isAgentRunStaleLifecycleError } from "../infra/agent-lifecycle-error.js
 import { copyErrorDiagnostic } from "../infra/error-diagnostics.js";
 import { collectErrorGraphCandidates, formatErrorMessage, readErrorName } from "../infra/errors.js";
 import { resolveGlobalSingleton } from "../shared/global-singleton.js";
+import { failoverReasonForExternalAuthRefreshTerminalFailure } from "./auth-profiles/oauth-refresh-failure.js";
 import { failoverReasonFromClassification } from "./failover/classification-rules.js";
 import {
   classifyFailoverSignal,
@@ -484,6 +485,13 @@ function resolveFailoverClassificationFromErrorInternal(
     return {
       kind: "reason",
       reason: err.reason,
+    };
+  }
+  const refreshReason = failoverReasonForExternalAuthRefreshTerminalFailure(err);
+  if (refreshReason) {
+    return {
+      kind: "reason",
+      reason: refreshReason,
     };
   }
   const signal = normalizeErrorSignal(err, providerHint);

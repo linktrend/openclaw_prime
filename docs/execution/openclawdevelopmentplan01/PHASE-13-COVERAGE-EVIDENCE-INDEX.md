@@ -12,11 +12,13 @@
 
 | Field        | Value                                                                                 |
 | ------------ | ------------------------------------------------------------------------------------- |
-| Plan         | `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`       |
+| Plan         | `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`       |
 | Plan SHA-256 | `17203ee586a3fb2b1281bcddd8b17ae350075ebce537689f3c4bfcbbd14914f7`                    |
 | Inventory    | `docs/execution/openclawdevelopmentplan01/section-13.3/inventory.json` (`version: 4`) |
 | Ledger       | `docs/execution/openclawdevelopmentplan01/section-13.3/ledger.csv`                    |
 | Wave packet  | `WAVE18-CORRECTION-PACKET.md`                                                         |
+
+**Archive provenance (2026-09-16):** Principal `docs/CURSOR-GROK-*` prompts and the frozen OpenClaw plan were moved to `docs/archive/openclaw-prime-1.0/` (cursor-grok-paci/ and plans/). This index cites those archive locations. Plan SHA-256 `17203ee5…` is the freeze-time pin; the archived plan file currently hashes `4a608af4…` (inventory `plan_sha256`). This index is coverage evidence, not production-deploy evidence.
 
 ## Counts
 
@@ -44,7 +46,7 @@
 ### Phase-0 evidence artifacts (implemented claims)
 
 - `docs/execution/openclawdevelopmentplan01/PHASE-0-FREEZE-PACKET.md`
-- `docs/CURSOR-GROK-EXECUTION-PROMPT.md`
+- `docs/archive/openclaw-prime-1.0/cursor-grok-paci/CURSOR-GROK-EXECUTION-PROMPT.md`
 - `docs/execution/openclawdevelopmentplan01/contracts/brain/PIN.json`
 - `docs/execution/openclawdevelopmentplan01/contracts/skills/PIN.json`
 - `docs/execution/openclawdevelopmentplan01/contracts/platform/PIN.json`

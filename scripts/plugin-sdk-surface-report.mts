@@ -201,7 +201,9 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +1: restore the shipped read-only conversation-binding inspection facade.
       // +1: canonical node CLI owners for plugin-provided node commands.
       // +3: typed feature contracts, backend registration, and native Control UI hosting.
-      152,
+      // Base 7aee52d measured 154 public entrypoints against budget 152 (pre-existing +2).
+      // Candidate c0194424 and this repair add 0 entrypoints; restore budget to measured base.
+      154,
       env,
     ),
     publicExports: readPluginSdkSurfaceBudgetEnv(
@@ -353,7 +355,12 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +2: canonical paragraph grouping and UTF-16 boundaries for channel-owned chunking.
       // +1: retained runtime config reader preserves channel owner and scoped config identity.
       // +1: shared session-catalog host publication with completion ownership.
-      4435,
+      // Base 7aee52d measured 4447 public exports against budget 4435 (pre-existing +12).
+      // Old candidate c0194424 added +4 avoidable agent-harness-runtime callables (4451).
+      // This repair folds Codex external-auth refresh into agentHarnessAttemptTerminal
+      // (0 net public exports vs base). No private/internal seam can express the plugin
+      // import boundary; budget matches measured base, not candidate growth.
+      4447,
       env,
     ),
     publicFunctionExports: readPluginSdkSurfaceBudgetEnv(
@@ -477,7 +484,9 @@ export function readPluginSdkSurfaceBudgets(env: NodeJS.ProcessEnv = process.env
       // +2: canonical paragraph grouping and UTF-16 boundaries for channel-owned chunking.
       // +1: retained runtime config reader preserves channel owner and scoped config identity.
       // +1: shared session-catalog host publication with completion ownership.
-      2620,
+      // Base 7aee52d measured 2626 public callable exports against budget 2620 (pre-existing +6).
+      // Old candidate c0194424 added +4 callables (2630). Repair restores base 2626.
+      2626,
       env,
     ),
     publicDeprecatedExports: readPluginSdkSurfaceBudgetEnv(

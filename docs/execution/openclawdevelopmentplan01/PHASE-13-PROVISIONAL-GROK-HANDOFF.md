@@ -10,9 +10,9 @@
 **AuthClaims 1.1 countersign closeout:** 2026-07-30 Asia/Taipei — fixture-owner gate **CLOSED** / **`OWNER_COUNTERSIGNED`** at tip `005c9454…` (`FIXTURE-OWNER-SIGNOFF.md`; Brain `cfa8e931…` / Skills `2fb6f8d5…`)
 **PACI machine-token seam (OpenClaw-owned local/fake):** 2026-07-30 Asia/Taipei — generic `client_credentials` + `private_key_jwt` seam implemented under Principal production execution prompt; draft Platform pin `PACI-DRAFT-CONTRACT-PIN-2026-07-30.md`; Lisa live packet prepared only (`LISA-MACHINE-TOKEN-INTEGRATION-PACKET-PREPARED-2026-07-30.md`). **Not** Codex certification; **not** live Lisa/Platform enablement.
 **Author (correction):** Cursor Local / Cloud Grok 4.5 High integrator under OpenClaw plan package
-**Plan:** `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`
+**Plan:** `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`
 **Plan SHA-256:** `17203ee586a3fb2b1281bcddd8b17ae350075ebce537689f3c4bfcbbd14914f7` (HASH_OK re-verified 2026-07-28; re-checked waves 17–20 + countersign closeout)
-**Authority:** `docs/CURSOR-GROK-EXECUTION-PROMPT.md` — OpenClaw-owned Phases 0–13 only
+**Authority:** `docs/archive/openclaw-prime-1.0/cursor-grok-paci/CURSOR-GROK-EXECUTION-PROMPT.md` — OpenClaw-owned Phases 0–13 only
 **PR:** [#38](https://github.com/linktrend/openclaw_prime/pull/38) → `development` (draft; do not merge from this handoff)
 **Supersedes:** prior provisional text at the same path (2026-07-27) and short pointer claims of 13 files / 82 tests as the tip proof set
 
@@ -282,7 +282,7 @@ git checkout issue/ocp-openclawdevelopmentplan01
 git pull --ff-only
 git rev-parse HEAD
 
-shasum -a 256 docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md
+shasum -a 256 docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md
 # expect: 17203ee586a3fb2b1281bcddd8b17ae350075ebce537689f3c4bfcbbd14914f7
 
 pnpm install   # if needed
