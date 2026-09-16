@@ -14,8 +14,9 @@
 | Starting branch  | `issue/150032-complete-openclaw-prime-1-0-cleanup-and-consolid` |
 | Ending branch    | same |
 | Starting commit  | `ea45e4bea5b3111780f9c6407886d037bdb02630` |
-| Ending commit    | (filled after checkpoint commit; machine consumers use `git rev-parse HEAD` / origin tip) |
+| Ending commit    | `ee5c1d5f0a78c551660182decba50795a4c9d22f` (repair checkpoint; SHA-pin descendant is origin tip) |
 | Starting tree    | `cab04863b61f023fa18bd205a9c1696764bb6119` |
+| Ending tree      | `688671d420a3aeaebbf186452bbcab35d6d6fdf1` (repair tree; re-read origin tip after SHA-pin) |
 | Ending status    | `complete` (review-repair checkpoint; Server01 production packet still missing) |
 
 ## Summary
@@ -92,3 +93,11 @@ This worker did not self-review. Independent review of this SHA is still require
 0.94 on typed refresh + fallbackSafe owner-boundary repair; 0.00 on production deploy completeness.
 
 ## Amendments
+
+### 2026-09-16 — record repair checkpoint SHA
+
+- What was wrong: Handoff was committed without the resulting SHA.
+- Corrected fact: Repair commit `ee5c1d5f0a78c551660182decba50795a4c9d22f` tree `688671d420a3aeaebbf186452bbcab35d6d6fdf1`. Origin tip after this amendment is a descendant whose complete extra diff is this SHA pin.
+- Why: Independent-review P2 required the recorded checkpoint to match git.
+- Who: `cursor-cloud-cloud-cloud-agent-feature-20260916-2054`
+- Evidence: `git rev-parse` after the repair commit

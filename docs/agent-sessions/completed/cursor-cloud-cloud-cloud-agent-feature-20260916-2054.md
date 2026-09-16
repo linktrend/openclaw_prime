@@ -24,6 +24,8 @@
 | Branch          | issue/150032-complete-openclaw-prime-1-0-cleanup-and-consolid |
 | Starting commit | ea45e4bea5b3111780f9c6407886d037bdb02630 |
 | Starting tree   | cab04863b61f023fa18bd205a9c1696764bb6119 |
+| Repair commit   | ee5c1d5f0a78c551660182decba50795a4c9d22f |
+| Repair tree     | 688671d420a3aeaebbf186452bbcab35d6d6fdf1 |
 | Status          | `complete` |
 | Handoff         | `docs/handoffs/2026-09-16-2054-cursor-cloud-openclaw-prime-1-0-review-repairs.md` |
 
