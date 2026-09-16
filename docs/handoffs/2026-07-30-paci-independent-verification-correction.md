@@ -115,3 +115,13 @@ Independent OpenClaw Codex re-verification of the pushed correction HEAD. Stop h
 ## Lisa worktree preservation
 
 - `.worktrees/lisa-ops01` on `issue/ocp-lisa-ops01` left untouched
+
+## Amendments
+
+### 2026-09-16 — archive provenance
+
+- What was wrong: This handoff cited `docs/CURSOR-GROK-*` as the live Principal prompt path.
+- Corrected fact: Those prompts now live at `docs/archive/openclaw-prime-1.0/cursor-grok-paci/`.
+- Why: Independent-review P2 after the 1.0 archive move.
+- Who: `cursor-cloud-cloud-cloud-agent-feature-20260916-2054`
+- Evidence: `docs/archive/openclaw-prime-1.0/README.md`

@@ -59,6 +59,7 @@ explicit holds:
 - VPS deployment, production canary, and Principal acceptance.
 
 The required operator sequence and inverse rollback are documented in
-`LISA-BACKUP-DEPLOYMENT-RUNBOOK.md` and `LISA-DIRECT-MIGRATION.md`. No schedule,
+`LISA-BACKUP-DEPLOYMENT-RUNBOOK.md` and archived
+`docs/archive/linkbots-lisa/superseded-2026/LISA-DIRECT-MIGRATION.md`. No schedule,
 service, VPS, production, upstream, provider, credential, or private-state
 mutation occurred for this source package.

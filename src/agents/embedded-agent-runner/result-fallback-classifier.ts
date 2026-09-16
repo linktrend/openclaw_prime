@@ -1,5 +1,6 @@
 /** Classifies embedded-agent run results for model fallback decisions. */
 import { isSilentReplyPayloadText } from "../../auto-reply/tokens.js";
+import { failoverReasonForExternalAuthRefreshTerminalFailure } from "../auth-profiles/oauth-refresh-failure.js";
 import { classifyFailoverReason } from "../failover/classify.js";
 import type { FailoverReason } from "../failover/signal.js";
 import { GENERIC_EXTERNAL_RUN_FAILURE_TEXT } from "../failover/user-copy.js";
@@ -204,7 +205,14 @@ export function classifyEmbeddedAgentRunResultForModelFallback(params: {
   ) {
     return null;
   }
+  const payloads = params.result.payloads ?? [];
+  const terminalErrorText = payloads.find(
+    (payload) => payload.isError === true && typeof payload.text === "string",
+  )?.text;
   const incompleteTurn = params.result.meta.error?.kind === "incomplete_turn";
+  const externalAuthRefreshReason = failoverReasonForExternalAuthRefreshTerminalFailure(
+    params.result.meta.error,
+  );
   if (incompleteTurn && params.result.meta.error?.fallbackSafe !== true) {
     return null;
   }
@@ -220,7 +228,6 @@ export function classifyEmbeddedAgentRunResultForModelFallback(params: {
     // bypass a policy decision rather than recover a malformed model result.
     return null;
   }
-  const payloads = params.result.payloads ?? [];
   const genericExternalFailureClassification = classifyGenericExternalRunFailurePayload({
     provider: params.provider,
     model: params.model,
@@ -232,10 +239,16 @@ export function classifyEmbeddedAgentRunResultForModelFallback(params: {
   if (hasDeliverableAssistantPayload(params.result)) {
     return null;
   }
+  if (externalAuthRefreshReason) {
+    const refreshErrorText = terminalErrorText ?? params.result.meta.error?.message ?? "";
+    return {
+      message: `${params.provider}/${params.model} ended with a provider error: ${refreshErrorText}`,
+      reason: externalAuthRefreshReason,
+      code: "embedded_error_payload",
+      rawError: refreshErrorText,
+    };
+  }
   if (fallbackSafeIncompleteTurn) {
-    const terminalErrorText = payloads.find(
-      (payload) => payload.isError === true && typeof payload.text === "string",
-    )?.text;
     return {
       message:
         terminalErrorText ??

@@ -21,8 +21,8 @@ The program is complete only when source can recreate the approved Lisa deployme
 This PRD supersedes the implementation direction in the following historical plans where they conflict with August 18–21 decisions or current source:
 
 - `docs/ITEM-3-CONNECT-OPENCLAW-PRIME-LISA-PRD.md`
-- `docs/ITEM-3-CONNECT-OPENCLAW-PRIME-LISA-IMPLEMENTATION-PLAN.md`
-- `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`
+- `docs/archive/openclaw-prime-1.0/plans/ITEM-3-CONNECT-OPENCLAW-PRIME-LISA-IMPLEMENTATION-PLAN.md`
+- `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`
 
 They remain historical evidence and must not be deleted or treated as current runtime proof.
 

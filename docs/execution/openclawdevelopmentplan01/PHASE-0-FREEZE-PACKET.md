@@ -4,23 +4,25 @@
 **Branch:** `issue/ocp-openclawdevelopmentplan01`
 **Recorded:** 2026-07-27 18:44 Asia/Taipei
 **OpenClaw execution agent:** Cursor Local Agent (Grok 4.5 High)
-**Authority:** Principal authorization in `docs/CURSOR-GROK-EXECUTION-PROMPT.md` for OpenClaw-owned Phases 0–13
+**Authority:** Principal authorization in `docs/archive/openclaw-prime-1.0/cursor-grok-paci/CURSOR-GROK-EXECUTION-PROMPT.md` for OpenClaw-owned Phases 0–13
+
+**Archive provenance (2026-09-16):** The Principal `docs/CURSOR-GROK-*` prompts and the frozen OpenClaw plan were moved into `docs/archive/openclaw-prime-1.0/` (cursor-grok-paci/ and plans/). This packet now cites those archive locations. The freeze-time plan SHA-256 `17203ee586a3fb2b1281bcddd8b17ae350075ebce537689f3c4bfcbbd14914f7` remains the historical pin; the archived plan file currently hashes `4a608af4b7236e100a8466642a5988ec51222384d17bc3461391a0e2f8ef50ea` (inventory `plan_sha256`). This packet is not production-deploy evidence.
 
 ## 1. Approved plan reference
 
 | Field            | Value                                                                           |
 | ---------------- | ------------------------------------------------------------------------------- |
-| Plan             | `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` |
+| Plan             | `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` |
 | Plan SHA-256     | `17203ee586a3fb2b1281bcddd8b17ae350075ebce537689f3c4bfcbbd14914f7`              |
-| Hash check       | HASH_OK (re-verified 2026-07-27 18:44 Asia/Taipei)                              |
-| Execution prompt | `docs/CURSOR-GROK-EXECUTION-PROMPT.md`                                          |
+| Hash check       | HASH_OK at freeze time 2026-07-27; archive copy hash differs, see provenance |
+| Execution prompt | `docs/archive/openclaw-prime-1.0/cursor-grok-paci/CURSOR-GROK-EXECUTION-PROMPT.md`                                          |
 | Scope            | openclaw_prime / Lisa only; no upstream repo edits; skip Codex Phases 14–15     |
 
 ## 2. Frozen hashes (plans and repository HEADs)
 
 | Source                           | Path / ref                                                                         | SHA-256 or commit                                                  | Status                 |
 | -------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------- |
-| OpenClaw plan                    | `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`    | `17203ee586a3fb2b1281bcddd8b17ae350075ebce537689f3c4bfcbbd14914f7` | frozen / match         |
+| OpenClaw plan                    | `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md`    | freeze-time `17203ee5…`; archive file `4a608af4…` | archived / provenance rewritten |
 | LiNKplatform plan                | `LiNKplatform/docs/LINKPLATFORM-SHARED-FOUNDATION-DETAILED-IMPLEMENTATION-PLAN.md` | `fbcf36235c4caaa6abf7ee93afedeedf105a96f6614a3a3ff5ccb8d78e33c6b9` | frozen / match plan §2 |
 | LiNKbrain plan                   | `LiNKbrain/docs/LINKBRAIN-PHASE-1-DETAILED-IMPLEMENTATION-PLAN.md`                 | `051caa80191639c06b2dee6fa4800e736ada30772a55ad84e12e5fa6a4e63458` | frozen / match plan §2 |
 | LiNKskills plan                  | `LiNKskills/docs/LINKSKILLS-INTERNAL-LAUNCH-DETAILED-DEVELOPMENT-PLAN.md`          | `31a6cc70bb778ce1dff236819e4bf600b0495dbb06c95bac55bcb2b0b2f5fe88` | frozen / match plan §2 |

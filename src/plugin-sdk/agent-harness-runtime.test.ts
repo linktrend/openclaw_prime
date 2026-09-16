@@ -4,6 +4,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { getReplyPayloadMetadata } from "../auto-reply/reply-payload.js";
 import {
+  agentHarnessAttemptTerminal,
   agentHarnessStructuredInput,
   attachModelProviderRequestTransport,
   buildAgentHarnessUserInputAnswers,
@@ -50,6 +51,18 @@ describe("classifyAgentHarnessTerminalOutcome", () => {
         reasoningText: "",
         planText: "",
         promptError: new Error("turn failed"),
+        turnCompleted: true,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("does not classify Codex auth-refresh prompt errors as empty harness outcomes", () => {
+    expect(
+      classifyAgentHarnessTerminalOutcome({
+        assistantTexts: [],
+        reasoningText: "",
+        planText: "",
+        promptError: new Error("auth refresh request failed: code=-32603"),
         turnCompleted: true,
       }),
     ).toBeUndefined();
@@ -164,6 +177,38 @@ describe("agent harness runtime SDK facade", () => {
       "run",
       "snapshot",
     ]);
+  });
+
+  it("projects Codex external-auth refresh through the existing attempt-terminal seam", () => {
+    expect(Object.isFrozen(agentHarnessAttemptTerminal.externalAuthRefresh)).toBe(true);
+    expect(Object.keys(agentHarnessAttemptTerminal.externalAuthRefresh).toSorted()).toEqual([
+      "classify",
+      "failoverReason",
+      "isFallbackEligible",
+      "materializePromptError",
+    ]);
+    expect(
+      agentHarnessAttemptTerminal.externalAuthRefresh.classify(
+        "auth refresh request failed: code=-32603",
+      ),
+    ).toEqual({ kind: "refresh_failed", jsonRpcCode: -32603 });
+    expect(
+      agentHarnessAttemptTerminal.externalAuthRefresh.classify("invalid auth refresh response"),
+    ).toEqual({ kind: "refresh_failed" });
+    const stamped = agentHarnessAttemptTerminal.externalAuthRefresh.materializePromptError({
+      message: "auth refresh request failed: code=-32603",
+    });
+    expect(agentHarnessAttemptTerminal.externalAuthRefresh.failoverReason(stamped)).toBe(
+      "auth_permanent",
+    );
+    expect(
+      agentHarnessAttemptTerminal.externalAuthRefresh.failoverReason(
+        "auth refresh request failed: code=-32603",
+      ),
+    ).toBeNull();
+    expect(
+      agentHarnessAttemptTerminal.externalAuthRefresh.isFallbackEligible("Internal error (-32603)"),
+    ).toBe(false);
   });
 
   it("keeps legacy harness implementations source-compatible while requiring capabilities in V2", () => {

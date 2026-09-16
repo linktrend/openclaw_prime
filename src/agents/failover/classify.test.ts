@@ -22,3 +22,19 @@ describe("OAuth session expiry", () => {
     expect(classifyFailoverReason(expiredMessage)).toBe("session_expired");
   });
 });
+
+describe("Codex app-server external-auth refresh failover", () => {
+  it("does not treat Codex refresh literals or generic -32603 as failover without a typed stamp", () => {
+    expect(classifyFailoverReason("auth refresh request failed: code=-32603")).toBeNull();
+    expect(classifyFailoverReason("auth refresh request failed: code=0")).toBeNull();
+    expect(classifyFailoverReason("invalid auth refresh response")).toBeNull();
+    expect(classifyFailoverReason("auth refresh returned invalid credentials")).toBeNull();
+    expect(classifyFailoverReason("external auth lock is poisoned")).toBeNull();
+    expect(classifyFailoverReason("Internal error (-32603): store hiccup")).toBeNull();
+    expect(classifyFailoverReason("JSON-RPC error -32603 Internal error")).toBeNull();
+  });
+
+  it("does not classify Codex refresh cancellation copy as generic failover", () => {
+    expect(classifyFailoverReason("auth refresh request canceled: operator abort")).toBeNull();
+  });
+});

@@ -100,3 +100,11 @@ Refresh `docs/current-status.md` from this completed session if Orchestrator-own
 98% on OpenClaw-owned Wave 6 lifecycle correction; 0% claim of Codex certification.
 
 ## Amendments
+
+### 2026-09-16 — archive provenance
+
+- What was wrong: This handoff cited `docs/CURSOR-GROK-*` as the live Principal prompt path.
+- Corrected fact: Those prompts now live at `docs/archive/openclaw-prime-1.0/cursor-grok-paci/`. Freeze packets and the §13.3 ledger were rewritten to the archive paths. No live duplicate under `docs/CURSOR-GROK-*`.
+- Why: Independent-review P2 after the 1.0 archive move.
+- Who: `cursor-cloud-cloud-cloud-agent-feature-20260916-2054`
+- Evidence: `docs/archive/openclaw-prime-1.0/README.md`, `docs/execution/openclawdevelopmentplan01/PHASE-0-FREEZE-PACKET.md`

@@ -43,7 +43,7 @@ Execution is split:
 
 Item 2 owns the reusable OpenClaw provider adapters. Item 3 owns Lisa as one canonical actor. Item 3 must not edit, re-implement, or duplicate those adapters, must not deep-import plugin internals, must not guess adapter exports, must not mutate provider repositories, and must not treat a still-reviewing Item 2 candidate as an accepted head.
 
-Companion execution document: [Item 3 implementation plan](/ITEM-3-CONNECT-OPENCLAW-PRIME-LISA-IMPLEMENTATION-PLAN).
+Companion execution document: [Item 3 implementation plan](archive/openclaw-prime-1.0/plans/ITEM-3-CONNECT-OPENCLAW-PRIME-LISA-IMPLEMENTATION-PLAN.md) (archived).
 
 ## 2. Verified current facts
 
@@ -131,7 +131,7 @@ Verified Lisa job-catalogue facts from `linkbots/lisa/ops/jobs/`:
 - Catalogue hard stops forbid mutating Google, Telegram, email, GSM, LiNKbrain, or any provider from this source package.
 - Time-management routes Carlos-owned tasks to Google Tasks and other tasks to a string destination `linkbrain` / ledger `LiNKbrain`, without the Item 2 v2 client.
 
-Historical Lisa Brain/Skills plan `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` (2026-07-27) remains on development. It is a two-provider plan. It does not define Libraries or Autowork. It still describes v1 MCP tool families and managed MCP activation. It is superseded as Lisa five-provider authority by this PRD. Wave A encodes Lisa policy against ports and fakes. Wave B binds that policy to the accepted Item 2 public barrels.
+Historical Lisa Brain/Skills plan `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` (2026-07-27) remains archived. It is a two-provider plan. It does not define Libraries or Autowork. It still describes v1 MCP tool families and managed MCP activation. It is superseded as Lisa five-provider authority by this PRD. Wave A encodes Lisa policy against ports and fakes. Wave B binds that policy to the accepted Item 2 public barrels.
 
 Live briefing `docs/agent-briefing.md` records that VPS Lisa already reaches LiNKskills and LiNKbrain through governed native bridges. That is a **live-runtime** fact. Item 3 is source-only Lisa policy on the Item 2 consumers. Item 3 must not treat live VPS wiring as completed Item 3 source, and must not change that runtime.
 

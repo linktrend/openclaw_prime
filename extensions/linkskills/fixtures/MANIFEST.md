@@ -5,7 +5,7 @@
 These fixtures are consumer-side contract samples for OpenClaw Lisa integration tests
 and the local Skills fake MCP. They are derived from:
 
-- `docs/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` §8–§9
+- `docs/archive/openclaw-prime-1.0/plans/OPENCLAW-PRIME-LISA-LINKBRAIN-LINKSKILLS-DETAILED-IMPLEMENTATION-PLAN.md` §8–§9
 - LiNKskills plan tool names (`skills_*`) and envelope shapes (`packages/contracts/schemas/*`)
 - Final Skills main `6269cb173a7c9e0170b29f35c539343c29eab795` / tree `6c36e6c98f90e55d957fba781327b1b0ef90860a` (v2 immutable-release certification path)
 - Exact Platform contract `platform.auth-claims/1.1.0` (camelCase AuthClaims in `identity/` + `auth/`)
