@@ -54,13 +54,13 @@ See closeout; include fail-first Vitest (6 failed) then post-fix pass, frozen `p
 
 ## Tests and Verification
 
-Fail-first: `classifyFailoverReason("auth refresh request failed: code=-32603")` was `null`. After fix, focused unit/extension tests passed. Broader `pnpm check` recorded at closeout.
+Fail-first: `classifyFailoverReason("auth refresh request failed: code=-32603")` was `null`. After fix, focused unit/extension tests passed. `git diff --check` PASS. `pnpm docs:list` PASS (exit 0). `python3 scripts/gitops/secret_scan.py` FAIL on this tree with pre-existing `stale_fixture_declaration` (11957) and `credential_finding` (2349) plus skipped binaries; no new credential findings on Prime 1.0 briefing/classification paths. `pnpm check` recorded at closeout if it completed.
 
 Not tested: live Server01 five-agent sequence, credentialed providers, Crabbox.
 
 ## Problems and Blockers
 
-Exact Server01 image digest, deployment receipt, deployment time, and rollback identity are unavailable without production-owner inspect.
+Exact Server01 image digest, deployment receipt, deployment time, and rollback identity are unavailable without production-owner inspect. Repo-wide secret scan is already fail-closed on `development` fixture-declaration drift (not introduced by this briefing).
 
 ## Uncommitted Changes
 
