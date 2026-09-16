@@ -1,7 +1,9 @@
 # Server01 five-agent parity
 
-Source-only deployment inputs for Lisa, David, Eric, Sara, and Jane. This slice
-does not create accounts, credentials, recipients, schedules, jobs, memories,
+Source-only deployment inputs for Lisa, David, Eric, Sara, and Jane on
+**OpenClaw Prime 1.0**. Operator briefing:
+[`docs/openclaw-prime-1.0-briefing.md`](../../docs/openclaw-prime-1.0-briefing.md).
+This slice does not create accounts, credentials, recipients, schedules, jobs, memories,
 queues, or production state. It preserves Lisa's separate compose topology and
 the existing four-agent fleet topology; it does not invent a replacement
 deployment layout.

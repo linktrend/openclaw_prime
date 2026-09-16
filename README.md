@@ -1,3 +1,19 @@
+# OpenClaw Prime 1.0 (LiNKtrend fork)
+
+This repository is **OpenClaw Prime** — LiNKtrend's private OpenClaw Gateway
+fleet (Lisa, David, Eric, Sara, Jane). It is not the public OpenClaw npm
+package and must not be tagged `v1.0.0` (that tag is historical LiNKaios).
+
+- **Operator briefing:** [`docs/openclaw-prime-1.0-briefing.md`](docs/openclaw-prime-1.0-briefing.md)
+- **Classification / promotion sequence:** [`docs/archive/openclaw-prime-1.0/classification.md`](docs/archive/openclaw-prime-1.0/classification.md)
+- **Agent bundles:** [`linkbots/README.md`](linkbots/README.md)
+- **Server01 parity (source-only):** [`linkbots/parity/README.md`](linkbots/parity/README.md)
+- **Coordination:** [`docs/agent-coordination.md`](docs/agent-coordination.md)
+
+Public OpenClaw product documentation remains at
+[https://docs.openclaw.ai](https://docs.openclaw.ai). The remainder of this
+README is the upstream product overview.
+
 # OpenClaw 🦞 — Your assistant, on your devices, in your chats
 
 <p align="center">

@@ -11,7 +11,7 @@
 - Contract tests: `linkbots/lisa/ops/model-routing-contract.test.ts`
 - **Mac Mini stage OpenRouter-only overlay:** `linkbots/lisa/ops/model-routing.openrouter-stage.ts` + `model-routing.openrouter-stage.contract.json` + `model-routing.openrouter-stage.test.ts`
 - Stage ops canary runbook: `docs/execution/openclawdevelopmentplan01/runbooks/lisa-stage-ops-canary.md`
-- Prior eval notes (superseded for defaults): `LISA-MODEL-ROUTING-EVAL-2026-07-30.md`
+- Prior eval notes (superseded for defaults): `docs/archive/linkbots-lisa/superseded-2026/LISA-MODEL-ROUTING-EVAL-2026-07-30.md`
 - Release graph: `docs/evidence/ocp-w30-approved-pdf-routing/release-graph.md`
 
 ## Mac Mini stage OpenRouter-only posture

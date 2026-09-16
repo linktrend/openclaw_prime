@@ -1,6 +1,10 @@
 # linkbots
 
-Version-controlled, non-secret agent-definition bundles for LiNK OpenClaw agents.
+Version-controlled, non-secret agent-definition bundles for **OpenClaw Prime 1.0**.
+
+- Prime operator briefing: [`docs/openclaw-prime-1.0-briefing.md`](../docs/openclaw-prime-1.0-briefing.md)
+- Five-agent Server01 source contract: [`parity/README.md`](parity/README.md)
+- Lisa bundle: [`lisa/README.md`](lisa/README.md)
 
 Each agent directory is a deployment input, not a live OpenClaw state directory:
 

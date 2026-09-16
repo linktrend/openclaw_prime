@@ -1,45 +1,43 @@
 # OpenClaw Prime and Lisa briefing
 
-Updated: 2026-08-11, Asia/Taipei.
+Updated: 2026-09-16, Asia/Taipei.
+
+**Canonical 1.0 briefing:** [`docs/openclaw-prime-1.0-briefing.md`](openclaw-prime-1.0-briefing.md)
 
 ## Current source of truth
 
-1. The running VPS Lisa/OpenClaw release and its health/readiness receipts.
-2. Current fork `main`, plus the matching `staging` and `development` source
-   tree.
-3. Lisa's source-bundle manifest and live comparison receipt for stable
-   personality files.
-4. Current Brain, Skills, and Platform release receipts.
-5. This briefing and `docs/current-status.md`.
+1. Live Server01/VPS receipts (digest, health, rollback) when a production
+   owner records them. This cloud 1.0 checkpoint does **not** have those
+   receipts.
+2. Protected Git refs: `main` / `staging` share tree
+   `243027a77caba32a9365e0dbd7cd448596fb660b`; `development` at 1.0 start was
+   `f9c09dc53c8942b45b817e88fef49fe46bbc9d38` /
+   `72ea598d5cb8b2156c8816a303ab1723f18d333e`.
+3. Lisa source bundle + comparison receipt under `linkbots/lisa/`.
+4. Brain, Skills, and Platform receipts in their own repos.
+5. [`docs/current-status.md`](current-status.md) (orchestrator-maintained; may lag).
 
 Historical session records, handoffs, pre-VPS plans, and candidate branches do
-not override the current release. The older pre-VPS briefing is retained under
-`docs/archive/coordination/`.
+not override a live release. Archived material:
+[`docs/archive/README.md`](archive/README.md).
 
-## Proven baseline
+## Five agents
 
-- Fork main `f24404c314d743913efd4d3c31e4e343f5141149` is the clean VPS
-  OpenClaw release.
-- Lisa health and readiness pass; her stable personality files were preserved
-  across cutover.
-- Lisa reaches LiNKskills, LiNKbrain Gateway, and LiNKbrain MCP through the
-  governed native bridges and server-held credentials.
-- Brain and Platform are deployed from their current main releases.
-- A controlled Lisa capture completed the full Librarian path into canonical
-  knowledge and a knowledge-version record.
+Lisa (CEO), David, Eric, Sara, and Jane are the deployed Prime fleet. Preserve
+live personalities, prompts, tools, skills, memories, and config unless a
+verified defect needs a narrow source fix. Do not redeploy merely to align
+Git branches.
 
 ## Boundaries
 
-- Do not copy mutable Lisa memory, identity, credentials, or token stores into
-  another agent.
-- Eric and David remain out of scope until Lisa acceptance testing is complete
-  and a separate design is authorized.
-- The Librarian timer remains disabled pending an explicit operations decision.
+- Do not copy mutable memory, identity, credentials, or token stores across agents.
 - Never print secrets, message content, or private memory in handoffs.
+- Do not mutate Server01, protected refs, or release tags from an implementer session.
+- Active Lisa Google Workspace repair owns `linkbots/lisa/ops/google-workspace/**`.
 
 ## Agent workflow
 
-Read `AGENTS.md`, this briefing, `docs/agent-coordination.md`,
+Read `AGENTS.md`, the 1.0 briefing, `docs/agent-coordination.md`,
 `docs/current-status.md`, and any genuinely active session records before
-editing. Use a task branch, preserve unrelated work, and record material work
-in a completed session or handoff.
+editing. Use `issue/<id>-<slug>`, preserve unrelated work, and record material
+work in a completed session or handoff.

@@ -1,5 +1,8 @@
 # Lisa agent bundle
 
+Reviewed non-secret definition bundle for Lisa on **OpenClaw Prime 1.0**.
+Fleet briefing: [`docs/openclaw-prime-1.0-briefing.md`](../../docs/openclaw-prime-1.0-briefing.md).
+
 This directory is the version-controlled, non-secret definition bundle for Lisa. It is the reviewed source used to prepare or recover a Lisa deployment; it is not a raw copy of a live OpenClaw profile.
 
 `PROFILE_BUNDLE_MANIFEST.json` is the authoritative deployment boundary. It records what is eligible for source control, what is excluded, and the restore process.

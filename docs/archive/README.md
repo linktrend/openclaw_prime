@@ -2,9 +2,15 @@
 
 This tree holds **clearly superseded** LiNKtrend-specific materials moved out of active workshop/docs paths during pre-launch hygiene.
 
+**OpenClaw Prime 1.0:** [`openclaw-prime-1.0/classification.md`](openclaw-prime-1.0/classification.md)
+and the live briefing [`../openclaw-prime-1.0-briefing.md`](../openclaw-prime-1.0-briefing.md).
+Handoffs and freeze packets under `docs/execution/openclawdevelopmentplan01/`
+were **not** bulk-moved (append-only / frozen provenance). Paths named in those
+historical files may now live under `openclaw-prime-1.0/`.
+
 The `coordination/` subdirectory contains the superseded pre-VPS briefing. It
-is historical only; use `docs/agent-briefing.md` and `docs/current-status.md`
-for the current VPS baseline.
+is historical only; use `docs/openclaw-prime-1.0-briefing.md` and
+`docs/current-status.md` for current operations.
 
 ## Rules
 
